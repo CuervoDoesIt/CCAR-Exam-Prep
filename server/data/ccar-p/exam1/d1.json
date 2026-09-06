@@ -1,0 +1,381 @@
+{
+  "examId": "ccar-p-exam1",
+  "domainId": "D1",
+  "domainName": "Solution Design & Architecture",
+  "questions": [
+    {
+      "id": "P1-D1-01",
+      "question": "An insurance carrier automates claims intake: every claim goes through the same three steps — extract structured fields, check them against policy rules, then draft a customer response. Compliance requires predictable, auditable behavior, and the sequence never varies. The architect proposes an autonomous agent that decides its own steps. What should you recommend instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the autonomous agent but add guardrails so its dynamic decisions stay within compliance bounds.",
+          "correct": false,
+          "explanation": "Guardrails mitigate agent risk but don't remove the core mismatch: this process has a fixed, known sequence. Anthropic distinguishes workflows (LLMs orchestrated through predefined code paths) from agents (LLMs that direct their own process), and recommends workflows for predictability on well-defined tasks.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Implement a prompt-chaining workflow: three sequential LLM calls, each processing the previous step's output, with programmatic checks between steps.",
+          "correct": true,
+          "explanation": "Prompt chaining is Anthropic's recommended pattern when a task decomposes cleanly into fixed subtasks and you can trade a little latency for higher accuracy. A workflow's predefined code path gives the predictability and auditability compliance demands; an agent's dynamic control adds cost and unpredictability with no measurable benefit here.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Use an evaluator-optimizer loop so a second model iteratively critiques each claim draft until it converges.",
+          "correct": false,
+          "explanation": "Evaluator-optimizer fits when clear evaluation criteria exist and iterative refinement measurably improves output quality. This scenario's problem is a fixed sequence of distinct steps, not iterative polishing of a single output, so a loop adds latency and cost without addressing the requirement.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Use orchestrator-workers so a central model dynamically decomposes each claim into subtasks at runtime.",
+          "correct": false,
+          "explanation": "Orchestrator-workers is designed for complex problems where subtasks cannot be predicted upfront. Here the three subtasks are fully known and never vary, so dynamic decomposition adds nondeterminism that conflicts with the compliance requirement for predictable behavior.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-02",
+      "question": "A B2B SaaS support platform receives refund requests, deep technical questions, and general inquiries. Each category needs a different prompt, different tools, and a different quality bar, and misrouted tickets hurt CSAT. A single shared prompt has plateaued: improving refund handling degrades technical answers. Which architecture best fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expand the single shared prompt with more instructions covering all three categories in detail.",
+          "correct": false,
+          "explanation": "This is exactly the failure routing solves: optimizing one input category in a shared prompt can degrade performance on others. Anthropic recommends separation of concerns when distinct categories are better handled separately.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Deploy an autonomous agent that reads each ticket and freely decides which tools and strategy to use.",
+          "correct": false,
+          "explanation": "The categories are known and stable, so this is a classification problem, not an open-ended one. Anthropic's guidance is to add agentic autonomy only when simpler solutions fall short; agents trade latency and cost for flexibility this scenario doesn't need.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Run all three specialized prompts in parallel on every ticket and let a judge model pick the best answer.",
+          "correct": false,
+          "explanation": "Parallelization suits independent subtasks or voting for confidence, but running three full pipelines per ticket triples cost when a cheap upfront classification would send each ticket to the right handler. It solves the wrong problem at the wrong price.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Build a routing workflow: classify each ticket first, then direct it to a specialized downstream prompt and toolset per category.",
+          "correct": true,
+          "explanation": "Routing classifies an input and directs it to a specialized follow-up task, enabling separation of concerns and prompts optimized per category. It fixes the observed plateau — where improving one category's handling degraded another — with a predictable, low-cost classification step.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-03",
+      "question": "A healthcare software vendor screens clinical notes for protected health information before releasing datasets to researchers. A single-pass check misses edge cases, false negatives carry regulatory risk, and the pipeline runs overnight so latency is flexible. Which workflow pattern raises confidence most directly?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Parallelization: run the same PHI check multiple times (voting) or split screening aspects into concurrent checks, then aggregate.",
+          "correct": true,
+          "explanation": "Anthropic's parallelization pattern covers sectioning (independent subtasks in parallel) and voting (running the same task multiple times for diverse perspectives). Voting is explicitly suited to high-stakes checks where multiple attempts raise confidence, and the flexible overnight latency budget absorbs the extra calls.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Prompt chaining: decompose the screen into sequential steps where each call refines the previous output.",
+          "correct": false,
+          "explanation": "Chaining trades latency for accuracy on tasks with fixed sequential subtasks, but it still gives you one pass over the data per aspect. The stated problem is confidence in a detection decision, which multiple independent perspectives (voting) address more directly than a longer single pipeline.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Simply upgrade to the most capable model tier and keep the single-pass design.",
+          "correct": false,
+          "explanation": "A stronger model may reduce misses but keeps a single point of failure and doesn't provide the confidence signal that aggregation across multiple attempts gives. Anthropic frames voting as the mechanism for improving confidence on tasks where false negatives are costly.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "An autonomous agent that keeps re-checking each note until it feels confident no PHI remains.",
+          "correct": false,
+          "explanation": "An open-ended agent loop has unpredictable cost and no defined stopping criterion, which is poor fit for a batch compliance pipeline. Anthropic advises workflows for well-defined tasks and reserving agents for problems where the number of steps genuinely cannot be predefined.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-04",
+      "question": "A developer-platform company builds a service that performs refactoring tasks spanning an unpredictable number of files: each request requires different subtasks that cannot be enumerated in advance, but results must be synthesized into one coherent change set. Which pattern does Anthropic recommend for this shape of problem?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Prompt chaining with a fixed sequence of refactoring steps applied to every request.",
+          "correct": false,
+          "explanation": "Chaining requires the task to decompose into fixed subtasks known in advance. Here the subtasks vary per request and cannot be hardcoded, which is precisely the situation Anthropic says chaining does not handle.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Routing: classify each refactor into one of several predefined categories with a dedicated pipeline each.",
+          "correct": false,
+          "explanation": "Routing helps when inputs fall into distinct, known categories. Multi-file refactors don't reduce to a small fixed set of categories — the required subtasks emerge from each codebase — so classification upfront can't determine the work needed.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Orchestrator-workers: a central LLM dynamically breaks the task down, delegates to worker LLMs, and synthesizes their results.",
+          "correct": true,
+          "explanation": "Anthropic describes orchestrator-workers as ideal for complex, unpredictable problems — its canonical example is coding changes across multiple files where subtasks can't be predicted upfront. The orchestrator determines decomposition at runtime and synthesizes worker outputs into a coherent result.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Parallelization with sectioning: predefine independent subtasks and run them concurrently.",
+          "correct": false,
+          "explanation": "Sectioning requires subtasks that are independent and known before execution. The key difference from orchestrator-workers, per Anthropic, is that in orchestrator-workers the subtasks are determined dynamically by the orchestrator — which is what unpredictable multi-file refactors require.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-05",
+      "question": "A marketing agency localizes campaign copy into eight languages. Quality is judged against a documented style rubric, and human reviewers observe that first drafts improve substantially after one or two rounds of targeted critique. Throughput matters less than final quality. Which pattern fits best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A single call to the most capable model with the rubric embedded in the prompt.",
+          "correct": false,
+          "explanation": "A strong single call is the right starting point under Anthropic's start-simple principle, but the scenario states that iterative critique demonstrably improves results — the specific evidence that justifies adding a refinement loop. Staying single-pass leaves measurable quality on the table.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Evaluator-optimizer: one model generates the translation, another evaluates it against the rubric and feeds back critique in a loop.",
+          "correct": true,
+          "explanation": "Anthropic says evaluator-optimizer is effective exactly when clear evaluation criteria exist and iterative refinement measurably adds value — its own example is literary translation critiqued over rounds. The documented rubric supplies the criteria, and observed improvement from critique supplies the measurable value.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Orchestrator-workers, with the orchestrator assigning each language to a worker model.",
+          "correct": false,
+          "explanation": "Fanning languages out to workers addresses throughput, which the scenario deprioritizes, and the decomposition (one task per language) is fixed, not dynamic. It provides no feedback loop, which is the mechanism actually shown to raise quality here.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Submit all translations through the Message Batches API to reduce cost by 50%.",
+          "correct": false,
+          "explanation": "Batch processing is a cost/throughput mechanism for asynchronous workloads, not a quality pattern — it changes how requests are processed, not whether output is critiqued and refined. It could complement a solution but doesn't address the stated quality goal.",
+          "citation": { "title": "Batch Processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-06",
+      "question": "An SRE tooling vendor is deciding whether to build a fully autonomous incident-investigation agent. Under Anthropic's guidance, which combination of conditions most justifies choosing an autonomous agent over a workflow?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The team wants to adopt the most modern architecture available to stay competitive.",
+          "correct": false,
+          "explanation": "Novelty is not a criterion. Anthropic explicitly advises finding the simplest solution possible and only increasing complexity when it demonstrably improves outcomes — many production systems need only a single well-optimized call with retrieval and examples.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "The system needs to call external tools, which only agents can do.",
+          "correct": false,
+          "explanation": "Tool use is not exclusive to agents — workflows orchestrate LLMs and tools through predefined code paths. The workflow/agent distinction is about who controls the process (your code vs. the model), not about whether tools are involved.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Leadership wants to cut per-request cost and latency, which agent autonomy delivers.",
+          "correct": false,
+          "explanation": "This inverts the trade-off. Anthropic states that agentic systems trade latency and cost for better task performance; autonomy typically increases both. Cost and latency pressure argue for simpler workflows, not more agency.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Investigations are open-ended with steps that can't be hardcoded, the value justifies higher cost and latency, and guardrails plus sandboxed testing bound the risk.",
+          "correct": true,
+          "explanation": "This matches Anthropic's criteria: agents fit open-ended problems where the number of steps can't be predicted and a fixed path can't be hardcoded, provided you accept the cost/latency trade for performance and mitigate risk through testing and guardrails.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-07",
+      "question": "An e-commerce company is building its first Claude feature: an FAQ assistant over ~200 help articles. The lead architect's design doc proposes a multi-agent framework with orchestration layers 'to future-proof the platform.' Applying Anthropic's guidance, what should the review board require?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Start with a single optimized LLM call using retrieval and in-context examples; add agentic complexity only if evals show it measurably improves results.",
+          "correct": true,
+          "explanation": "Anthropic's core recommendation is to find the simplest solution possible — often one optimized call with retrieval and examples — and increase complexity only when simpler solutions demonstrably fall short. An FAQ assistant over a small corpus is the canonical case for this baseline.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Approve the multi-agent design since re-architecting later would cost more than building it now.",
+          "correct": false,
+          "explanation": "Speculative complexity contradicts the start-simple principle. Agentic systems trade cost and latency for performance; paying that tax before evidence shows a simple call is insufficient makes the system slower, costlier, and harder to debug for no measured gain.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Require at least an orchestrator-workers workflow, since production systems need dynamic decomposition.",
+          "correct": false,
+          "explanation": "Orchestrator-workers targets complex tasks where subtasks can't be predicted upfront. Answering FAQs from a small article set is well-defined; mandating dynamic decomposition imposes a pattern whose defining condition is absent.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Adopt a heavyweight agent framework so the abstraction layers hide prompt and response handling from the team.",
+          "correct": false,
+          "explanation": "Anthropic cautions that frameworks add abstraction layers that can obscure the underlying prompts and responses, making systems harder to debug, and suggests starting with LLM APIs directly. Hiding the fundamentals is a cost, not a benefit, especially for a first project.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-08",
+      "question": "A media company re-classifies 250,000 archived articles every night to refresh its recommendation engine. Results are consumed by a 7am pipeline job, no humans wait on responses, and finance has mandated the lowest possible unit cost. Which approach best fits these constraints?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Synchronous Messages API calls to the top-tier Opus model to maximize classification quality.",
+          "correct": false,
+          "explanation": "This pays real-time prices and top-tier rates for a workload with no interactive users. Simple classification rarely needs the most capable tier, and forgoing the Batch API's 50% discount directly violates the cost mandate.",
+          "citation": { "title": "Models Overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Synchronous calls to a fast, low-cost model with heavy client-side parallelism to finish quickly.",
+          "correct": false,
+          "explanation": "The model tier is sensible, but synchronous fan-out still pays standard per-token prices and pushes against rate limits. Since nothing needs immediate responses, this leaves the Batch API's 50% discount on the table for no benefit.",
+          "citation": { "title": "Batch Processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Submit the nightly run to the Message Batches API with a cost-efficient model tier; results arrive asynchronously, typically well within the 24-hour window.",
+          "correct": true,
+          "explanation": "The Batch API charges 50% of standard prices across all usage and processes requests asynchronously, with most batches finishing in under an hour and a 24-hour processing window. Bulk classification with no interactive users is exactly its documented use case, and a lower-cost tier suits routine classification.",
+          "citation": { "title": "Batch Processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "Use the Message Batches API, but enable 1-hour prompt caching on every request since the batch discount requires an active cache.",
+          "correct": false,
+          "explanation": "The 50% batch discount applies to all batch usage and has no dependency on prompt caching; caching is a separate optimization with its own pricing. Requiring a 1-hour cache write (2x base input cost) on every request as a precondition misstates how the two features relate.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-09",
+      "question": "A fintech app triages millions of short in-app support messages per day into five intents. Product requires responses fast enough for a live chat experience, the task is simple classification, and the per-message cost ceiling is strict. Which model choice best satisfies all three constraints?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude Opus 5, because the highest-capability tier minimizes classification errors.",
+          "correct": false,
+          "explanation": "Opus 5 is positioned for complex agentic and enterprise work at $5/$25 per MTok with moderate latency. Five-way intent classification doesn't need frontier capability, and at millions of daily messages the 5x input-price premium over Haiku breaks the cost ceiling.",
+          "citation": { "title": "Models Overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Claude Haiku 4.5 — the fastest tier with near-frontier intelligence at $1/$5 per MTok.",
+          "correct": true,
+          "explanation": "Anthropic positions Haiku 4.5 as the fastest model with near-frontier intelligence, priced at $1 input / $5 output per MTok. For high-volume, latency-sensitive, simple classification, it satisfies speed and budget while remaining accurate enough — the documented sweet spot for this tier.",
+          "citation": { "title": "Models Overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "C",
+          "text": "Claude Fable 5.1, since demanding production workloads warrant the strongest reasoning model.",
+          "correct": false,
+          "explanation": "Fable 5.1 targets demanding reasoning and long-horizon agentic work, is the slowest tier in the lineup, and costs $10/$50 per MTok — 10x Haiku's input price. Both its latency profile and price contradict this workload's requirements.",
+          "citation": { "title": "Models Overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Claude Sonnet 5 through the Message Batches API to capture the 50% discount.",
+          "correct": false,
+          "explanation": "Batch processing is asynchronous and suited to workloads that don't need immediate responses; live chat triage does. The discount can't be applied without abandoning the real-time requirement, so this fails the latency constraint outright.",
+          "citation": { "title": "Batch Processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-10",
+      "question": "An enterprise knowledge assistant answers questions over a wiki far larger than any context window. One faction wants to pre-load as much of the corpus as fits into every request 'since the window is huge'; internal tests already show answer quality degrading as stuffed context grows. What architecture does Anthropic's guidance support?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Pre-load the maximum context each request; larger windows exist precisely so retrieval layers can be eliminated.",
+          "correct": false,
+          "explanation": "More context isn't automatically better: as token count grows, models exhibit context rot — degraded accuracy and recall. Anthropic frames attention as a depleting budget, making curation of what enters context as important as how much space exists.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Keep pre-loading but raise max_tokens so the model has more room to reason over the stuffed context.",
+          "correct": false,
+          "explanation": "max_tokens caps output length; it does nothing about degraded attention over an overloaded input. The observed quality drop stems from context rot on the input side, which output limits cannot fix.",
+          "citation": { "title": "Context Windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        },
+        {
+          "key": "C",
+          "text": "Retrieval with lightweight references: maintain identifiers (paths, queries, links) and load only relevant content just-in-time at runtime.",
+          "correct": true,
+          "explanation": "Anthropic's context-engineering guidance favors just-in-time retrieval: agents keep lightweight identifiers and dynamically pull relevant data into context at runtime rather than pre-loading everything. This preserves the attention budget and directly addresses the measured degradation, with hybrid pre-loading only where speed demands it.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Shard the corpus across parallel model calls that each receive a full slice, then merge all answers.",
+          "correct": false,
+          "explanation": "Fanning the whole corpus across calls multiplies token cost enormously per question and still floods each call with mostly irrelevant content. Retrieval selects the small relevant subset first, which is both cheaper and aligned with attention-budget guidance.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D1-11",
+      "question": "A global chat product runs Claude behind horizontally scaled, load-balanced API servers across three regions. A new engineer asks how Claude 'remembers' a conversation when the next request lands on a different server. Which statement correctly describes the architecture they must build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Include a session ID in each request; the Messages API replays the stored server-side conversation automatically.",
+          "correct": false,
+          "explanation": "There is no server-side session replay in the Messages API. Each request's input phase must contain all previous conversation history plus the current message; no session identifier substitutes for resending that history.",
+          "citation": { "title": "Context Windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        },
+        {
+          "key": "B",
+          "text": "Enable prompt caching, which stores the conversation so each request only needs to send the newest user message.",
+          "correct": false,
+          "explanation": "Prompt caching changes what you pay for repeated prefix tokens, not what you must send: the full prompt, including history, is still transmitted and still occupies the context window. Caching is a billing/latency optimization, not conversation storage.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "The API retains recent turns for a short window after each response, so servers hitting it within that window inherit the context.",
+          "correct": false,
+          "explanation": "This invents stateful behavior the API doesn't have. The documented model is progressive token accumulation supplied by the caller: every turn's input contains the entire prior conversation. Any short-lived retention notion confuses cache TTLs with conversational state.",
+          "citation": { "title": "Context Windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        },
+        {
+          "key": "D",
+          "text": "The API is stateless: the application must persist conversation history itself and send the full message list on every request, which is what makes any server interchangeable.",
+          "correct": true,
+          "explanation": "Each request carries the complete conversation — the input phase contains all previous history plus the new user message. Because the caller owns state, any stateless application server can serve any turn, which is exactly the property that enables horizontal scaling behind a load balancer.",
+          "citation": { "title": "Context Windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        }
+      ]
+    }
+  ]
+}

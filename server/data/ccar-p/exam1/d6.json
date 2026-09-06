@@ -1,0 +1,143 @@
+{
+  "examId": "ccar-p-exam1",
+  "domainId": "D6",
+  "domainName": "Stakeholder Communication & Lifecycle Management",
+  "questions": [
+    {
+      "id": "P1-D6-01",
+      "question": "After one flawless demo of a Claude-powered underwriting assistant, a bank's CPO wants general availability in a week: 'It worked perfectly — ship it.' As the architect, what is the correct way to set expectations?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Agree: a successful end-to-end demo on real data is sufficient evidence of production reliability.",
+          "correct": false,
+          "explanation": "LLM outputs vary across inputs and runs, so one successful path proves little about the input distribution production will see. Anthropic's guidance stresses measuring performance and iterating — evidence comes from systematic evaluation, not a single anecdote.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Explain that LLM behavior is probabilistic, a single demo is an anecdote not evidence, and commit to an eval suite over representative cases with agreed pass thresholds before launch.",
+          "correct": true,
+          "explanation": "This reframes the conversation correctly: because outputs are probabilistic, reliability claims require measured performance across representative inputs. Anthropic emphasizes comprehensive testing and iterating on implementations — for autonomous behavior, extensive testing in sandboxed environments with guardrails — before trusting a system in production.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Promise determinism instead: set temperature to zero so identical inputs always produce identical, demo-quality outputs.",
+          "correct": false,
+          "explanation": "This is both misleading and technically stale: sampling settings never guaranteed quality across varied inputs, and the temperature, top_p, and top_k parameters are deprecated — current models return a 400 error for non-default values. Prompting and evals, not sampling knobs, are the reliability levers.",
+          "citation": { "title": "Model Deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        },
+        {
+          "key": "D",
+          "text": "Quietly pad the timeline for more testing without telling the CPO why the launch is delayed.",
+          "correct": false,
+          "explanation": "Hiding the rationale forfeits the chance to align leadership on how LLM systems are validated, and the expectation gap will resurface at the next incident. Stakeholder management for probabilistic systems means making evaluation-gated readiness explicit, not obscuring it.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D6-02",
+      "question": "A hospital network's Claude-based intake triage pilot succeeded with one clinic. Leadership asks the architect to present a pilot-to-production lifecycle plan. Which plan reflects Anthropic-aligned practice?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Big-bang cutover: enable the assistant for all clinics at once, since the pilot already validated the system.",
+          "correct": false,
+          "explanation": "A pilot validates one narrow slice of traffic; scaling exposes new input distributions where probabilistic systems can fail differently. Anthropic's guidance for expanding autonomy and scope is grounded in testing and guardrails, which a simultaneous full rollout abandons.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Extend the pilot indefinitely; production commitment should wait until the model provider guarantees error-free output.",
+          "correct": false,
+          "explanation": "No provider guarantees error-free LLM output — the technology is inherently probabilistic, which is why the lifecycle is managed with evals, monitoring, and guardrails rather than waited out. Indefinite pilots stall value delivery without reducing the fundamental uncertainty.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Skip staged rollout: output guardrails alone eliminate clinical risk, so intermediate monitoring phases add no information.",
+          "correct": false,
+          "explanation": "Guardrails bound certain failure modes; they don't measure real-world accuracy or surface distribution shift, which is what canary monitoring provides. Anthropic pairs guardrails with extensive testing — they are complements in a rollout, not a substitute for observing production behavior gradually.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Eval-gated staged rollout: agree success metrics, pass an eval suite built from pilot data, expand to a small monitored canary cohort with guardrails, and widen only as metrics hold.",
+          "correct": true,
+          "explanation": "This operationalizes Anthropic's guidance — measure performance, iterate, test extensively (in sandboxed settings where autonomy is involved), and use guardrails — as a communicable lifecycle: evals gate each expansion and a monitored canary catches degradation while blast radius is small. It gives leadership objective go/no-go criteria.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D6-03",
+      "question": "A CFO reviewing a Claude-powered document service asks why monthly API spend fluctuates and how it could drop 'without cutting features.' Which explanation of the cost drivers is accurate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Spend scales with tokens processed — input and output are metered separately, output priced higher — and can fall via prompt caching (reads ~10% of base input price) and the Batch API's 50% discount on asynchronous work.",
+          "correct": true,
+          "explanation": "This matches the documented pricing model: per-MTok rates differ by model, output costs more than input (e.g., $2/$10 on Sonnet 5), cache reads cost about 10% of base input price, and Batch API requests are billed at 50% of standard prices. It gives the CFO real, feature-preserving levers.",
+          "citation": { "title": "Models Overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "B",
+          "text": "The API bills a flat fee per request, so fluctuation implies request volume changed and nothing else.",
+          "correct": false,
+          "explanation": "Billing is per token, not per request: a short lookup and a hundred-page analysis are radically different costs at identical request counts. A flat-fee mental model hides the variables — prompt size, output length, model tier — the business can actually manage.",
+          "citation": { "title": "Models Overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "C",
+          "text": "Only output tokens are billed; input context is free, so trimming prompts saves nothing.",
+          "correct": false,
+          "explanation": "Input tokens are metered at their own per-MTok rate on every model, and for document-heavy workloads input frequently dominates spend. That is precisely why prompt caching — which discounts repeated input prefixes — is a meaningful cost lever.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Enabling prompt caching makes repeated input effectively free, eliminating input cost as a budget line.",
+          "correct": false,
+          "explanation": "Caching discounts but doesn't eliminate cost: reads are billed at roughly 0.1x base input price, writes cost more than base input (1.25x for 5-minute TTL, 2x for 1-hour), and only the identical stable prefix qualifies. Overpromising 'free' sets the CFO up for surprises.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D6-04",
+      "question": "Anthropic announces that the pinned model version behind a retailer's production assistant is deprecated with a future retirement date. The VP of Engineering asks for the management plan. What should the architect advise?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Repoint production to the newest model immediately — newer models are strictly better, so regression testing just delays the inevitable.",
+          "correct": false,
+          "explanation": "Anthropic explicitly advises thorough testing of applications with replacement models well before the retirement date; behavior can shift on your specific workload even when a successor is generally stronger. Untested same-day swaps convert a planned migration into production risk.",
+          "citation": { "title": "Model Deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        },
+        {
+          "key": "B",
+          "text": "Do nothing until requests fail; deprecated models keep working, so retirement is effectively a soft deadline.",
+          "correct": false,
+          "explanation": "Retirement is a hard cutoff — requests to retired models fail — and deprecated models are documented as likely less reliable than active ones in the interim. Waiting for failure means discovering the deadline as an outage.",
+          "citation": { "title": "Model Deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        },
+        {
+          "key": "C",
+          "text": "Stay on pinned versions, use the notice window (at least 60 days for public models) to run the eval suite against the recommended replacement, fix regressions, and migrate before retirement — auditing usage exports to find stragglers.",
+          "correct": true,
+          "explanation": "This mirrors the documented lifecycle playbook: Anthropic provides at least 60 days' notice before retiring publicly released models, names recommended replacements, and urges testing with new models well before the date. Pinned snapshot IDs keep behavior stable during validation, and the Console usage export locates lingering deprecated-model traffic by API key.",
+          "citation": { "title": "Model Deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        },
+        {
+          "key": "D",
+          "text": "Relax — deprecated models continue receiving quality and safety updates until retirement, so timing the migration is a pure cost decision.",
+          "correct": false,
+          "explanation": "Deprecated (and even legacy) models no longer receive updates and are documented as likely less reliable than active models — Anthropic tells customers to move workloads to active models for the highest support level. Treating the window as risk-free misinforms the VP.",
+          "citation": { "title": "Model Deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        }
+      ]
+    }
+  ]
+}

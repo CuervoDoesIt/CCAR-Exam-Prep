@@ -1,0 +1,381 @@
+{
+  "examId": "ccar-p-exam2",
+  "domainId": "D2",
+  "domainName": "Claude Models, Prompting & Context Engineering",
+  "questions": [
+    {
+      "id": "P2-D2-01",
+      "question": "A mining company submits about 80,000 tokens of geological survey reports along with a question about drill-site viability. The engineer currently places the question first, followed by the reports, and responses keep missing details buried in the surveys. What prompt-structure change does Anthropic recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Interleave fragments of the question between the individual survey documents.",
+          "correct": false,
+          "explanation": "Scattering the query fragments the instruction and gives the model no single, clear ask after it has ingested the data. Anthropic's long-context guidance keeps documents together at the top and the query intact at the end.",
+          "citation": { "title": "Long context prompting tips", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/long-context-tips" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the question first but add stronger instructions to read everything carefully.",
+          "correct": false,
+          "explanation": "Instruction emphasis does not fix suboptimal ordering. Anthropic's guidance for long-context requests is structural: put longform inputs before the query rather than exhorting the model to try harder.",
+          "citation": { "title": "Long context prompting tips", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/long-context-tips" }
+        },
+        {
+          "key": "C",
+          "text": "Place the longform documents near the top of the prompt and the query at the end, with documents clearly structured (for example, XML-tagged with metadata).",
+          "correct": true,
+          "explanation": "Anthropic recommends putting long documents and inputs near the top, above the query and instructions, because queries placed at the end measurably improve response quality on long-context tasks. Tagging each document with structure and metadata further helps Claude ground its answer.",
+          "citation": { "title": "Long context prompting tips", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/long-context-tips" }
+        },
+        {
+          "key": "D",
+          "text": "Split the surveys into many single-document requests and merge the separate answers afterward.",
+          "correct": false,
+          "explanation": "Drill-site viability requires cross-document reasoning that per-document calls cannot perform, and merging partial answers reintroduces the synthesis problem downstream. The context window comfortably fits this corpus once ordering is fixed.",
+          "citation": { "title": "Long context prompting tips", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/long-context-tips" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-02",
+      "question": "A biotech agent chains lab-inventory and assay-database tool calls. The team observes that Claude commits to a complete plan up front and fails to adjust when a tool returns surprising results mid-sequence. Which capability most directly addresses this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Increase the thinking budget so the initial plan is more thorough.",
+          "correct": false,
+          "explanation": "A bigger budget deepens the up-front reasoning but does not add reasoning between tool calls, which is where the adaptation failure occurs. The plan is still frozen before any tool result arrives.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "B",
+          "text": "Echo each tool result back as an extra plain-text user message so Claude re-reads it.",
+          "correct": false,
+          "explanation": "Tool results already return to Claude through the standard tool_result flow; duplicating them as prose adds tokens without adding a reasoning step. The missing piece is thinking between calls, not re-delivery of the data.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Run each tool call in a separate fresh conversation to force re-planning.",
+          "correct": false,
+          "explanation": "Fresh conversations discard the accumulated state the agent needs to reason coherently across the sequence. This trades one failure mode for a worse one: total loss of task continuity.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Interleaved thinking, which lets Claude reason about each tool result between tool calls within a single assistant turn before deciding the next action.",
+          "correct": true,
+          "explanation": "Interleaved thinking exists precisely for this: Claude thinks after receiving each tool result and can revise its approach mid-sequence instead of executing a fixed up-front plan. On earlier models it is enabled via a beta header; newer adaptive-thinking models interleave automatically.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-03",
+      "question": "A security operations team enables thinking on a tool-using triage agent. To save tokens, their middleware strips the thinking blocks from the assistant message before sending the tool_result back to the API. The agent's tool-use turns start failing or degrading. What is wrong?",
+      "options": [
+        {
+          "key": "A",
+          "text": "During tool use, prior thinking blocks must be passed back complete and unmodified with the conversation so Claude can continue its reasoning from where it left off.",
+          "correct": true,
+          "explanation": "Anthropic requires preserving thinking blocks when returning tool results: the blocks carry the model's reasoning state (and integrity signatures), and stripping or altering them breaks reasoning continuity in the tool-use loop. Token savings must come from other levers, not from mutating the turn in flight.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "B",
+          "text": "Thinking blocks must be manually re-summarized by the client before each subsequent request.",
+          "correct": false,
+          "explanation": "No client-side summarization step exists or is required; the API manages thinking content itself. The client's only obligation is to return the blocks unmodified during the tool-use loop.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "C",
+          "text": "The tool_result was placed in a user message; it belongs in an assistant message.",
+          "correct": false,
+          "explanation": "This reverses the actual message flow: tool_result blocks are sent in a user message responding to the assistant's tool_use. The failure here stems from stripped thinking blocks, not result placement.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Thinking cannot be combined with tool use, so the feature must be disabled for this agent.",
+          "correct": false,
+          "explanation": "Thinking works with tool use and is especially valuable in agentic loops; interleaved thinking even reasons between tool calls. The integration simply carries the requirement to preserve thinking blocks across the loop.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-04",
+      "question": "A supply-chain platform builds each prompt as: (1) static system instructions, (2) a live inventory snapshot regenerated on every request, (3) static SKU reference tables, and places cache_control on the SKU tables block. Usage logs show cache_read_input_tokens is always zero. Why?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The SKU tables exceed the maximum cacheable size for the model.",
+          "correct": false,
+          "explanation": "Prompt caching imposes minimum cacheable token counts, not a maximum size ceiling that silently disables reads. The zero-hit pattern indicates a prefix mismatch, not a size violation.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "The breakpoint hashes everything up to and including it, so the ever-changing snapshot before the tables makes the prefix unique per request; static content must precede dynamic content, with the breakpoint on the last stable block.",
+          "correct": true,
+          "explanation": "A cache hit requires an exact match of the entire prefix up to the breakpoint. Because the inventory snapshot changes every request, the cumulative hash never repeats and every lookup misses; this is the classic 'breakpoint after dynamic content' failure mode. Reordering so static instructions and tables sit first, cached, with dynamic data after, restores hits.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Only system prompts are cacheable; content in the messages array is not.",
+          "correct": false,
+          "explanation": "Caching applies across the prefix hierarchy of tools, system, and messages, so message content is cacheable. The issue is where the breakpoint sits relative to dynamic content, not which section holds it.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "The default 5-minute TTL expires before the next request arrives.",
+          "correct": false,
+          "explanation": "TTL expiry would show intermittent hits under steady traffic, and cache reads refresh the TTL. Consistently zero reads across all traffic is the signature of a never-matching prefix, not expiry.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-05",
+      "question": "An autonomous mine-planning agent runs for many hours and approaches its context limit mid-task. The team adds a compaction step so the agent can continue in a refreshed context. According to Anthropic's context engineering guidance, what should compaction preserve and discard?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep only the most recent messages and drop everything earlier in the conversation.",
+          "correct": false,
+          "explanation": "Recency-only truncation discards the architectural decisions and unresolved issues made early in the run, which are exactly what the agent needs to stay coherent. Compaction is selective summarization, not a sliding window.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Keep all raw tool outputs verbatim and discard the agent's own conclusions about them.",
+          "correct": false,
+          "explanation": "This inverts the guidance: stale raw tool outputs are among the safest content to discard once their conclusions are captured, and Anthropic highlights clearing old tool results as a low-risk compaction. The distilled decisions are the part worth keeping.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Nothing; upgrade to a larger context window model so compaction is unnecessary.",
+          "correct": false,
+          "explanation": "Bigger windows postpone but do not remove the problem: performance degrades as context grows (context rot), because attention is a finite budget. Curation remains necessary regardless of window size.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "A distilled summary that preserves architectural decisions, unresolved issues, and critical implementation details, while discarding redundant or stale tool outputs.",
+          "correct": true,
+          "explanation": "This is Anthropic's description of good compaction: compress the history into a high-fidelity summary that keeps decisions and open threads so the agent continues coherently, tuned first for recall and then for precision. Redundant tool results are the prime candidates for removal.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-06",
+      "question": "A biotech research agent must accumulate findings across a multi-day literature review whose total material far exceeds any context window, with sessions that stop and resume. Which pattern does Anthropic recommend for maintaining continuity?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Re-send the entire set of prior findings in one giant prompt at the start of each session.",
+          "correct": false,
+          "explanation": "The corpus exceeds the window, and even where it fits, flooding the context with everything degrades retrieval accuracy as attention stretches. Persistent external state, not brute-force replay, is the recommended approach.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Structured note-taking: the agent persists notes to memory files outside the context window and retrieves them when relevant in later sessions.",
+          "correct": true,
+          "explanation": "Anthropic describes structured note-taking as regularly writing notes persisted outside the context window that are pulled back in when needed, enabling multi-hour and multi-session coherence with minimal overhead. The platform's memory tool and context editing operationalize this pattern.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Rely on the model to remember earlier sessions, since conversations with the same API key share state.",
+          "correct": false,
+          "explanation": "The Messages API is stateless: the model retains nothing between requests, and API keys do not create shared memory. Any cross-session continuity must be engineered by the application, for example via memory files.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Raise the thinking budget so Claude internally memorizes findings between requests.",
+          "correct": false,
+          "explanation": "Thinking tokens are per-request reasoning; they are not persisted as memory across API calls. Budget size has no effect on cross-session recall, which requires state stored outside the model.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-07",
+      "question": "A logistics agent operates over a multi-terabyte ERP document store. One architect proposes exhaustively pre-retrieving all potentially relevant records into context before inference; another proposes giving the agent lightweight references (paths, stored queries) plus tools to load data at runtime. Which does Anthropic's guidance favor for agentic workloads?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The just-in-time approach: maintain lightweight identifiers and let the agent dynamically retrieve what it needs at runtime, optionally hybridized with a small amount of up-front context.",
+          "correct": true,
+          "explanation": "Anthropic's context engineering guidance favors just-in-time retrieval for agents: references stay cheap, the agent progressively discloses only relevant data, and context pollution is avoided. A hybrid that pre-loads a small stable core (like a CLAUDE.md-style overview) while retrieving the rest on demand is explicitly endorsed.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Exhaustive pre-retrieval, because agents cannot be trusted to issue their own searches reliably.",
+          "correct": false,
+          "explanation": "Modern agentic models are increasingly skilled at navigating data with tools, which is why Anthropic's guidance has shifted toward runtime exploration. Exhaustive pre-retrieval front-loads stale, mostly irrelevant tokens into the attention budget.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Load the entire store into a large context window so nothing is ever missed.",
+          "correct": false,
+          "explanation": "A multi-terabyte corpus cannot fit any context window, and even at feasible scales, maximal stuffing degrades accuracy through context rot. The goal is the smallest set of high-signal tokens, not the largest.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Pre-retrieve everything and also give the agent retrieval tools, loading both into every request for redundancy.",
+          "correct": false,
+          "explanation": "Doubling up maximizes context pollution: the pre-retrieved bulk crowds the attention budget while the tools go unused. Hybrid strategies mean a selective stable core plus on-demand retrieval, not both approaches at full volume.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-08",
+      "question": "A managed-detection provider's Claude system prompt is edited directly in production by several engineers whenever analysts complain about triage output. Regressions keep surfacing days later with no way to tell which edit caused them. What operating model should the architect institute?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Freeze the system prompt permanently so no further regressions are possible.",
+          "correct": false,
+          "explanation": "Freezing prevents improvement and contradicts the expectation that prompts are iteratively calibrated against observed failure modes. The problem is uncontrolled change, not change itself.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Let each analyst team maintain its own private variant of the system prompt.",
+          "correct": false,
+          "explanation": "Forking multiplies the untested-change problem across variants and destroys any shared baseline for comparing behavior. Divergent prompts make regressions harder, not easier, to attribute.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Treat the system prompt as a versioned production artifact: keep it in source control, evaluate candidate changes against a test suite of representative triage cases, and roll out with the ability to roll back.",
+          "correct": true,
+          "explanation": "System prompts at scale are production code: Anthropic's guidance is to calibrate prompts at the right altitude and refine them against a minimal set of tests based on observed failure modes. Versioning plus pre-deployment evals makes every regression attributable and reversible.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Move all instructions out of the system prompt into each per-request user message.",
+          "correct": false,
+          "explanation": "Relocating instructions changes where they live, not how changes are governed; the untested-edit problem simply moves. Stable, well-structured system-level guidance remains the recommended home for persistent behavior.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-09",
+      "question": "A supply-chain control-tower agent makes hundreds of tracking-API tool calls per shift. Stale tool outputs from hours ago dominate its context while only recent results matter. Which platform capability automates removing the old results while keeping the newest ones?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Context editing with a clear_tool_uses strategy: when a configured token trigger is exceeded, older tool results are cleared automatically while the most recent tool interactions are kept.",
+          "correct": true,
+          "explanation": "Context editing clears stale tool results server-side once the conversation crosses a configurable trigger, with a keep setting preserving the most recent tool-use pairs. It is built for exactly this heavy-tool-use agent pattern and can pair with memory files so important details survive clearing.",
+          "citation": { "title": "Context editing", "url": "https://docs.claude.com/en/docs/build-with-claude/context-editing" }
+        },
+        {
+          "key": "B",
+          "text": "Prompt caching, which offloads the old tool results into the cache and out of the context.",
+          "correct": false,
+          "explanation": "Caching reduces the cost and latency of reprocessing an unchanged prefix; the cached tokens still occupy the context window and the attention budget. It does not remove anything from what the model sees.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Lowering max_tokens so the conversation accumulates context more slowly.",
+          "correct": false,
+          "explanation": "max_tokens caps the length of each generated response; it does nothing about the tool results already accumulated in the conversation history. The dominant growth here is tool output, which max_tokens does not govern.",
+          "citation": { "title": "Models overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "D",
+          "text": "A system prompt instruction telling Claude to ignore tool results older than one hour.",
+          "correct": false,
+          "explanation": "Instructed-to-ignore content still consumes tokens and attention budget, and long-context degradation happens regardless of instructions. Reclaiming context requires actually removing or summarizing the content, not asking the model to disregard it.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-10",
+      "question": "A biotech team runs protein-pipeline analyses with thinking budgets around 50,000 tokens on synchronous requests and sees intermittent network timeouts and dropped connections on the longest runs. What does Anthropic recommend for workloads like this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep requests synchronous but enable streaming so the connection stays alive for the full run.",
+          "correct": false,
+          "explanation": "Streaming helps deliver long responses but Anthropic specifically advises moving thinking budgets above 32k tokens to batch processing, because such long-running requests can still hit system timeouts and open-connection limits. Streaming alone does not remove that risk.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "B",
+          "text": "Move these requests to the Message Batches API, which Anthropic recommends for thinking budgets above 32k tokens to avoid networking issues.",
+          "correct": true,
+          "explanation": "The extended thinking guidance is explicit: for budgets above 32k, use batch processing so long-running requests do not run into timeouts and open-connection limits. Deep offline analyses fit the asynchronous batch model and also earn the 50% cost reduction.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Split the 50k budget into several sequential requests of 8k thinking each, letting reasoning accumulate across calls.",
+          "correct": false,
+          "explanation": "Thinking does not carry over between API requests; each request reasons independently, so fragmenting the budget produces several shallow analyses rather than one deep one. This misunderstands thinking as persistent state.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Disable thinking entirely and compensate with longer, more detailed final outputs.",
+          "correct": false,
+          "explanation": "Large thinking budgets exist because thorough internal reasoning improves quality on genuinely complex problems; verbose final output is not a substitute for the reasoning process. This sacrifices the analysis quality the workload requires.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D2-11",
+      "question": "After adopting a Claude model with a very large context window, a threat-intelligence team plans to concatenate every feed, playbook, and historical ticket into each request, reasoning that 'the window fits it, so use it.' What is the flaw in this plan according to Anthropic guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Very large requests disable prompt caching, so costs cannot be controlled.",
+          "correct": false,
+          "explanation": "Large stable prefixes are actually ideal caching candidates; caching remains available and is often the saving grace of big-context designs. Cost is a concern, but caching being disabled is not the mechanism.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Oversized prompts automatically violate rate limits and are rejected regardless of tier.",
+          "correct": false,
+          "explanation": "Large prompts consume more of the ITPM budget but are not automatically rejected; throughput and cost degrade gradually. The core architectural flaw is quality degradation, not an automatic limit violation.",
+          "citation": { "title": "Rate limits", "url": "https://docs.claude.com/en/api/rate-limits" }
+        },
+        {
+          "key": "C",
+          "text": "The API silently truncates the middle of long prompts, so content will be invisibly lost.",
+          "correct": false,
+          "explanation": "Silent mid-prompt truncation is not the failure mode; content within the window is presented to the model. The real issue is that retrieval accuracy across the included tokens declines as the context grows.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Context rot: as token count grows, the model's finite attention budget stretches and recall precision declines, so the goal is the smallest set of high-signal tokens, not maximal filling.",
+          "correct": true,
+          "explanation": "Anthropic describes context as a finite resource with diminishing marginal returns: models experience context rot, where accuracy retrieving information degrades as context length increases. Good context engineering curates the minimal high-signal set rather than exploiting the window's nominal size.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    }
+  ]
+}

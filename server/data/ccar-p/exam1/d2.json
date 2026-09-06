@@ -1,0 +1,381 @@
+{
+  "examId": "ccar-p-exam1",
+  "domainId": "D2",
+  "domainName": "Claude Models, Prompting & Context Engineering",
+  "questions": [
+    {
+      "id": "P1-D2-01",
+      "question": "A legal-tech SaaS handles 80% routine lookups and 20% complex multi-document analyses. A hard monthly API budget is in place, but the complex analyses have a strict quality bar that the cheapest tier fails in evals. How should the architect assign models?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run everything on Claude Opus 5 so no query ever gets an underpowered model.",
+          "correct": false,
+          "explanation": "At $5/$25 per MTok, sending 80% routine traffic to Opus multiplies spend roughly fivefold on input versus Haiku 4.5 for work a cheaper tier handles well. Anthropic's lineup exists precisely so capability is matched to task complexity.",
+          "citation": { "title": "Models Overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Run everything on Claude Haiku 4.5 and accept the quality shortfall on complex analyses.",
+          "correct": false,
+          "explanation": "Evals already show the cheapest tier misses the quality bar on the 20% complex workload. Knowingly shipping below a stated quality requirement isn't a trade-off; it's a requirements failure that routing avoids at modest cost.",
+          "citation": { "title": "Models Overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "C",
+          "text": "Add a routing step: classify each request and send routine lookups to Haiku 4.5 ($1/$5 per MTok) and complex analyses to a higher tier that passes evals.",
+          "correct": true,
+          "explanation": "This is Anthropic's routing pattern applied to model selection: classify inputs and direct them to specialized handling, allowing cost optimization by sending easy queries to smaller, faster models and hard ones to more capable tiers. It satisfies both the budget and the quality bar simultaneously.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Standardize on Claude Fable 5.1 for all traffic since one model simplifies operations.",
+          "correct": false,
+          "explanation": "Fable 5.1 is the most expensive tier at $10/$50 per MTok and the slowest in the lineup, intended for demanding reasoning and long-horizon agentic work. Using it for routine lookups maximizes cost under a hard budget cap — the opposite of tier-appropriate routing.",
+          "citation": { "title": "Models Overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-02",
+      "question": "An actuarial platform uses a Claude model that supports manual extended thinking. Multi-step reserve calculations show reasoning slips under the current configuration. The team wants Claude to reason more thoroughly before answering. Which configuration is correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Enable thinking with type 'enabled' and a budget_tokens of at least 1,024 that is less than max_tokens, sized generously for the task's complexity.",
+          "correct": true,
+          "explanation": "Manual extended thinking is enabled via thinking: {type: \"enabled\", budget_tokens: N}. The budget must be at least 1,024 tokens and less than max_tokens, and larger budgets can improve quality on complex problems through more thorough reasoning — Anthropic suggests starting near 16k or more for complex tasks and tuning.",
+          "citation": { "title": "Extended Thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "B",
+          "text": "Enable thinking with budget_tokens: 512 to keep costs low while still unlocking reasoning.",
+          "correct": false,
+          "explanation": "The API rejects budgets below the documented 1,024-token minimum. Even at the minimum, Anthropic recommends increasing incrementally for complex tasks, since deeper analysis is the mechanism by which thinking improves quality.",
+          "citation": { "title": "Extended Thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Set budget_tokens higher than max_tokens so reasoning is never truncated by the output cap.",
+          "correct": false,
+          "explanation": "Thinking tokens count toward max_tokens for the turn, so budget_tokens must be less than max_tokens to leave room for the final answer — the only documented exception is interleaved thinking, where the budget spans a whole turn's thinking blocks.",
+          "citation": { "title": "Extended Thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Treat budget_tokens as a hard guarantee: Claude will consume exactly that many reasoning tokens every request, making cost fully fixed.",
+          "correct": false,
+          "explanation": "The budget is a target, not a strict cap or floor — actual usage varies with the task, and Claude may stop reasoning well before the budget is exhausted. Cost should be tracked via the usage fields rather than assumed constant.",
+          "citation": { "title": "Extended Thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-03",
+      "question": "A pharma research team runs extended thinking with 45,000-token budgets for deep protocol analysis. Requests intermittently fail with network timeouts and dropped connections, though smaller-budget requests succeed. What does Anthropic's documentation recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Wrap the synchronous calls in aggressive retry logic with exponential backoff.",
+          "correct": false,
+          "explanation": "Retries don't fix the root cause: budgets above 32k produce long-running requests that hit system timeouts and open-connection limits by design. Retrying long doomed requests wastes spend and worsens the timeout pattern.",
+          "citation": { "title": "Extended Thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "B",
+          "text": "Disable prompt caching, since cache writes are extending request duration past the timeout threshold.",
+          "correct": false,
+          "explanation": "Prompt caching is unrelated to this failure mode — it reduces repeated prefix processing and generally improves latency. The documented cause of timeouts at high thinking budgets is the long-running generation itself, not cache writes.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Lower the thinking budget to 1,024 tokens, since large budgets are unsupported.",
+          "correct": false,
+          "explanation": "Large budgets are supported and often valuable for complex analysis; 1,024 is merely the minimum. Collapsing the budget sacrifices the reasoning depth this workload needs when a documented delivery mechanism for big budgets exists.",
+          "citation": { "title": "Extended Thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Move these requests to the Message Batches API, which Anthropic recommends for thinking budgets above 32k to avoid networking issues.",
+          "correct": true,
+          "explanation": "The extended thinking documentation states directly: for thinking budgets above 32k, use batch processing to avoid networking issues, because pushing beyond 32k produces long-running requests that can hit system timeouts and open-connection limits. As a bonus, batch usage is billed at 50% of standard prices.",
+          "citation": { "title": "Extended Thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-04",
+      "question": "A support platform enabled prompt caching but sees cache_read_input_tokens of 0 on every request. Investigation shows the system prompt starts with a per-request timestamp, followed by 6,000 tokens of unchanging policy text with a cache_control breakpoint at the end. What is the correct fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add more cache_control breakpoints throughout the system prompt, up to the maximum of four.",
+          "correct": false,
+          "explanation": "More breakpoints can't help when the very first tokens differ every request: caching matches an identical prefix, and a changing timestamp at the top invalidates everything after it. Breakpoint count isn't the problem; prefix ordering is.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Reorder the prompt static-first: keep the 6,000-token policy text at the top with the breakpoint on its last stable block, and move the timestamp after the breakpoint.",
+          "correct": true,
+          "explanation": "Cache effectiveness depends on placing static content first and marking the end of the stable prefix with cache_control; content that varies per request must come after the breakpoint. Anthropic documents this exact mistake — volatile data such as timestamps placed in the cached prefix — as a leading cause of zero cache hits.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Shorten the policy text below the model's minimum cacheable length so the cache engages faster.",
+          "correct": false,
+          "explanation": "This is backwards: prompts below the model's minimum cacheable token length are not cached at all, even when marked with cache_control. The 6,000-token block is an asset for caching; the volatile timestamp ahead of it is the defect.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Switch the breakpoint to the 1-hour TTL, which is more tolerant of prefix changes between requests.",
+          "correct": false,
+          "explanation": "TTL controls how long an entry survives between uses, not how matching works — cache hits require the prefix to be identical regardless of TTL. A 1-hour entry with a changing timestamp in front of it still never gets read, while costing 2x base input to write.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-05",
+      "question": "An internal analytics agent is invoked roughly every 30–40 minutes with the same 20,000-token instruction prefix. Cache metrics show every invocation re-writes the cache; the default cache entry has always expired by the next run. What is the most cost-appropriate adjustment?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Nothing can be done: prompt caching cannot persist entries beyond five minutes.",
+          "correct": false,
+          "explanation": "The 5-minute TTL is only the default. Anthropic offers a 1-hour TTL option via cache_control specifically for requests that recur at longer intervals, so this workload has a documented solution.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Route the invocations through the Message Batches API so the 50% discount replaces the lost caching savings.",
+          "correct": false,
+          "explanation": "This conflates two different mechanisms: batch is an asynchronous processing discount, while caching cuts repeated-prefix cost. An interactive agent invoked on demand can't wait on asynchronous batch completion, and the caching problem remains solvable directly with a longer TTL.",
+          "citation": { "title": "Batch Processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Add all four allowed cache_control breakpoints, since each breakpoint extends the entry's lifetime.",
+          "correct": false,
+          "explanation": "Breakpoints define where cache entries can be written and matched; they do not change TTL. Up to four breakpoints help when different sections change at different frequencies — they cannot keep a 5-minute entry alive across a 35-minute gap.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Use the 1-hour TTL on the stable prefix, accepting the higher write cost (2x base input) because reads at 30–40 minute intervals will then hit at roughly 10% of base input price.",
+          "correct": true,
+          "explanation": "The 1-hour TTL exists for exactly this pattern: requests recurring at intervals longer than five minutes. Writes cost 2x base input versus 1.25x for the 5-minute tier, but each subsequent 20K-token read costs about 0.1x base input instead of a full re-write, and each use refreshes the TTL.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-06",
+      "question": "A growth team A/B tests tool descriptions by randomly serving one of two tool definition variants per request. Since the experiment launched, prompt cache hit rates collapsed to near zero — even though the system prompt and conversation prefixes are unchanged. Why?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Tools sit at the top of the cache hierarchy (tools, then system, then messages), so changing tool definitions invalidates the cached system and message content downstream; tool definitions must stay stable per cached prefix.",
+          "correct": true,
+          "explanation": "The cache prefix is built in the order tools, then system, then messages, and a change at any level invalidates that level and everything after it. Randomizing tool definitions therefore breaks the entire cached prefix on every variant switch; the fix is stable tool definitions (or consistent variant assignment per conversation).",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "The system prompt is cached independently of tools, so the collapse must come from an unnoticed change in the messages array.",
+          "correct": false,
+          "explanation": "System content is not cached independently of tools: tools precede system in the cumulative prefix hierarchy, so a tool-definition change invalidates the system-level cache even when its text is byte-identical. The premise contradicts documented invalidation rules.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "The team exceeded the four-breakpoint limit, which silently turns caching off for the whole request.",
+          "correct": false,
+          "explanation": "Nothing in the scenario involves breakpoint count, and the documented cause fits the hierarchy rules exactly: tool changes cascade invalidation downstream. The four-breakpoint limit governs where entries can be defined, not a global off switch triggered by experiments.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Another team in a different organization is writing conflicting cache entries for the same prompts.",
+          "correct": false,
+          "explanation": "Caches are isolated between organizations — different organizations never share cache entries, so outside teams cannot invalidate yours. The collapse is fully explained by the experiment's own tool-definition churn at the top of the cache hierarchy.",
+          "citation": { "title": "Prompt Caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-07",
+      "question": "A due-diligence agent pre-loads roughly 300 deal documents into context at session start 'so everything is available.' Accuracy on questions about mid-corpus details is measurably worse than in small-context tests. Applying Anthropic's context engineering guidance, what should change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep pre-loading; retrieval adds latency and modern models are immune to long-context degradation.",
+          "correct": false,
+          "explanation": "Models are not immune: Anthropic describes context rot, where accuracy and recall degrade as context grows, because attention is a finite budget that depletes with each token. The team's own mid-corpus accuracy drop is this phenomenon in action.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the full pre-load but instruct the model in the system prompt to pay equal attention to all documents.",
+          "correct": false,
+          "explanation": "Attention constraints are architectural, not instructional — a prompt cannot restore an exhausted attention budget. Anthropic's remedy is curating what enters context, not exhorting the model to attend harder to an overloaded window.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Give the agent lightweight identifiers (file paths, queries, links) and tools to retrieve documents just-in-time, optionally pre-loading only the few items speed demands.",
+          "correct": true,
+          "explanation": "This is Anthropic's just-in-time strategy: maintain lightweight references and dynamically load data into context at runtime, mirroring how humans use external indexes rather than memorizing everything. Hybrid approaches — some data up front for speed, exploration tools for the rest — are explicitly endorsed.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Duplicate the most important documents at both the start and end of the context so position effects cancel out.",
+          "correct": false,
+          "explanation": "Duplication consumes even more of the attention budget on redundant tokens and isn't an Anthropic-documented mitigation. The guidance is to treat context as a finite resource and retrieve only what's relevant, not to pad the window further.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-08",
+      "question": "A data-platform team runs a multi-hour schema-migration agent. Late in each run, the conversation approaches the context limit and the agent forgets early architectural decisions, repeating settled debates. Which combination of techniques does Anthropic recommend for long-horizon coherence?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Switch to the model with the largest context window; more raw capacity removes the need for context management.",
+          "correct": false,
+          "explanation": "A bigger window delays but doesn't eliminate the problem: context rot means performance degrades as tokens accumulate regardless of the ceiling. Anthropic's long-horizon techniques exist because capacity alone doesn't preserve attention quality over multi-hour tasks.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Use compaction — summarizing the conversation while preserving architectural decisions — plus structured note-taking that persists key state outside the context window for later retrieval.",
+          "correct": true,
+          "explanation": "These are Anthropic's named long-horizon techniques: compaction summarizes a conversation nearing its limit while keeping critical details like architectural decisions, and structured note-taking maintains persistent memory outside the window, enabling coherence across multi-hour task sequences. Together they directly prevent re-litigating settled decisions.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Raise max_tokens on every request so each turn can restate all prior decisions in its output.",
+          "correct": false,
+          "explanation": "max_tokens governs output length and does nothing for a filling context window — restating decisions in output actually accelerates the fill. The documented tools for this failure mode are compaction, note-taking, and sub-agent architectures, not larger outputs.",
+          "citation": { "title": "Context Windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        },
+        {
+          "key": "D",
+          "text": "Kill and restart the agent with a clean context every hour, relying on the codebase itself to convey prior decisions.",
+          "correct": false,
+          "explanation": "A bare restart discards rationale and in-flight state that code alone doesn't capture, recreating the amnesia problem on a schedule. Anthropic's pattern for fresh contexts pairs them with distilled summaries or persisted notes, not with starting from nothing.",
+          "citation": { "title": "Effective Context Engineering for AI Agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-09",
+      "question": "An invoice-extraction pipeline returns inconsistently structured output: field names drift, edge cases are mishandled, and instructions occasionally bleed into extracted values. The prompt is one long prose paragraph with a single embedded sample. What is the professional-grade prompting fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Provide 3–5 diverse, relevant examples wrapped in <example> tags, and separate instructions, context, and input into distinct XML sections.",
+          "correct": true,
+          "explanation": "Anthropic recommends 3–5 diverse examples for best results — examples are among the most reliable ways to steer format and structure — wrapped in <example>/<examples> tags so Claude distinguishes them from instructions. XML tags for instructions, context, and input let Claude parse complex prompts unambiguously, fixing the instruction-bleed failure.",
+          "citation": { "title": "Prompting Best Practices: Examples", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/multishot-prompting" }
+        },
+        {
+          "key": "B",
+          "text": "Keep exactly one example: additional examples overfit the model to the samples and reduce generalization.",
+          "correct": false,
+          "explanation": "This contradicts the documented guidance of including 3–5 examples for best results, with emphasis on making them diverse and covering edge cases. Well-chosen varied examples improve accuracy and consistency rather than causing harmful overfitting.",
+          "citation": { "title": "Prompting Best Practices: Examples", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/multishot-prompting" }
+        },
+        {
+          "key": "C",
+          "text": "Remove the example entirely to save tokens and rely on longer prose instructions.",
+          "correct": false,
+          "explanation": "Examples are one of the most reliable levers for output format, tone, and structure — precisely the failure modes observed. Trading them away for more prose worsens the ambiguity that's causing instructions to bleed into extracted values.",
+          "citation": { "title": "Prompting Best Practices: Examples", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/multishot-prompting" }
+        },
+        {
+          "key": "D",
+          "text": "Structure is cosmetic: XML tags and prose paragraphs produce equivalent parsing behavior in current models.",
+          "correct": false,
+          "explanation": "Anthropic documents that XML tags help Claude parse prompts unambiguously when instructions, context, examples, and variable inputs are mixed — wrapping each content type in its own tag reduces misinterpretation. Treating structure as cosmetic ignores that documented effect.",
+          "citation": { "title": "Prompting Best Practices: XML Tags", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-10",
+      "question": "A legal research product must show users the exact source passages supporting each answer over uploaded case documents, with minimal token overhead. The team plans to add 'always quote your sources' to the prompt. What should the architect recommend instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the prompt-based approach; instructed quoting and the citations feature produce equivalent accuracy.",
+          "correct": false,
+          "explanation": "Anthropic's evaluations found the citations feature significantly more likely to cite the most relevant quotes than purely prompt-based approaches. For a product whose core value is verifiable grounding, the measured quality gap matters.",
+          "citation": { "title": "Citations", "url": "https://docs.claude.com/en/docs/build-with-claude/citations" }
+        },
+        {
+          "key": "B",
+          "text": "Avoid the citations feature because returned cited_text is billed as output tokens, inflating cost on quote-heavy answers.",
+          "correct": false,
+          "explanation": "This reverses the documented economics: cited_text does not count toward output tokens, which is listed as a cost advantage over prompting Claude to reproduce direct quotes in its generated output.",
+          "citation": { "title": "Citations", "url": "https://docs.claude.com/en/docs/build-with-claude/citations" }
+        },
+        {
+          "key": "C",
+          "text": "Enable the citations feature on the document content blocks: responses return passages tied to source locations, with higher citation quality and cited_text excluded from output-token billing.",
+          "correct": true,
+          "explanation": "The citations feature grounds responses in provided documents and returns the exact supporting passages with location indices. It is documented as significantly more likely to cite relevant quotes than prompt-based approaches, and the cited_text field does not count toward output tokens — satisfying both the verifiability and cost requirements.",
+          "citation": { "title": "Citations", "url": "https://docs.claude.com/en/docs/build-with-claude/citations" }
+        },
+        {
+          "key": "D",
+          "text": "Citations can't help here — the feature only works with web search results, not user-provided documents.",
+          "correct": false,
+          "explanation": "Citations are enabled directly on document content blocks supplied in the request (for example plain-text documents with citations enabled), which is exactly the uploaded-case-file scenario. Restricting the feature to web search misstates its documented scope.",
+          "citation": { "title": "Citations", "url": "https://docs.claude.com/en/docs/build-with-claude/citations" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D2-11",
+      "question": "A team running Claude Haiku 4.5 (200K context window) gets 'prompt is too long' errors on mature conversations. An engineer argues the errors are impossible because 'most of our prompt is cached, and cached tokens don't occupy the window.' Which statement is accurate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The engineer is right: cache_read tokens are excluded from the context window, so only new tokens count.",
+          "correct": false,
+          "explanation": "The documentation states the opposite: cached prompt prefixes still occupy the context window — caching changes what you pay for those tokens, not whether they count. All of input_tokens, cache_read_input_tokens, and cache_creation_input_tokens count toward the window.",
+          "citation": { "title": "Context Windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        },
+        {
+          "key": "B",
+          "text": "Everything counts toward the window — system prompt, tool definitions, all messages, and generated output including thinking — and caching only changes billing, so the conversation itself must be curated or compacted.",
+          "correct": true,
+          "explanation": "The context window includes the system prompt, every message (tool results, images, documents), tool definitions, and the turn's output including thinking, and cached prefixes still occupy it. The real fix is context management — trimming, summarizing, or compaction — not assuming caching frees space.",
+          "citation": { "title": "Context Windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        },
+        {
+          "key": "C",
+          "text": "Tool definitions and thinking output are metadata that never count toward the 200K limit, so the overflow must come from message text alone.",
+          "correct": false,
+          "explanation": "Tool definitions are explicitly listed as counting toward the context window, and a turn's generated output — including its thinking — counts as well. Excluding them from the accounting is exactly the miscalculation that produces surprise overflows.",
+          "citation": { "title": "Context Windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        },
+        {
+          "key": "D",
+          "text": "Raising max_tokens will expand the effective window, since the window scales with the configured output limit.",
+          "correct": false,
+          "explanation": "max_tokens caps output within the fixed context window; it does not enlarge the window. In fact, when input plus max_tokens exceeds the window, generation can stop early with a model_context_window_exceeded stop reason rather than gaining capacity.",
+          "citation": { "title": "Context Windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        }
+      ]
+    }
+  ]
+}

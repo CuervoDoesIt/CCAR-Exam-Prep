@@ -1,0 +1,449 @@
+{
+  "examId": "ccar-f-exam2",
+  "domainId": "D2",
+  "domainName": "Tool Design & MCP Integration",
+  "questions": [
+    {
+      "id": "F2-D2-01",
+      "question": "A travel platform's agent has two tools: search_hotels (live availability and prices) and search_hotel_content (static descriptions and photos). Claude frequently calls the wrong one when users ask about room rates. Both tools are genuinely needed. What is the first fix Anthropic's guidance recommends?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Merge both tools into one, since two search tools can never coexist reliably.",
+          "correct": false,
+          "explanation": "Consolidation helps when tools duplicate a workflow, but these serve distinct purposes and are both needed. The documented first lever is the description: even small refinements to tool descriptions can yield dramatic improvements in selection accuracy.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Set tool_choice to force search_hotels on every request that mentions hotels.",
+          "correct": false,
+          "explanation": "Forcing a specific tool removes Claude's judgment entirely and would misfire on legitimate content questions (photos, descriptions). tool_choice {\"type\": \"tool\"} is for cases where one particular call must happen, not for disambiguating two valid tools.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "Rewrite each description to state explicitly what the tool does, when to use it, and what it does not return — e.g., that search_hotel_content has no pricing.",
+          "correct": true,
+          "explanation": "Anthropic's best practice is extremely detailed descriptions covering what the tool does, when it should (and shouldn't) be used, and its limitations — written as you'd explain it to a new team member. Stating that content search excludes pricing directly resolves the ambiguity.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "D",
+          "text": "Lower the sampling temperature so tool selection becomes more consistent.",
+          "correct": false,
+          "explanation": "Temperature affects output randomness, not the model's understanding of overlapping tools. If descriptions leave the boundary between two tools ambiguous, more deterministic sampling just repeats the same misunderstanding consistently.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-02",
+      "question": "A telecom operator's agent exposes about 40 tools spanning billing, network operations, and CRM. Several services each have their own generic \"search\" tool, and Claude often calls a search tool from the wrong service. Which naming practice does Anthropic recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Order the tools alphabetically in the tools array so related ones appear together.",
+          "correct": false,
+          "explanation": "Array ordering doesn't disambiguate purpose; the model selects tools by name, description, and schema. Anthropic's remedy for large, cross-service tool surfaces is meaningful namespacing, not list ordering.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Namespace tool names with a consistent service prefix, e.g. billing_search_invoices, network_search_outages, crm_search_customers.",
+          "correct": true,
+          "explanation": "Anthropic recommends namespacing — grouping related tools under common prefixes such as service or resource — to clarify boundaries between dozens of tools. Consistent prefixes make each tool's domain immediately obvious and reduce wrong-service selections.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Keep the generic names and add a routing table to the system prompt mapping intents to tools.",
+          "correct": false,
+          "explanation": "A system-prompt mapping can help marginally, but it leaves the primary signal — the tool name and description Claude reads at selection time — ambiguous. Anthropic's guidance is to fix names and descriptions first, since they drive selection.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "D",
+          "text": "Rename every tool to a single short verb (search, get, update) and rely on the input schema to distinguish services.",
+          "correct": false,
+          "explanation": "This deepens the ambiguity: identical or generic names give the model no signal about which service a tool touches, and input schemas are a weak differentiator. Namespaced, self-describing names are the documented approach as tool libraries grow.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-03",
+      "question": "A real-estate startup wrapped its REST API one-endpoint-per-tool: list_agents, get_agent_calendar, create_appointment. Booking a property viewing requires chaining all three, and the agent wastes context on intermediate results and sometimes calls them out of order. What does Anthropic's tool-writing guidance recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Consolidate the chain into one task-oriented tool, e.g. schedule_viewing, that checks agent availability and books internally.",
+          "correct": true,
+          "explanation": "Anthropic advises building task-oriented tools rather than mirroring API endpoints — like a schedule_event tool that handles availability lookup and booking in one call. Consolidation cuts context consumed by intermediate outputs and eliminates mis-sequencing.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the three tools and add few-shot examples of the correct calling order to the system prompt.",
+          "correct": false,
+          "explanation": "Examples may reduce mis-ordering but do nothing about the token waste of shuttling intermediate results through context on every booking. Anthropic's guidance is to consolidate frequently chained operations so the agent thinks in tasks, not mechanical steps.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Raise max_tokens so the agent has room to reason through the three-call sequence.",
+          "correct": false,
+          "explanation": "max_tokens caps a single response's output; it doesn't reduce the tokens consumed by intermediate tool results accumulating in the conversation, nor prevent out-of-order calls. The structural fix is a consolidated, workflow-level tool.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Expose even finer-grained endpoints so each call is smaller and cheaper.",
+          "correct": false,
+          "explanation": "Finer granularity increases the number of round trips and intermediate results in context, worsening the exact problems observed. Anthropic explicitly warns against simply wrapping existing API endpoints and recommends fewer, more consolidated tools that handle frequently chained, multi-step tasks in a single call.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-04",
+      "question": "A gaming studio's player-support tool returns the entire account record: ~2,000 lines of JSON with internal UUIDs, feature flags, and raw timestamps. Claude often misses the relevant facts and context fills quickly. What change matches Anthropic's guidance on tool results?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the full payload but instruct Claude in the system prompt to skim for relevant fields.",
+          "correct": false,
+          "explanation": "The tokens are still spent — the whole record enters context regardless of what Claude attends to. Anthropic's guidance targets the tool response itself: return only high-signal information rather than asking the model to filter bloat downstream.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Return the same fields but alphabetized so important ones are easier to locate.",
+          "correct": false,
+          "explanation": "Ordering doesn't reduce token cost or noise; low-signal technical metadata still crowds the context window. The documented fix is content selection — semantic, decision-relevant fields — not cosmetic rearrangement.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Return only the opaque UUIDs to minimize tokens, letting Claude fetch details with follow-up calls.",
+          "correct": false,
+          "explanation": "Anthropic found the opposite helps: resolving arbitrary UUIDs into semantically meaningful language significantly improves Claude's precision. Returning only cryptic identifiers strips the signal and forces extra round trips.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Reshape the response to concise, human-readable, high-signal fields (player name, tier, recent tickets), omitting low-level metadata Claude doesn't need.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is to prioritize contextually relevant, semantic information over exhaustive technical dumps — returning meaningful names and the fields needed for the next decision. Concise high-signal results improve accuracy and preserve the limited context budget.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-05",
+      "question": "A travel metasearch tool can match thousands of flights for a broad query like \"NYC to Europe in June.\" The team must decide how the tool should behave when result sets are huge. What does Anthropic recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Return the complete result set so the agent always has full information to reason over.",
+          "correct": false,
+          "explanation": "Agents operate under limited context; dumping thousands of results consumes the window and buries signal in noise. Anthropic recommends sensible defaults for pagination, filtering, and truncation precisely to protect against this.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Paginate and truncate with sensible defaults, and when truncating, tell the agent results were cut and steer it toward more targeted queries.",
+          "correct": true,
+          "explanation": "This is Anthropic's guidance: implement pagination, range selection, filtering, and truncation with sensible defaults, and include helpful guidance in truncated responses that nudges the agent toward token-efficient, targeted searches instead of broad ones.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Silently return only the first page with no indication that more results exist.",
+          "correct": false,
+          "explanation": "Silent truncation misleads the agent into treating a partial view as complete, producing confidently wrong answers. Truncated responses should signal the cutoff and guide the agent's next, more specific query.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Make page size a required parameter with no default so the model must always choose it explicitly.",
+          "correct": false,
+          "explanation": "Anthropic recommends sensible defaults rather than pushing every decision onto the model; a mandatory no-default parameter adds friction and invites invalid calls. Defaults plus optional overrides keep the common path simple and token-efficient.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-06",
+      "question": "A telecom diagnostics tool serves two workflows: quick line-status checks during chat, and full technical detail when escalating to engineering. Detail mode is ~10x the tokens. How does Anthropic suggest designing a single tool to serve both needs efficiently?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a response_format enum parameter (e.g. \"concise\" or \"detailed\") so the agent controls verbosity per call.",
+          "correct": true,
+          "explanation": "Anthropic recommends exposing a response_format-style enum so agents choose between concise and detailed responses, keeping routine calls token-efficient while preserving access to full technical output (and needed identifiers) when the task demands it.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Publish two separate tools with identical inputs, differing only in output verbosity.",
+          "correct": false,
+          "explanation": "Near-duplicate tools reintroduce selection ambiguity — the very problem clear tool surfaces avoid. A single tool with a verbosity parameter conveys the choice explicitly in the schema without doubling the tool count.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Always return full detail; more information can never hurt the agent's reasoning.",
+          "correct": false,
+          "explanation": "It can hurt: verbose low-signal payloads consume the finite context window and dilute attention on relevant facts. Anthropic's token-efficiency guidance is to return only what the task needs, with detail available on request.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Always return the concise form; engineers can query the backend directly for detail.",
+          "correct": false,
+          "explanation": "This breaks the escalation workflow the agent is supposed to complete, forcing humans to compensate outside the loop. The documented pattern keeps both modes agent-accessible via a response-format parameter rather than amputating one.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-07",
+      "question": "A real-estate app requires that the first model response for every listing page always calls get_property_valuation — never a direct text answer and never a different tool. Which API mechanism guarantees this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "tool_choice {\"type\": \"any\"}, which requires the model to call one of the provided tools.",
+          "correct": false,
+          "explanation": "\"any\" guarantees some tool gets called but not which one — Claude could still pick a different tool from the list. To mandate one particular tool, the request must name it with tool_choice type \"tool\".",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "B",
+          "text": "A system prompt line: \"Always call get_property_valuation before answering.\"",
+          "correct": false,
+          "explanation": "Prompting steers behavior but offers no guarantee; the model may still answer directly on some inputs. The documented way to require a particular tool call is the tool_choice parameter, which the API enforces.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "tool_choice {\"type\": \"tool\", \"name\": \"get_property_valuation\"}, which forces Claude to use that specific tool.",
+          "correct": true,
+          "explanation": "The four tool_choice options are auto, any, tool, and none; \"tool\" forces Claude to always use the named tool. The API prefills the assistant response to force the call, so no free-text answer precedes the tool_use block.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "D",
+          "text": "tool_choice {\"type\": \"auto\"}, the default that lets Claude decide whether to call tools.",
+          "correct": false,
+          "explanation": "\"auto\" is the default when tools are provided and explicitly leaves the decision to Claude — it may respond directly without any tool call. It cannot provide the guarantee this requirement demands.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-08",
+      "question": "A gaming analytics assistant has several stats tools. Product wants every answer grounded in a tool call — the model must use one of its tools rather than answering from memory — but which tool should remain the model's choice. Which tool_choice setting fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "{\"type\": \"none\"} — prevents tool calls so the model reasons carefully before answering.",
+          "correct": false,
+          "explanation": "\"none\" does the opposite of the requirement: it prevents Claude from using any tools (and is the default when no tools are provided). Every answer would come from parametric memory, exactly what product wants to avoid.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "B",
+          "text": "{\"type\": \"tool\", \"name\": \"get_player_stats\"} — forces the flagship stats tool on every request.",
+          "correct": false,
+          "explanation": "Forcing one named tool removes the model's ability to choose the right tool per question, misrouting queries meant for the other stats tools. The requirement is \"some tool, model's choice,\" which is exactly what \"any\" provides.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "{\"type\": \"auto\"} — the default, letting Claude decide whether to call any tool at all.",
+          "correct": false,
+          "explanation": "Under \"auto\" Claude may still respond directly without any tool call when it judges its own knowledge sufficient, so answers wouldn't reliably be tool-grounded. \"auto\" permits tools; it doesn't require them.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "D",
+          "text": "{\"type\": \"any\"} — requires Claude to use one of the provided tools, without dictating which.",
+          "correct": true,
+          "explanation": "Per the docs, \"any\" tells Claude it must use one of the provided tools but doesn't force a particular one — the model still selects the best-fitting tool. The API prefills the assistant message to guarantee a tool_use block is produced.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-09",
+      "question": "During a travel agent run, Claude calls book_flight and the airline API returns HTTP 500. The loop must continue gracefully. Per Anthropic's docs, how should the application report this failure back to Claude?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send a tool_result for that tool_use_id with is_error set to true and an instructive message, e.g. \"Booking service unavailable (HTTP 500); retry after 60 seconds.\"",
+          "correct": true,
+          "explanation": "The docs say to return the error in the tool_result content with \"is_error\": true, and to write instructive error messages stating what went wrong and what to try next. Claude then incorporates the failure into its response or adapts its plan.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "B",
+          "text": "Terminate the conversation and show the raw HTTP error to the end user immediately.",
+          "correct": false,
+          "explanation": "Aborting forfeits Claude's ability to recover — retrying, suggesting alternatives, or explaining the outage in user-friendly terms. The is_error mechanism exists precisely so tool failures become information the model can act on.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Skip the tool_result for the failed call and resend the previous request so Claude tries again.",
+          "correct": false,
+          "explanation": "Every tool_use block must be answered by a tool_result immediately following it in the message history; omitting one produces API errors about tool_use ids without matching tool_result blocks. Failures are reported, not silently dropped.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Describe the failure in a plain text user message placed before the tool_result block.",
+          "correct": false,
+          "explanation": "Error details belong inside the tool_result (with is_error true) referencing the tool_use_id. The docs also require tool_result blocks to come first in the user message's content array — text before them causes a 400 error.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-10",
+      "question": "A real-estate tech firm is building an MCP server. One capability is exposing read-only MLS listing records and the database schema so the host application can supply them to the model as context — no action is performed. Which MCP primitive fits this capability?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A tool, because anything the model consumes must be fetched through tools/call.",
+          "correct": false,
+          "explanation": "Tools are model-controlled executable functions for performing actions. MCP provides a separate primitive — resources — specifically for passive, read-only data sources, so not everything the model consumes needs to be a tool invocation.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "B",
+          "text": "A resource: an application-controlled, read-only data source with a URI, which the host retrieves and provides as context.",
+          "correct": true,
+          "explanation": "MCP resources are passive data sources providing read-only access to information — file contents, database records, schemas — identified by URIs. They are application-controlled: the host decides how to retrieve and include them, unlike model-invoked tools.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "C",
+          "text": "A prompt, since the listing data will ultimately be inserted into the model's prompt.",
+          "correct": false,
+          "explanation": "MCP prompts are reusable, user-invoked instruction templates, not raw data feeds. Although resource content may end up in the model's context, the primitive for exposing data itself is the resource, discovered via resources/list and read via resources/read.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "D",
+          "text": "Elicitation, since the server is supplying information into the conversation.",
+          "correct": false,
+          "explanation": "Elicitation is a client-side primitive that lets servers request additional input or confirmation from the user — the opposite direction of data flow. Serving read-only records to the application is the resources primitive.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-11",
+      "question": "A gaming studio wants team members to explicitly trigger a standardized \"generate patch notes\" workflow — with arguments like build number and audience — from their MCP-enabled client, ideally surfaced like a slash command. Which MCP primitive should the server expose?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A tool, so the model can run patch-note generation automatically whenever it seems relevant.",
+          "correct": false,
+          "explanation": "Tools are model-controlled — Claude decides when to invoke them. The requirement is explicit, user-initiated invocation of a standardized template, which is precisely the role of MCP prompts, not automatic model triggering.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "B",
+          "text": "A resource containing an example patch-notes document the model can read for style.",
+          "correct": false,
+          "explanation": "A resource provides passive read-only data; it can inform style but cannot define a parameterized, invokable workflow with arguments. The user-invoked template with structured arguments is the prompts primitive.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "C",
+          "text": "A prompt: a user-controlled, parameterized template that clients typically surface as slash commands.",
+          "correct": true,
+          "explanation": "MCP prompts are reusable templates with defined arguments, and they are user-controlled — requiring explicit invocation rather than automatic triggering. Clients commonly expose them as slash commands or command-palette entries, matching this workflow exactly.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "D",
+          "text": "A notification, so the server can push the template to clients when builds ship.",
+          "correct": false,
+          "explanation": "Notifications inform clients of state changes (like a changed tool list); they are not invokable templates and carry no user-triggered workflow semantics. The primitive designed for reusable, argument-taking workflows is the prompt.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-12",
+      "question": "A telecom builds two MCP servers: one runs on each field engineer's laptop as a locally launched process serving a single client, the other is hosted centrally and must serve many clients across the network. Which transport pairing matches MCP's design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Streamable HTTP for both, since HTTP works equally well locally and remotely.",
+          "correct": false,
+          "explanation": "HTTP does work locally, but MCP's stdio transport exists because direct process communication on the same machine gives optimal performance with no network overhead. For a locally launched single-client server, stdio is the intended fit.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        },
+        {
+          "key": "B",
+          "text": "Stdio for both, since it is the simpler and faster transport.",
+          "correct": false,
+          "explanation": "Stdio uses standard input/output streams between local processes on the same machine — it cannot reach a centrally hosted server over the network. Remote, multi-client servers are what Streamable HTTP is designed for.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        },
+        {
+          "key": "C",
+          "text": "WebSockets locally and gRPC remotely, the two transports the MCP spec defines.",
+          "correct": false,
+          "explanation": "MCP defines two transport mechanisms: stdio and Streamable HTTP (HTTP POST with optional Server-Sent Events for streaming). WebSockets and gRPC are not the protocol's defined transports.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        },
+        {
+          "key": "D",
+          "text": "Stdio for the local single-client server; Streamable HTTP for the remote server that serves many clients.",
+          "correct": true,
+          "explanation": "This matches the documented design: local MCP servers using stdio typically serve a single client via direct process communication, while remote servers use Streamable HTTP and typically serve many clients, with support for standard HTTP authentication.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D2-13",
+      "question": "A travel company is deploying its remote MCP server over Streamable HTTP for third-party MCP clients and must decide how authorization should work. What does the MCP specification say?",
+      "options": [
+        {
+          "key": "A",
+          "text": "HTTP-based transports should use the spec's OAuth-based authorization, with clients sending access tokens in the Authorization: Bearer header; stdio servers instead retrieve credentials from the environment.",
+          "correct": true,
+          "explanation": "The MCP authorization spec, built on OAuth 2.1, applies to HTTP-based transports: the MCP server acts as a resource server and clients present Bearer tokens in the Authorization header on every request. STDIO implementations should not follow it, using environment credentials instead.",
+          "citation": { "title": "MCP Authorization Specification", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization" }
+        },
+        {
+          "key": "B",
+          "text": "Access tokens should be passed in the URL query string so they survive redirects between endpoints.",
+          "correct": false,
+          "explanation": "The specification explicitly prohibits this: access tokens MUST NOT be included in the URI query string. Tokens go in the Authorization request header using the Bearer scheme on every HTTP request to the server.",
+          "citation": { "title": "MCP Authorization Specification", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization" }
+        },
+        {
+          "key": "C",
+          "text": "Remote HTTP servers should read credentials from environment variables, the same mechanism stdio servers use.",
+          "correct": false,
+          "explanation": "The spec assigns environment-based credentials to STDIO transports, where client and server share a local machine. For HTTP-based transports serving remote clients it defines an OAuth 2.1-based authorization flow with Bearer tokens instead.",
+          "citation": { "title": "MCP Authorization Specification", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization" }
+        },
+        {
+          "key": "D",
+          "text": "MCP requires all servers to be public; authorization is out of scope for the protocol.",
+          "correct": false,
+          "explanation": "Authorization is optional but very much in scope: MCP provides transport-level authorization capabilities, and the spec details an OAuth 2.1-based flow for HTTP transports so clients can access restricted servers on behalf of resource owners.",
+          "citation": { "title": "MCP Authorization Specification", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization" }
+        }
+      ]
+    }
+  ]
+}

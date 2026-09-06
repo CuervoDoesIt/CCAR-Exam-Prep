@@ -1,0 +1,143 @@
+{
+  "examId": "ccar-p-exam2",
+  "domainId": "D6",
+  "domainName": "Stakeholder Communication & Lifecycle Management",
+  "questions": [
+    {
+      "id": "P2-D6-01",
+      "question": "A utility company's steering committee meets to decide whether a Claude-powered outage-notification drafter goes live to two million customers. The product manager plans to present five impressive demo transcripts. As the architect, what should you advise presenting instead to support the go/no-go decision?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A larger set of thirty transcripts sampled across service regions for broader anecdotal coverage.",
+          "correct": false,
+          "explanation": "More anecdotes are still anecdotes: hand-picked or unscored transcripts cannot establish the failure rate a launch decision hinges on. Anthropic's guidance is to measure performance against defined criteria rather than judge by impressive examples.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Results from a pre-agreed evaluation suite scoring accuracy and tone on representative outage scenarios against launch thresholds, plus an analysis of the observed failure modes.",
+          "correct": true,
+          "explanation": "Go/no-go decisions should rest on empirical evaluation against success criteria agreed before the review, so the committee compares measured performance to thresholds instead of reacting to demos. Anthropic emphasizes measuring performance and iterating; failure-mode analysis tells stakeholders what residual risk they are accepting.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "A competitive analysis showing peer utilities have already deployed similar AI notification systems.",
+          "correct": false,
+          "explanation": "Peer adoption says nothing about whether this system meets this company's quality bar on its own data. Launch risk is a property of the measured system, which only evaluation results can characterize.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Latency and throughput benchmarks demonstrating the system meets its performance SLAs.",
+          "correct": false,
+          "explanation": "Operational readiness is necessary but not sufficient: a fast system that drafts inaccurate or off-tone outage notices still fails customers. Quality evaluation results are the decision-critical evidence latency numbers cannot replace.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D6-02",
+      "question": "Two days after a telecom support assistant's prompt update ships, resolution quality drops sharply and executives are hearing customer complaints. The prompt is version-controlled and the previous version's eval scores are on record. What is the strongest incident communication from the architect?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Reassure stakeholders that LLM outputs are inherently nondeterministic, so temporary variance is expected and no action is needed.",
+          "correct": false,
+          "explanation": "A measured regression following a specific change is not random variance, and dismissing it erodes stakeholder trust. Anthropic's approach treats performance as measurable, which makes regressions identifiable and correctable rather than shrugged off.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Say nothing until the full root-cause analysis is complete so the communication is definitive.",
+          "correct": false,
+          "explanation": "Silence during a customer-visible incident lets speculation define the narrative and delays mitigation approval. Best practice is early communication of measured impact and immediate containment, with root cause following.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Quantify the regression with eval metrics against the prior baseline, report that the versioned prompt was rolled back as containment, and state the re-release criteria the fix must pass.",
+          "correct": true,
+          "explanation": "This is disciplined lifecycle communication: measured impact instead of anecdotes, immediate reversal enabled by versioned artifacts, and objective, evaluation-based criteria for shipping again. It reflects Anthropic's principle of measuring performance and iterating on implementations.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Announce an immediate switch to a different model family as the definitive fix for the regression.",
+          "correct": false,
+          "explanation": "The regression followed a prompt change, and swapping models is another untested change that can introduce new regressions. Anthropic advises thoroughly testing applications against a new model before moving workloads onto it.",
+          "citation": { "title": "Model deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D6-03",
+      "question": "An investment platform pinned a dated Claude model snapshot at launch two years ago. That model has now been marked deprecated with a published retirement date. How should the architect frame the roadmap conversation with business owners?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Present the retirement timeline, noting Anthropic provides at least 60 days' notice before retiring publicly released models, and plan an eval-verified migration to the recommended replacement well before the date, since requests to retired models fail.",
+          "correct": true,
+          "explanation": "This matches Anthropic's lifecycle: deprecated models get a recommended replacement and retirement date, customers receive at least 60 days' notice, and retired models stop serving requests entirely. Testing the replacement against the application's evals well ahead of the deadline is the explicitly recommended migration practice.",
+          "citation": { "title": "Model deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        },
+        {
+          "key": "B",
+          "text": "Explain that no action is needed because pinned snapshots are guaranteed to remain available indefinitely.",
+          "correct": false,
+          "explanation": "Pinning protects against silent behavior changes, not against retirement: once the retirement date passes, requests to the model fail. The lifecycle states, including deprecated and retired, apply to pinned snapshots too.",
+          "citation": { "title": "Model deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        },
+        {
+          "key": "C",
+          "text": "Have engineering silently swap in the replacement model on retirement day to avoid alarming the business.",
+          "correct": false,
+          "explanation": "An untested same-day swap invites production regressions on a regulated platform with no runway to react. Anthropic recommends thorough testing with the new model well before the retirement date, which requires planning the business owners into the timeline.",
+          "citation": { "title": "Model deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        },
+        {
+          "key": "D",
+          "text": "Defer any migration work until requests actually begin failing, then treat it as a production hotfix.",
+          "correct": false,
+          "explanation": "This converts a scheduled, well-notified lifecycle event into an avoidable outage. The documented best practice is to test replacements and migrate before the retirement date, precisely so failure day never arrives.",
+          "citation": { "title": "Model deprecations", "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D6-04",
+      "question": "A grocery chain's CFO questions continued investment in the Claude-based customer-service assistant, calling the current evidence 'a few nice chat screenshots.' Which framing best communicates the program's ROI?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A curated gallery of the assistant's most impressive customer conversations from the past quarter.",
+          "correct": false,
+          "explanation": "This repeats the exact weakness the CFO identified: anecdotes cannot be weighed against program cost. Value claims need measured operational outcomes, echoing Anthropic's emphasis on measuring performance rather than showcasing examples.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Public benchmark leaderboard scores showing the underlying Claude model outperforms competitors.",
+          "correct": false,
+          "explanation": "Generic benchmarks describe the model, not this deployment; Anthropic itself advises judging models by evals on your own workload. A CFO needs business outcomes attributable to the program, not vendor-level capability claims.",
+          "citation": { "title": "Models overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "C",
+          "text": "Monthly token consumption growth as evidence of strong internal adoption.",
+          "correct": false,
+          "explanation": "Token volume is a cost driver, not a value metric; rising consumption without outcome data could equally signal waste. ROI framing must connect usage to money saved or earned.",
+          "citation": { "title": "Models overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Operational metrics tied to money: automation and deflection rates, cost per resolved contact versus the human-handled baseline, and quality scores trended over time.",
+          "correct": true,
+          "explanation": "Deflection and automation rates translate directly into avoided handling cost, and pairing them with quality evals shows savings are not purchased with worse service. This is the empirical, outcome-based framing Anthropic's guidance on measuring performance supports, expressed in the CFO's terms.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    }
+  ]
+}

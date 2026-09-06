@@ -1,0 +1,381 @@
+{
+  "examId": "ccar-p-exam2",
+  "domainId": "D1",
+  "domainName": "Solution Design & Architecture",
+  "questions": [
+    {
+      "id": "P2-D1-01",
+      "question": "An airline's disruption-management assistant calls the Claude API from dozens of app servers. During a major storm, rebooking traffic spikes and the API begins returning 429 errors. The team must keep rebooking flows responsive and must not lose requests. Which design best addresses this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Retry failed requests immediately in a tight loop from each app server until they succeed.",
+          "correct": false,
+          "explanation": "The 429 response includes a retry-after header indicating how long to wait, and earlier retries will fail. Tight-loop retries amplify load during the spike instead of shedding it, worsening the throttling.",
+          "citation": { "title": "Rate limits", "url": "https://docs.claude.com/en/api/rate-limits" }
+        },
+        {
+          "key": "B",
+          "text": "Add a central request queue with backpressure that smooths bursts under the per-minute limits and honors the retry-after header on 429s.",
+          "correct": true,
+          "explanation": "Anthropic's rate limits use a continuously replenishing token bucket, so short bursts can trigger 429s even when average traffic is within limits. A queue with backpressure smooths bursts, preserves every request, and respecting retry-after avoids failed retries.",
+          "citation": { "title": "Rate limits", "url": "https://docs.claude.com/en/api/rate-limits" }
+        },
+        {
+          "key": "C",
+          "text": "Increase max_tokens on every request so each call does more work and fewer calls are needed.",
+          "correct": false,
+          "explanation": "Raising max_tokens does not reduce request volume by itself, and OTPM limits count actual generated output tokens, not the max_tokens setting. This changes nothing about the burst pattern that is causing 429s.",
+          "citation": { "title": "Rate limits", "url": "https://docs.claude.com/en/api/rate-limits" }
+        },
+        {
+          "key": "D",
+          "text": "Provision several extra API keys within the organization and round-robin traffic across them to multiply the limits.",
+          "correct": false,
+          "explanation": "Rate limits are enforced at the organization level, not per API key, so spreading traffic across keys in the same organization does not increase capacity. The correct levers are smoothing traffic, caching, or requesting a higher limit.",
+          "citation": { "title": "Rate limits", "url": "https://docs.claude.com/en/api/rate-limits" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-02",
+      "question": "A streaming platform has two Claude workloads: enriching metadata for eight million catalog titles each quarter, and a real-time viewer chat feature with a two-second latency target. Finance wants maximum cost efficiency without breaking the chat SLA. How should the architect split the workloads?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send catalog enrichment through the Message Batches API and keep viewer chat on the synchronous Messages API.",
+          "correct": true,
+          "explanation": "The Message Batches API cuts costs by 50% and is designed for large volumes that don't need immediate responses, which describes the enrichment job exactly. Latency-sensitive chat stays on the synchronous API, so each workload uses the pattern it fits.",
+          "citation": { "title": "Batch processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "B",
+          "text": "Send both workloads through the Message Batches API so the 50% discount applies to all traffic.",
+          "correct": false,
+          "explanation": "Batches are processed asynchronously with no guaranteed response time, so a two-second interactive chat SLA cannot be met. Anthropic positions batch processing explicitly for tasks that do not require immediate responses.",
+          "citation": { "title": "Batch processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Keep both workloads on the synchronous API and negotiate a custom volume discount instead.",
+          "correct": false,
+          "explanation": "This leaves the built-in 50% batch discount on the table for a workload that is perfectly batch-shaped: huge volume, no immediacy requirement. Architecture should route async-tolerant work to the async, discounted path before pursuing commercial workarounds.",
+          "citation": { "title": "Batch processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "Run enrichment on the synchronous API overnight, when rate limits reset and off-peak pricing applies.",
+          "correct": false,
+          "explanation": "Rate limits use a token bucket that replenishes continuously rather than resetting at fixed intervals, and the API has no off-peak pricing. Overnight synchronous processing pays full price and still competes for the same organization-level limits.",
+          "citation": { "title": "Rate limits", "url": "https://docs.claude.com/en/api/rate-limits" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-03",
+      "question": "A government benefits portal uses Claude to process citizen applications end to end. Reviewers find the model occasionally mis-validates national ID formats and eligibility date rules, both of which are exhaustively specified in regulation. What is the best architectural correction?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add many few-shot examples of valid and invalid IDs to the prompt so Claude learns the format.",
+          "correct": false,
+          "explanation": "Even with examples, a probabilistic model can still occasionally mis-validate a fully deterministic rule. Anthropic's guidance is to use the simplest solution that works, and a regex or rules engine is simpler and perfectly reliable here.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Increase the thinking budget so Claude reasons more carefully about ID formats and date arithmetic.",
+          "correct": false,
+          "explanation": "More thinking improves complex reasoning but cannot guarantee correctness on mechanical validation, and it adds cost and latency to every request. Deterministic rules do not need model reasoning at all.",
+          "citation": { "title": "Extended thinking", "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Move format and date-rule validation into deterministic pre- and post-processing code, reserving Claude for unstructured judgment such as interpreting supporting documents.",
+          "correct": true,
+          "explanation": "This is the hybrid pattern Anthropic recommends: orchestrate LLM calls through predefined code paths and apply programmatic checks around them. Deterministic logic handles what is fully specified; the model handles only what genuinely requires language understanding.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Add a second model call that verifies the first model's validation output before acceptance.",
+          "correct": false,
+          "explanation": "Stacking a second probabilistic check on a deterministic problem adds cost and latency while still permitting correlated errors. Anthropic advises adding multi-call complexity only when it measurably improves outcomes over simpler solutions, and code is both simpler and exact here.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-04",
+      "question": "A retail bank's document-summarization service feeds a live agent-assist console. Spend is far above forecast even though input volume matches projections; the summaries turn out to be verbose and multi-page. Given how Claude pricing is structured, which change yields the largest direct cost reduction?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Trim boilerplate headers and footers from input documents to reduce input tokens.",
+          "correct": false,
+          "explanation": "Helpful, but per-token output pricing is several times higher than input pricing across the current model lineup, and the diagnosis points at output length. Trimming inputs attacks the cheaper side of the bill.",
+          "citation": { "title": "Models overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Move the service to the Message Batches API to capture the 50% discount.",
+          "correct": false,
+          "explanation": "Batch processing is asynchronous and intended for work that does not need immediate responses, so it cannot back a live agent-assist console. The discount is real but the delivery model is incompatible with this workload.",
+          "citation": { "title": "Batch processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Enable prompt caching on each document before it is summarized.",
+          "correct": false,
+          "explanation": "Prompt caching pays off when the same prefix is reused across many requests; each unique document read once gains little, and a cache write costs more than a normal input read. Caching also reduces input cost, not the output tokens driving this overrun.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Constrain output length and format in the prompt so summaries are consistently concise.",
+          "correct": true,
+          "explanation": "Output tokens are priced several times higher per token than input tokens, so uncontrolled verbose generation is the dominant cost driver here. Tightening the required output format cuts the expensive side of the token bill directly and also reduces latency.",
+          "citation": { "title": "Models overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-05",
+      "question": "An airline contact-center assistant prepends the same 40,000-token fare-rules manual to every request, followed by a short, unique agent question. Requests arrive continuously throughout the day. Which change most improves cost and latency without changing answer quality?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Replace the manual with a 2,000-token summary to shrink every request.",
+          "correct": false,
+          "explanation": "Summarizing discards fare-rule detail and risks wrong answers, trading accuracy for cost. Prompt caching achieves the cost and latency win while keeping the full-fidelity manual available to the model.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Place a cache_control breakpoint on the manual so subsequent requests read it from cache at a small fraction of the base input price.",
+          "correct": true,
+          "explanation": "This is the canonical caching use case: a large, stable prefix reused continuously. Cache reads are billed at roughly a tenth of base input price and reduce latency, and steady traffic keeps refreshing the cache TTL.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Split the manual across several parallel requests and merge the partial answers.",
+          "correct": false,
+          "explanation": "Parallel sectioning suits independent subtasks, but answering a fare question requires the rules as coherent context in one call. Splitting shared context multiplies token spend and coordination complexity for no quality gain.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Place cache_control on the final user-question block so the whole prompt, question included, is cached.",
+          "correct": false,
+          "explanation": "The cache requires an exact prefix match up to the breakpoint, and the question changes every request, so the hash never matches and no reads occur. The breakpoint belongs on the last stable block, the manual, before any dynamic content.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-06",
+      "question": "A streaming service uses one large prompt that simultaneously classifies maturity ratings, extracts cast metadata, and writes marketing synopses for each title. Quality is inconsistent and failures are hard to localize. The latency budget is generous. What does Anthropic guidance recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Decompose into a prompt-chaining workflow: sequential, focused calls with programmatic checks between steps, trading latency for accuracy.",
+          "correct": true,
+          "explanation": "Prompt chaining is Anthropic's recommended pattern when a task decomposes cleanly into fixed subtasks: each call does one thing well, and gates between steps catch errors early. The explicit trade of latency for higher accuracy fits the generous latency budget.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the single prompt but raise the model's reasoning effort so it can juggle all three tasks.",
+          "correct": false,
+          "explanation": "More reasoning does not fix the structural problem that three unrelated objectives compete in one prompt, and failures remain unlocalizable. Decomposition, not more compute on a muddled task, is the guidance.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Convert the system into an autonomous agent that plans its own steps per title.",
+          "correct": false,
+          "explanation": "Agents are for open-ended problems where the number of steps cannot be predicted. This task is a fixed, predictable sequence, exactly what Anthropic defines as workflow territory, and agentic autonomy would add cost and unpredictability.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Run three copies of the identical full prompt in parallel and majority-vote the outputs.",
+          "correct": false,
+          "explanation": "Voting parallelization raises confidence on a single well-posed task; it does not separate concerns or localize which subtask failed. It also triples the cost of an already overloaded prompt.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-07",
+      "question": "A national tax authority requires its Claude-backed filing assistant to keep operating through a regional cloud outage. Claude models are offered through multiple platforms, including the Claude API, Amazon Bedrock, and Google Cloud. What is the strongest application-layer resilience design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Rely on the primary platform's internal redundancy and add client-side retries with exponential backoff.",
+          "correct": false,
+          "explanation": "Retries handle transient errors, not a sustained platform or regional outage; when the provider is down, every retry fails. Resilience against provider-level failure requires an alternate path, which is an application-layer design decision.",
+          "citation": { "title": "Models overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Cache previous model responses and serve them verbatim to users during outages.",
+          "correct": false,
+          "explanation": "Anthropic's prompt caching caches prompt prefixes to cut cost and latency; it is not a response cache, and no platform feature replays old answers. Filing questions are user-specific, so replaying prior responses would produce wrong, potentially harmful guidance.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Issue every request to two platforms simultaneously and use whichever response returns first.",
+          "correct": false,
+          "explanation": "Always-on duplication doubles token spend on every request to insure against a rare event, which fails any cost-modeling review. Failover should activate on health signals, not run continuously.",
+          "citation": { "title": "Models overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Abstract the model client behind a provider interface with health-based routing that fails over to the same model family on an alternate platform, plus a degraded-mode UX.",
+          "correct": true,
+          "explanation": "Because the same Claude model families are available on the Claude API, Amazon Bedrock, and Google Cloud, an application-layer abstraction can redirect traffic during an outage while keeping prompts and evals consistent. Pairing failover with explicit degraded-mode behavior is sound enterprise availability design.",
+          "citation": { "title": "Models overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-08",
+      "question": "A retail bank's platform team must choose between adopting a feature-rich agent orchestration framework and writing a thin in-house layer of composable primitives for loan-processing workflows. Auditors require full traceability of every model interaction. What does Anthropic guidance suggest?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Adopt the framework; vendor abstractions reduce operational risk and audit burden by default.",
+          "correct": false,
+          "explanation": "Anthropic cautions that frameworks add abstraction layers that can obscure the underlying prompts and responses, making systems harder to debug, which is the opposite of what traceability-driven auditors need. Abstraction is not automatically lower risk.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Never use frameworks; Anthropic's position is that they are inappropriate for production.",
+          "correct": false,
+          "explanation": "This overstates the guidance. Anthropic says frameworks can help teams get started quickly; the caution is to understand the underlying code and reduce abstraction layers where they obscure behavior, not to ban frameworks outright.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Start with simple, composable patterns directly against the API; if a framework is adopted, ensure the team understands the prompts and calls underneath, since abstractions can obscure debugging.",
+          "correct": true,
+          "explanation": "This mirrors Anthropic's core advice: find the simplest solution possible, use frameworks knowingly, and keep visibility into what actually reaches the model. For an audited banking workflow, direct control over each call also satisfies traceability requirements.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Build a fully autonomous in-house agent platform first so the bank owns maximum flexibility.",
+          "correct": false,
+          "explanation": "Anthropic recommends starting with optimized single calls and workflows, adding agentic complexity only when it measurably improves outcomes. Building a maximal platform before demonstrating need inverts that principle and inflates cost and risk.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-09",
+      "question": "An airline assistant serves both simple FAQs (baggage allowances, check-in times) and complex multi-leg rebooking reasoning. A single large model currently answers everything, driving cost and latency complaints on the easy queries. Which design applies Anthropic's routing pattern correctly?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Classify each incoming query first, route FAQs to a smaller, faster model, and send complex rebooking cases to a more capable model.",
+          "correct": true,
+          "explanation": "Routing classifies an input and directs it to a specialized downstream path, letting each category be handled optimally. Anthropic explicitly cites routing easy questions to smaller models and hard ones to more capable models to optimize cost and speed.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Default every query to the small model and escalate to the large one only after a customer complains.",
+          "correct": false,
+          "explanation": "Complaints are a lagging, customer-hostile escalation signal. Routing performs the classification up front, before the wrong model produces a bad rebooking answer, which is the point of separation of concerns.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Keep the large model for all traffic but lower its reasoning effort to reduce cost on FAQs.",
+          "correct": false,
+          "explanation": "Tuning effort adjusts thinking depth but still bills every FAQ at large-model token rates and does not exploit the clearly distinct query categories. Model tiering through routing is the appropriate cost lever here.",
+          "citation": { "title": "Models overview", "url": "https://docs.claude.com/en/docs/about-claude/models/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Merge both flows into one prompt instructing the model to answer quickly for FAQs and carefully for rebooking.",
+          "correct": false,
+          "explanation": "Anthropic notes that optimizing one input type in a shared prompt can hurt performance on the others. Routing exists precisely so distinct categories get separately optimized handling instead of one compromised mega-prompt.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-10",
+      "question": "A government services chatbot is throttled on input tokens per minute (ITPM) at peak hours. Every request carries the same 30,000-token policy context plus a short citizen question. A rate limit increase will take weeks to approve. What is the fastest effective mitigation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask citizens to write shorter questions to cut input tokens.",
+          "correct": false,
+          "explanation": "The question is a tiny fraction of each request; the 30,000-token repeated context dominates ITPM consumption. Optimizing the smallest component cannot meaningfully move the throttling threshold.",
+          "citation": { "title": "Rate limits", "url": "https://docs.claude.com/en/api/rate-limits" }
+        },
+        {
+          "key": "B",
+          "text": "Lower max_tokens across all requests to free up rate limit headroom.",
+          "correct": false,
+          "explanation": "max_tokens governs output, and OTPM limits count actual generated tokens rather than the max_tokens setting; neither affects the ITPM limit being hit. This lever addresses the wrong limit entirely.",
+          "citation": { "title": "Rate limits", "url": "https://docs.claude.com/en/api/rate-limits" }
+        },
+        {
+          "key": "C",
+          "text": "Divert peak-hour conversations to the Message Batches API until the limit increase lands.",
+          "correct": false,
+          "explanation": "Batch processing is asynchronous and gives no immediate responses, so live chat cannot ride on it. Batches also have their own separate limits; they are not overflow capacity for synchronous traffic.",
+          "citation": { "title": "Batch processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "Cache the shared policy context with cache_control; on most models cache reads do not count toward ITPM, multiplying effective throughput immediately.",
+          "correct": true,
+          "explanation": "Anthropic's rate limiting is cache-aware: for most models only uncached input tokens count toward ITPM, so caching the repeated 30,000-token prefix removes it from rate limit accounting on every hit. This raises effective throughput within the existing limit and cuts cost simultaneously.",
+          "citation": { "title": "Rate limits", "url": "https://docs.claude.com/en/api/rate-limits" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D1-11",
+      "question": "A streaming platform must process user-submitted watch-party descriptions two ways: generate a polished public rewrite, and screen the submission for policy violations. The latency budget is tight, and combining both jobs in one prompt has degraded each. Which workflow pattern fits best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Prompt chaining: rewrite first, then run a compliance check on the rewritten text.",
+          "correct": false,
+          "explanation": "Chaining serializes the calls and doubles latency in a tight budget, and screening should examine the original submission, not only the polished rewrite. Chaining suits dependent steps; these two tasks are independent.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Parallelization by sectioning: run the rewrite and the policy screen as independent parallel calls on the same input, then combine results programmatically.",
+          "correct": true,
+          "explanation": "Anthropic's sectioning variant runs independent subtasks in parallel, and its cited example is exactly this shape: one call processes the content while another screens it, performing better than one prompt handling both. Parallel execution also preserves the tight latency budget.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Evaluator-optimizer: a second model iteratively critiques and refines each rewrite until it passes.",
+          "correct": false,
+          "explanation": "Evaluator-optimizer is for tasks where iterative refinement against clear criteria adds measurable value, at the cost of multiple round trips. An iterative loop is the wrong shape for a latency-bound screen-plus-rewrite requirement.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Orchestrator-workers: a lead model dynamically decomposes each submission into subtasks for worker models.",
+          "correct": false,
+          "explanation": "Orchestrator-workers earns its overhead when subtasks cannot be predicted in advance. Here the two subtasks are fixed and known, so static parallelization achieves the goal without an orchestration call on every request.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    }
+  ]
+}

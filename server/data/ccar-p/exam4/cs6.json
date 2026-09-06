@@ -1,0 +1,162 @@
+{
+  "examId": "ccar-p-exam4",
+  "caseId": "CS6",
+  "caseTitle": "Axonum Biosciences — computational-biology literature triage and assay-data analysis assistant",
+  "caseScenario": "Axonum Biosciences is a 140-person drug-discovery company whose computational-biology group is building an internal AI assistant to accelerate two workflows: scientific literature triage and assay-data analysis. The literature corpus spans 2.8 million full-text papers ingested from public databases, supplemented by 900,000 internal high-throughput screening records stored in a proprietary assay archive. The assistant must surface relevant papers, extract compound activity summaries, and correlate published findings with Axonum's unpublished lead-optimization data, helping medicinal chemists prioritize which compounds to advance to in vivo studies.\n\nAxonum operates under a strict IP-confidentiality boundary: all pre-IND compound structures, potency measurements, and selectivity profiles are trade secrets. The company's legal team has prohibited these data from appearing in any API payload sent to a third-party endpoint or from being readable by any MCP server not explicitly on the approved list. The research-computing team is integrating Claude into the workflow via a custom MCP server named `assay-db` that wraps the internal assay archive behind a structured query interface, returning only sanitized result objects with compound IDs rather than raw SMILES strings or numerical potency values. A second MCP server, `pubmed-fetch`, retrieves and chunks public paper text. Both servers are registered in the project-scoped `.mcp.json` committed to the research monorepo.\n\nBecause GxP-adjacent documentation workflows are involved, Axonum's quality team requires a full audit trail of every tool call and its result, stamped with a timestamp and the operator ID of the researcher who initiated the session. The team also needs to control costs: a single triage session over a corpus batch of 500 or more abstracts must cost at least 50 percent less than the equivalent synchronous API call volume. Finally, every change to a triage prompt template must be validated against a curated internal golden dataset before it can reach production, so that regressions in recall or precision are caught before they affect chemist workflows.",
+  "caseRequirements": [
+    "R1: All assistant access to internal assay records must go exclusively through the sanctioned `assay-db` MCP tool; direct file-system reads of the raw assay archive by any tool or code path are prohibited.",
+    "R2: Unpublished compound structures, potency values, and selectivity profiles must never appear as plain text in any MCP tool argument or API payload that crosses the confidentiality boundary to an unapproved external endpoint.",
+    "R3: Any triage session that processes a corpus batch of 500 or more abstracts must achieve at least a 50% cost reduction relative to synchronous per-abstract API calls.",
+    "R4: Every change to a triage prompt template must pass an automated evaluation over at least 30 abstract/relevance-label pairs drawn from the curated golden dataset before the change is deployed to production.",
+    "R5: Every MCP tool call and its structured result must be logged with an immutable timestamp and the initiating operator ID to satisfy the GxP-adjacent audit-trail requirement."
+  ],
+  "questions": [
+    {
+      "id": "P4-CS6-01",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "Axonum's assistant needs to answer a chemist's question about a lead compound's selectivity profile by combining data from the internal assay archive with context from a recently published paper. Which integration design correctly enforces both R1 and R2 while still delivering a coherent answer?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Grant the assistant file-system read access to the raw assay archive directory in addition to the `assay-db` MCP tool, so it can fall back to direct file reads when the tool's query interface does not support a needed filter, then instruct it in the system prompt to avoid exporting raw compound data, and rely on OS-level ACLs on the archive folder to limit the blast radius if the instruction is ignored.",
+          "correct": false,
+          "explanation": "Direct file-system access violates R1, which prohibits any code path that bypasses the `assay-db` MCP tool. A system-prompt instruction to avoid exporting data is a probabilistic control, not a deterministic boundary, and therefore does not satisfy R2. Granting the fallback access also expands the attack surface for confused-deputy exploitation.",
+          "citation": {
+            "title": "MCP — Security Best Practices",
+            "url": "https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Register both `assay-db` and `pubmed-fetch` as MCP resources rather than tools so Claude can subscribe to them as read-only data streams, then combine the streamed compound record and the paper text into one context window before generating the answer.",
+          "correct": false,
+          "explanation": "MCP resources and tools serve different roles in the protocol: resources are read-only data subscriptions, not structured query interfaces with access controls. Streaming raw compound records — including potency values and SMILES — as resource content would expose the full record in the context window, violating R2 if any downstream tool receives that context. The design also undermines the sanitization logic that `assay-db` provides via its structured query response.",
+          "citation": {
+            "title": "MCP — Architecture overview",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Configure the assistant to call `assay-db` with a compound-ID query and receive back a sanitized result object containing only approved fields, then call `pubmed-fetch` for the paper text, and synthesize both into the final answer without passing any raw assay payload to `pubmed-fetch` or any other tool.",
+          "correct": true,
+          "explanation": "This design satisfies R1 by routing all assay access through `assay-db` and never touching the file system. It satisfies R2 because the sanitized result object contains only compound IDs and approved aggregate fields — not raw SMILES or potency numbers — and that object is never forwarded to `pubmed-fetch` or any unapproved endpoint. The correct design beats option D (the runner-up) because D sends the compound name and assay type to the public-literature server before `assay-db` is consulted, leaking pre-IND identifiers across the confidentiality boundary and inverting the access order R1 mandates, whereas this approach enforces both requirements structurally at the tool boundary.",
+          "citation": {
+            "title": "MCP — Tools",
+            "url": "https://modelcontextprotocol.io/docs/concepts/tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Pass the chemist's raw query, including the compound name and the specific assay type they mentioned, as a natural-language string directly to `pubmed-fetch` so it can retrieve papers matching both the compound and the assay, then call `assay-db` only if the paper results are insufficient.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Sending a natural-language query containing a compound name and assay type to `pubmed-fetch` — a public-literature retrieval server — risks leaking pre-IND compound identifiers outside the confidentiality boundary, violating R2 even if the compound name alone is not a SMILES string. This is a reasonable workflow instinct — searching literature before checking internal data is often efficient — but it does not meet R2 because compound names are themselves sensitive IP at the pre-IND stage. The design also inverts the access pattern mandated by R1, which requires `assay-db` to be the primary path, not a fallback.",
+          "citation": {
+            "title": "Tool use with Claude",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS6-02",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D6"],
+      "question": "The research-computing team has just revised the system-prompt template that scores abstract relevance for a given target class. Before this change can be deployed, R4 requires a passing automated evaluation over at least 30 abstract/relevance-label pairs from the curated golden dataset. Which evaluation strategy correctly satisfies R4 and produces a repeatable quality gate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run the revised prompt template against all 30 golden-dataset pairs in a single Message Batches API submission, collect the model's relevance predictions, and compute precision and recall against the hand-labeled ground truth; block deployment if either metric falls below the team's agreed threshold.",
+          "correct": true,
+          "explanation": "Running the evaluation as a batch job satisfies R4's count requirement (30 labeled pairs), and the Message Batches API is a natural fit for a latency-insensitive offline eval — R3's 50% mandate applies to 500-abstract production batches rather than to a 30-pair evaluation, so the batch discount here is a bonus rather than a compliance requirement. Precision and recall against a hand-labeled golden set are objective, reproducible metrics that can be re-run identically after any subsequent prompt change. This design beats option B (the runner-up) because B evaluates on live researcher queries rather than a fixed labeled dataset, making the pass/fail decision non-reproducible across runs — a critical gap for a repeatable quality gate.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Route the next 30 live abstract-triage requests from researchers in shadow mode alongside the current template, compare relevance scores, and promote the new template if researchers explicitly prefer its output in at least 20 of the 30 shadow comparisons.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Shadow testing on live traffic is a sound evaluation methodology and does accumulate 30 comparison events, which at first glance satisfies R4's count requirement. However, it does not meet R4 because live researcher queries are non-deterministic: the 30 abstracts available on any given week may cluster around one target class, cannot be replayed identically for a future prompt change, and produce a pass/fail gate that cannot be audited against the same inputs. R4 requires evaluation against the curated golden dataset, which provides a fixed, reproducible reference that shadow testing cannot replicate.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have two senior computational biologists manually review 30 representative abstracts triaged by the new template during a one-hour evaluation session, and mark the change as validated if both reviewers agree it performs at least as well as the previous template on the sampled abstracts.",
+          "correct": false,
+          "explanation": "Manual review by two domain experts is not an automated evaluation as required by R4. A one-hour session with 30 abstracts also cannot be reproduced identically when the next prompt change is proposed, because the reviewers' judgments will differ across sessions. The absence of a fixed ground-truth label means there is no objective metric to threshold, so the gate cannot be consistently enforced.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Deploy the revised template to a randomly selected 10% of triage sessions for one week, log all relevance predictions, then compare the aggregate precision metric for that cohort against the prior week's baseline and approve if the difference is within two percentage points.",
+          "correct": false,
+          "explanation": "A week-long A/B rollout deploys the untested template to production researchers before the evaluation is complete, violating R4's requirement that the evaluation gate must pass before deployment. The one-week observation window also means regression feedback arrives too late to protect researchers from an inferior triage experience, and week-to-week query distributions may vary enough to make the comparison unreliable.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS6-03",
+      "primaryDomain": "D7",
+      "secondaryDomains": ["D3", "D5"],
+      "question": "Axonum's platform engineer is designing the nightly batch pipeline that processes 600-abstract corpus updates and must satisfy both R3 (50% cost reduction) and R5 (immutable GxP audit log of every tool call). Which operational configuration correctly satisfies both requirements?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send all 600 abstract-classification requests in a single synchronous loop using the standard Messages API with a 1-hour prompt-cache TTL on the shared system prompt, relying on cache-read discounts at 0.1x base input price to approximate the 50% overall cost target, and write tool-call events along with their structured results to a shared append-only log table keyed by request ID.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Using a 1-hour prompt-cache TTL is a sound cost-optimization technique and the append-only log table addresses R5's audit requirement. However, it does not meet R3 because cache-read discounts (0.1x base input) apply only to the cached prefix tokens — in this case, the fixed system prompt — while the variable abstract content in each request is billed at full input rate. For short abstracts, the system prompt is a minor fraction of total tokens, so overall cost reduction falls well below the 50% threshold mandated by R3. Only the Message Batches API provides a guaranteed 50% discount on the entire request.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Submit all 600 abstract-classification requests as a single Message Batches API job, poll for completion (results typically available within one hour), and write each tool call and its structured result — including the operator ID and an ISO-8601 timestamp — to a write-once audit store before the batch result is consumed by downstream workflows.",
+          "correct": true,
+          "explanation": "The Message Batches API provides a guaranteed 50% cost reduction over equivalent synchronous requests, directly satisfying R3 for the 600-abstract nightly run. Polling for batch completion and writing each tool-call event to a write-once audit store before downstream consumption satisfies R5: the log is immutable, stamped with the operator ID, and covers every tool call and result. This design beats option A (the runner-up) because A relies on prompt-cache discounts that do not guarantee the 50% threshold mandated by R3 and does not use the batch API path that carries the explicit pricing guarantee.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Split the 600 abstracts into 12 parallel synchronous API calls of 50 abstracts each using Claude Code subagents launched in headless mode, log the shell exit codes and token counts to a shared file after each subagent completes, and declare cost savings from reduced idle time between requests.",
+          "correct": false,
+          "explanation": "Parallelizing synchronous API calls reduces wall-clock latency but does not reduce the per-token cost of each request; total API spend remains the same as a sequential run. R3 requires a 50% cost reduction, which requires the Message Batches API discount. Exit codes and token counts also do not constitute a GxP-compliant audit trail of tool-call content and structured results as required by R5.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use the Message Batches API for the 600-abstract job to obtain the 50% discount, but defer writing the audit log until after downstream workflows have consumed the batch results, using a weekly reconciliation job to backfill operator IDs and timestamps from application logs.",
+          "correct": false,
+          "explanation": "Deferring the audit log and backfilling operator IDs violates R5, which requires the audit record to be immutable once written and to include the operator ID at the time of the tool call. A weekly reconciliation backfill creates a mutable, reconstructed record rather than an original timestamped entry, which is not acceptable for GxP-adjacent audit compliance. Deferred logging also means a system failure between batch completion and reconciliation could result in permanent audit gaps.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    }
+  ]
+}

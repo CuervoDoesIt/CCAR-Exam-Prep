@@ -1,0 +1,329 @@
+{
+  "examId": "ccar-p-exam2",
+  "domainId": "D5",
+  "domainName": "Governance, Safety & Risk Management",
+  "questions": [
+    {
+      "id": "P2-D5-01",
+      "question": "An airport operations agent has three categories of tools: querying gate status, reassigning a gate, and cancelling a flight. The architect wants a proportionate control model rather than requiring approval for everything. How should the tools be governed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Require human approval uniformly for all three, since consistency is easier to audit.",
+          "correct": false,
+          "explanation": "Uniform approval on read-only queries adds friction with no risk reduction and trains reviewers to click through prompts, degrading the quality of scrutiny where it matters. Controls should be proportionate to the consequence of the action.",
+          "citation": {
+            "title": "Building Effective Agents — guardrails and human checkpoints",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Tier the controls by consequence: allow gate queries freely, require approval for reassignment, and require approval plus a second authorization for cancellation.",
+          "correct": true,
+          "explanation": "Matching the strength of the gate to the reversibility and blast radius of the action concentrates human attention where errors are costly. Anthropic's agent guidance pairs least-privilege tool exposure with pausing for human feedback at checkpoints, which is exactly what a risk-tiered model operationalizes.",
+          "citation": {
+            "title": "Building Effective Agents — guardrails and human checkpoints",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Allow all three autonomously and rely on the agent to request confirmation when it judges an action to be high-impact.",
+          "correct": false,
+          "explanation": "This delegates the safety boundary to the model's own judgment, which is probabilistic and can be manipulated by injected content. A control that the agent can decide to skip is not a control.",
+          "citation": {
+            "title": "Building Effective Agents — guardrails and human checkpoints",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Expose all three tools but set a low max iteration count so the agent cannot perform many actions in one session.",
+          "correct": false,
+          "explanation": "An iteration cap limits how many actions occur but not which ones — a single unreviewed flight cancellation is the harm being guarded against. Stopping conditions are a useful control for runaway loops, not a substitute for approval gates on irreversible actions.",
+          "citation": {
+            "title": "Building Effective Agents — stopping conditions",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2-D5-02",
+      "question": "A utility company's engineering team keeps a shared CLAUDE.md in its repository so Claude Code understands the codebase. A developer proposes adding the production database password to it so the agent can run diagnostic queries without prompting. How should the architect respond?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Approve it, because CLAUDE.md is only read by Claude Code and is not part of the application runtime.",
+          "correct": false,
+          "explanation": "CLAUDE.md is a version-controlled file in the repository, so the secret would be committed to git history, distributed to every clone, and included in the model's context. Who reads the file at runtime is irrelevant to how widely the secret is exposed.",
+          "citation": {
+            "title": "Claude Code memory (CLAUDE.md)",
+            "url": "https://docs.claude.com/en/docs/claude-code/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Approve it but add a comment in the file instructing Claude not to print the password in its responses.",
+          "correct": false,
+          "explanation": "The secret is still committed to the repository and shared with everyone who clones it, which is the actual breach. An instruction about output formatting does nothing about the credential's presence in version control.",
+          "citation": {
+            "title": "Claude Code memory (CLAUDE.md)",
+            "url": "https://docs.claude.com/en/docs/claude-code/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Reject it: keep credentials in the environment or a secrets manager and let the diagnostic tooling read them at execution time, never placing them in prompt or memory files.",
+          "correct": true,
+          "explanation": "CLAUDE.md is shared project memory checked into source control and loaded into context, making it the wrong place for any secret. Credentials belong in environment variables or a managed secret store that the executing tool resolves at run time, so the value never enters the repository or the model's context.",
+          "citation": {
+            "title": "Claude Code memory (CLAUDE.md)",
+            "url": "https://docs.claude.com/en/docs/claude-code/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Approve it, but move the file to the user-scoped ~/.claude/CLAUDE.md so it is not committed.",
+          "correct": false,
+          "explanation": "This avoids the git-history problem but still places a production credential in plaintext on developer workstations and injects it into the model's context on every session. The correct control is a secrets manager or environment variable resolved by the tool, not a different plaintext location.",
+          "citation": {
+            "title": "Claude Code memory (CLAUDE.md)",
+            "url": "https://docs.claude.com/en/docs/claude-code/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2-D5-03",
+      "question": "A wealth-management firm's research agent runs long autonomous sessions. During an incident, one session looped on a failing data tool for hours, accumulating significant API spend before anyone noticed. What combination of controls most directly prevents a recurrence?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Increase the tool's timeout so calls are less likely to fail and trigger retries.",
+          "correct": false,
+          "explanation": "A longer timeout may reduce one failure mode but does nothing to bound a loop that keeps retrying, and it can make each wasted iteration more expensive. The gap is the absence of a termination condition, not the timeout value.",
+          "citation": {
+            "title": "Building Effective Agents — stopping conditions",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Instruct the agent in its system prompt to give up after a few failed attempts.",
+          "correct": false,
+          "explanation": "A prompt instruction is a probabilistic request, and an agent already stuck in a degraded loop is exactly the situation where it may not comply. Termination guarantees belong in the orchestration code that runs the loop.",
+          "citation": {
+            "title": "Building Effective Agents — stopping conditions",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Enforce a maximum iteration count and a per-session spend ceiling in the orchestration loop, with alerting and an operator kill switch.",
+          "correct": true,
+          "explanation": "Anthropic notes it is common to include stopping conditions such as a maximum number of iterations to maintain control, precisely because autonomy brings higher cost and compounding errors. Enforcing the cap and spend ceiling in the loop code, plus alerting and a kill switch, bounds the damage deterministically.",
+          "citation": {
+            "title": "Building Effective Agents — stopping conditions",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Move the workload to the Message Batches API so cost is halved if it happens again.",
+          "correct": false,
+          "explanation": "Batch pricing reduces unit cost but an unbounded loop is unbounded at any price, and batch processing is unsuitable for an interactive research agent. This addresses the symptom's magnitude rather than the missing termination control.",
+          "citation": {
+            "title": "Building Effective Agents — stopping conditions",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2-D5-04",
+      "question": "A regional utility is deploying a customer-billing agent and must retain evidence for regulators that no billing adjustment was made without a recorded justification. Application engineers propose writing audit entries from the agent's summary at the end of each session. What is the flaw?",
+      "options": [
+        {
+          "key": "A",
+          "text": "There is no flaw; the agent's session summary is the most complete description of what occurred.",
+          "correct": false,
+          "explanation": "The summary is model-generated prose that may compress, omit, or misstate individual actions, and it is produced by the same component whose behavior is being audited. A regulator needs the executed actions themselves, not the agent's retrospective account.",
+          "citation": {
+            "title": "Tool use overview",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Audit records would depend on model-generated text and be written after the fact; entries should instead be emitted synchronously by the adjustment tool itself, append-only, before the action commits.",
+          "correct": true,
+          "explanation": "Binding the audit record to the tool invocation makes it a deterministic byproduct of the action rather than a narrative the model may get wrong, and writing it before commit means no adjustment can exist without a record. Append-only storage preserves the evidentiary value the regulator requires.",
+          "citation": {
+            "title": "Tool use overview",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "The flaw is only that summaries are verbose; truncating them to a fixed length resolves the compliance concern.",
+          "correct": false,
+          "explanation": "Length is irrelevant to the problem, and truncation actively increases the chance of dropping a recorded action. The defect is that the record derives from probabilistic text written after the fact rather than from the action itself.",
+          "citation": {
+            "title": "Tool use overview",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The flaw is that summaries consume context; enabling prompt caching for them fixes the reliability issue.",
+          "correct": false,
+          "explanation": "Prompt caching is a latency and cost optimization for repeated prompt prefixes and has no bearing on whether an audit record is trustworthy or complete. It does not make a model-generated summary an authoritative compliance artifact.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2-D5-05",
+      "question": "A field-services company runs a local MCP server on technicians' laptops to read work orders. Security asks what the realistic worst case is if that server's npm package is compromised in a future release. What is the accurate assessment and mitigation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The worst case is limited to returning incorrect work-order data, since MCP servers can only respond to tool calls.",
+          "correct": false,
+          "explanation": "This understates the risk: a local MCP server is a binary executing on the user's machine, not a sandboxed data source. MCP security guidance identifies arbitrary code execution, data exfiltration, and data loss as risks from compromised local servers.",
+          "citation": {
+            "title": "MCP security best practices — local server compromise",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The worst case is contained by the MCP protocol itself, which isolates servers from the host operating system.",
+          "correct": false,
+          "explanation": "MCP does not provide operating-system isolation; the specification explicitly warns that servers run with the same privileges as the client and recommends that clients add sandboxing. Assuming protocol-level containment is a material misreading of the threat model.",
+          "citation": {
+            "title": "MCP security best practices — local server compromise",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "The server could execute arbitrary code with the technician's privileges and exfiltrate local data; mitigate by pinning versions, sandboxing the process with restricted filesystem and network access, and using stdio transport.",
+          "correct": true,
+          "explanation": "MCP security guidance states that local servers can achieve arbitrary code execution with client privileges and enable data exfiltration and data loss. Recommended mitigations include executing servers in a sandboxed environment with minimal default privileges and restricted file system and network access, and using stdio transport to limit access to just the MCP client.",
+          "citation": {
+            "title": "MCP security best practices — local server compromise",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The worst case is credential theft only, which is fully mitigated by rotating API keys on a monthly schedule.",
+          "correct": false,
+          "explanation": "Credential theft is one outcome among several, and monthly rotation leaves a long window during which a stolen key remains valid. It also does nothing about arbitrary code execution or destruction of local data.",
+          "citation": {
+            "title": "MCP security best practices — local server compromise",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2-D5-06",
+      "question": "A public-sector benefits agency requires that its eligibility-screening agent never state a final eligibility determination to applicants, because only a caseworker may do so. Which control design best guarantees this in production?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A deterministic output-filtering stage between the model and the applicant that blocks or rewrites responses containing determination language, combined with withholding the determination tool from the applicant-facing agent.",
+          "correct": true,
+          "explanation": "The requirement is absolute, so it must be enforced outside the model: a code-level filter on the egress path plus removing the capability entirely means neither a model error nor an injected instruction can produce a determination. This is the same principle as enforcing must-hold rules programmatically rather than by prompt.",
+          "citation": {
+            "title": "Building Effective Agents — guardrails and testing",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A carefully worded system prompt that defines the boundary and gives several examples of compliant refusals.",
+          "correct": false,
+          "explanation": "Prompt engineering meaningfully improves adherence but cannot guarantee it, and a statutory boundary admits no failure rate. Examples help shape typical behavior while leaving the tail cases that regulators care about unaddressed.",
+          "citation": {
+            "title": "Building Effective Agents — guardrails and testing",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Periodic sampling of transcripts by a compliance analyst, with prompt revisions when violations are found.",
+          "correct": false,
+          "explanation": "Sampling detects a fraction of violations after applicants have already received improper determinations, making it detective rather than preventive. It is a reasonable supplementary assurance activity but cannot deliver the guarantee.",
+          "citation": {
+            "title": "Building Effective Agents — guardrails and testing",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Extended thinking enabled so the model reasons about the policy boundary before every response.",
+          "correct": false,
+          "explanation": "Extended thinking can improve reasoning quality on complex tasks but remains probabilistic and does not create an enforceable constraint. It also increases latency and token cost without addressing the compliance requirement.",
+          "citation": {
+            "title": "Extended thinking",
+            "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2-D5-07",
+      "question": "A cybersecurity operations team is drafting an incident playbook for its triage agent. Which item belongs in the playbook as a genuine containment capability rather than a detection measure?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A dashboard showing per-session token consumption and tool-call volume trends.",
+          "correct": false,
+          "explanation": "Dashboards surface that something is wrong but cannot stop it; an operator watching a graph is not a containment control. Observability is necessary input to a playbook, not the containment step itself.",
+          "citation": {
+            "title": "Building Effective Agents — stopping conditions",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Weekly review of agent transcripts by a senior analyst to identify emerging failure patterns.",
+          "correct": false,
+          "explanation": "A weekly review operates on a timescale far longer than an incident and is retrospective by design. It improves the system over time but contains nothing during an active event.",
+          "citation": {
+            "title": "Building Effective Agents — guardrails and testing",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "An alert that fires when the agent's error rate exceeds a threshold, routed to the on-call channel.",
+          "correct": false,
+          "explanation": "Alerting reduces time to awareness but is still detection — it notifies a human that harm may be occurring without halting the agent. A playbook needs a mechanism that acts on the running system.",
+          "citation": {
+            "title": "Building Effective Agents — stopping conditions",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A kill switch that immediately revokes the agent's tool credentials and terminates in-flight sessions.",
+          "correct": true,
+          "explanation": "Revoking credentials and terminating sessions removes the agent's ability to act, which is what containment means. It complements built-in stopping conditions such as maximum iteration counts by giving operators a decisive intervention when automated limits prove insufficient.",
+          "citation": {
+            "title": "Building Effective Agents — stopping conditions",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

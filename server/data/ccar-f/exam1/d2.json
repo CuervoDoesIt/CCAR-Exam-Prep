@@ -1,0 +1,605 @@
+{
+  "examId": "ccar-f-exam1",
+  "domainId": "D2",
+  "domainName": "Tool Design & MCP Integration",
+  "questions": [
+    {
+      "id": "F1-D2-01",
+      "question": "A payroll SaaS team defines a tool as {\"name\": \"get_data\", \"description\": \"Gets the data.\"}. The agent frequently picks the wrong tool or malforms inputs. Following Anthropic's tool-definition best practices, what is the highest-impact fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Lower the model temperature so that tool selection becomes fully deterministic across runs.",
+          "correct": false,
+          "explanation": "Temperature does not supply the missing information about what the tool does or when to use it. Anthropic identifies detailed descriptions as by far the most important factor in tool performance; sampling parameters cannot compensate for an uninformative definition.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Rewrite the description in detail: what the tool does, when to use it, and what each parameter means.",
+          "correct": true,
+          "explanation": "Anthropic says extremely detailed descriptions are by far the most important factor in tool performance, recommending at least 3-4 sentences covering purpose, when to use it, parameter meanings, and caveats. Descriptions function as prompts to the model, so writing them like documentation for a new teammate directly improves selection and input accuracy.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Duplicate the tool under several alternative names so at least one matches the model's guess.",
+          "correct": false,
+          "explanation": "Duplicating tools multiplies ambiguity instead of resolving it, since the model now faces several indistinguishable options. Anthropic's guidance runs the opposite way: consolidate related operations into fewer, well-described tools to reduce selection ambiguity.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Move the tool's documentation into the system prompt and keep the definition minimal.",
+          "correct": false,
+          "explanation": "The tool's own description field is where Claude expects usage guidance; the API assembles tool definitions into a special system prompt for the model. Scattering documentation away from the definition weakens the association between the tool and its guidance, contrary to documented best practice.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-02",
+      "question": "An enterprise IT team is exposing Asana and Slack operations to an agent with dozens of tools. Agents keep confusing a generic \"search\" tool and passing ambiguous \"user\" values. Per Anthropic's \"Writing tools for agents\", how should the tools be redesigned?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Shorten all tool names to single verbs like \"search\" and \"send\" to reduce token overhead.",
+          "correct": false,
+          "explanation": "Generic single-verb names are exactly what causes cross-service confusion when many tools coexist. Anthropic recommends namespacing with service prefixes so agents can select the right tool at the right time; the token savings from shorter names are negligible next to wrong-tool errors.",
+          "citation": {
+            "title": "Writing tools for agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Give every tool an identical parameter set so the agent never has to learn different schemas.",
+          "correct": false,
+          "explanation": "Forcing identical parameters onto different operations produces vague, overloaded inputs, the opposite of the unambiguous naming Anthropic advises. Each tool's schema should describe its own operation precisely, with parameter names that leave no room for misinterpretation.",
+          "citation": {
+            "title": "Writing tools for agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Replace all specialized tools with one universal \"do_action\" tool that takes a free-text command string.",
+          "correct": false,
+          "explanation": "A free-text catch-all discards schema validation and forces the model to guess an undocumented command language. Anthropic's guidance is to design clearly-scoped, schema-defined tools with explicit parameters, then help selection through good names and descriptions.",
+          "citation": {
+            "title": "Writing tools for agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Namespace tools by service (e.g., asana_search) and use unambiguous parameter names like user_id.",
+          "correct": true,
+          "explanation": "Anthropic's tool-writing guidance recommends namespacing related tools under common service prefixes so agents can pick the right tool as the library grows, and using explicit, unambiguous parameter names such as user_id rather than user. Both changes attack the exact confusions this team is seeing.",
+          "citation": {
+            "title": "Writing tools for agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-03",
+      "question": "A hotel-booking platform's tool takes a \"room_type\" input that must be one of exactly four values, but the agent keeps inventing values like \"deluxe-suite\". How should the input JSON Schema be improved?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Declare room_type as a string with an enum of the four allowed values and mark it required.",
+          "correct": true,
+          "explanation": "JSON Schema enums constrain a parameter to a fixed set of values, and per-property descriptions tell Claude what each value means; the documented get_weather example uses exactly this pattern for its unit parameter. Listing the parameter in required prevents it from being omitted.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Accept any string and normalize invented values to the closest valid room type on the server.",
+          "correct": false,
+          "explanation": "Silent fuzzy-matching hides errors and can book the wrong room without either the model or user knowing. The schema is the right layer for constraining values: an enum communicates the valid set to Claude up front instead of correcting it after the fact.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Change room_type to an integer code (1-4) since numbers are harder for the model to invent.",
+          "correct": false,
+          "explanation": "Opaque numeric codes strip away the semantic meaning that helps Claude choose correctly, and a model can produce an out-of-range integer just as easily as an invalid string. Anthropic favors semantically meaningful, well-described inputs constrained by schema, not obfuscation.",
+          "citation": {
+            "title": "Writing tools for agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Remove room_type from the schema and instruct the model to embed the room type in a notes field.",
+          "correct": false,
+          "explanation": "Moving structured data into free text abandons the validation the input_schema exists to provide and forces brittle server-side parsing. The input_schema is a JSON Schema precisely so parameters like this can be typed, constrained, and documented.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-04",
+      "question": "A shipping-logistics agent calls a carrier-rates tool that sometimes fails. Today the tool returns just \"ERROR\" and the agent gives up or retries blindly. Following Anthropic's guidance on tool errors, what should a failed call return instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "An empty response, so the model treats the failure as \"no rates found\" and moves on gracefully.",
+          "correct": false,
+          "explanation": "Masking an outage as an empty result is worse than an error: the agent may confidently tell customers no shipping options exist. Failures should be signaled explicitly, with is_error true on the tool_result and a message explaining what happened.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A raw stack trace, giving the model maximum diagnostic detail to reason about the failure.",
+          "correct": false,
+          "explanation": "Stack traces are noisy, token-hungry, and rarely tell the agent what to do next. Anthropic's guidance favors concise, actionable error messages that communicate specific improvements or next steps rather than dumping internal diagnostics into context.",
+          "citation": {
+            "title": "Writing tools for agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A structured error naming the failure category, whether it is retryable, and what the agent should do next.",
+          "correct": true,
+          "explanation": "Anthropic recommends instructive error responses that clearly communicate what went wrong and specific, actionable next steps, instead of opaque codes like \"failed\". Distinguishing categories and retryability (a transient rate limit vs. a permanently invalid address) gives the agent the context to recover or adapt rather than guessing.",
+          "citation": {
+            "title": "Writing tools for agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "An HTTP 500 from the application to the Claude API, aborting the conversation so no bad data reaches the model.",
+          "correct": false,
+          "explanation": "A tool failure is not an API failure; killing the whole conversation discards recoverable state. The documented pattern is to return the error inside a tool_result with is_error set to true so Claude can incorporate it and respond appropriately, such as retrying or explaining the issue.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-05",
+      "question": "A retail analytics agent only needs to read sales dashboards, but the proposed integration would grant it a company-wide admin token covering writes, deletes, and user management. What is the security-appropriate design, consistent with MCP scope guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Grant the admin token but add a system-prompt instruction telling the agent never to use write operations.",
+          "correct": false,
+          "explanation": "Prompt instructions are not a security boundary; a prompt-injected or confused agent can still exercise every permission the token actually carries. Enforcement must live in the credentials and tool surface, not in natural-language requests to the model.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Grant the admin token now for convenience and plan to narrow the scopes after launch.",
+          "correct": false,
+          "explanation": "Broad tokens expand the blast radius immediately: MCP guidance warns that a stolen omnibus-scope token enables lateral access and privilege chaining, and revoking it later disrupts every workflow at once. Least privilege should be the starting posture, not a post-launch cleanup.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Expose write tools but require the agent to log every mutation for weekly audit review.",
+          "correct": false,
+          "explanation": "Audit logs detect misuse only after the damage is done and do nothing to shrink the attack surface. Since the agent's job requires no writes at all, the mutation capability should simply not be granted; logging complements least privilege but cannot replace it.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Scope the agent to read-only tools and a minimal-privilege credential, elevating only on new need.",
+          "correct": true,
+          "explanation": "MCP security guidance calls for a progressive, least-privilege scope model: begin with a minimal set of low-risk read operations and elevate incrementally only when a privileged operation is actually attempted and justified. This limits the impact of token compromise and keeps audit trails meaningful.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-06",
+      "question": "A compliance-screening pipeline must guarantee that every request runs the check_sanctions tool specifically, never answering from memory and never choosing a different tool. Which tool_choice configuration achieves this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "{\"type\": \"tool\", \"name\": \"check_sanctions\"}, which forces Claude to call that particular tool.",
+          "correct": true,
+          "explanation": "The tool option of tool_choice forces Claude to always use the named tool, which is exactly the guarantee this pipeline needs. With auto Claude may answer directly, and with any it may pick a different provided tool, so only the tool type pins the specific call.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "{\"type\": \"auto\"}, plus a strongly worded system prompt requiring the sanctions check.",
+          "correct": false,
+          "explanation": "auto leaves the decision to Claude, and prompting only influences rather than guarantees the choice. When a hard guarantee is required, the documented mechanism is forcing tool use via tool_choice, not persuasion through instructions.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "{\"type\": \"any\"}, which requires Claude to use the check_sanctions tool on every request.",
+          "correct": false,
+          "explanation": "any requires Claude to use one of the provided tools but does not dictate which one; if other tools are in the request, Claude could satisfy any by calling one of them instead. Forcing a specific tool requires the tool type with the tool's name.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "{\"type\": \"none\"}, which locks the toolset so only check_sanctions remains callable.",
+          "correct": false,
+          "explanation": "none does the opposite of what is needed: it prevents Claude from using any tools at all, and it is the default when no tools are provided. It cannot force a call to check_sanctions or any other tool.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-07",
+      "question": "A telehealth triage bot must always end its turn by calling one of three intake tools, but the product team wants Claude to pick whichever tool best fits the patient's message. Which tool_choice value matches this requirement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "\"auto\", because it automatically selects the best-fitting tool on every turn.",
+          "correct": false,
+          "explanation": "auto lets Claude decide whether to call any tool at all, so on some turns it may respond directly with text and never invoke an intake tool. It is the default when tools are provided, but it does not guarantee a tool call.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "\"tool\", because forcing tool use is the only way to make Claude call an intake tool.",
+          "correct": false,
+          "explanation": "The tool type forces one specific named tool, removing Claude's ability to choose among the three intake options. The requirement is \"some tool, Claude's choice\", which is precisely what the any type provides.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "\"any\", which requires Claude to use one of the provided tools but leaves the choice to it.",
+          "correct": true,
+          "explanation": "tool_choice type any tells Claude it must use one of the provided tools but does not force a particular one, matching the requirement exactly. Note that with any or tool, the API prefills the assistant message toward tool use, so Claude will not emit a natural-language answer instead.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "\"none\", combined with listing only the three intake tools in the request body.",
+          "correct": false,
+          "explanation": "none prevents Claude from using any tools regardless of what is listed, so no intake tool would ever be called. Restricting the tools array shapes the menu, but none takes the menu away entirely.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-08",
+      "question": "A travel-operations agent responds with stop_reason \"tool_use\" containing three independent tool_use blocks: flight status, hotel availability, and weather. The team runs them concurrently. How must the results be sent back to Claude?",
+      "options": [
+        {
+          "key": "A",
+          "text": "As three separate user messages, one per tool result, sent in the order the tools finished executing.",
+          "correct": false,
+          "explanation": "Splitting results across multiple user messages breaks the documented format: all tool_result blocks answering one assistant turn belong together in the single next user message. Tool results must immediately follow their tool_use blocks with nothing interleaved.",
+          "citation": {
+            "title": "Parallel tool use - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use"
+          }
+        },
+        {
+          "key": "B",
+          "text": "As one user message holding all three tool_result blocks, each matched via tool_use_id.",
+          "correct": true,
+          "explanation": "The parallel tool use documentation requires one tool_result per tool_use block, returned all together in the next user message, matched by tool_use_id, with every tool_result placed before any text. Execution order is the application's choice, but the reply format is fixed.",
+          "citation": {
+            "title": "Parallel tool use - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use"
+          }
+        },
+        {
+          "key": "C",
+          "text": "As a single tool_result block whose content concatenates the three outputs, referencing the first tool_use_id.",
+          "correct": false,
+          "explanation": "Each tool_use block requires its own corresponding tool_result with a matching tool_use_id; two of the three requests would be left dangling, which produces an API error about tool_use ids lacking tool_result blocks. Results cannot be merged under one id.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Only the flight result needs returning; Claude re-requests the other tools if it still wants them.",
+          "correct": false,
+          "explanation": "Every tool_use block must receive a tool_result in the next user message; omitting results is a formatting error, not an optimization. Even a call the application chose not to run should get a tool_result with is_error true and a brief explanation.",
+          "citation": {
+            "title": "Parallel tool use - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-09",
+      "question": "An inventory agent's database tool threw a timeout while handling a tool_use request with id \"toolu_abc123\". What is the correct way to report this failure back to Claude?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Append an assistant message apologizing for the timeout so the transcript stays coherent.",
+          "correct": false,
+          "explanation": "The application must not fabricate assistant turns; the pending tool_use still requires a matching tool_result in a user message. Errors are conveyed through the tool_result mechanism so Claude itself can decide how to respond, retry, or explain.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Send a user message with a text block first describing the timeout, then the tool_result block after it.",
+          "correct": false,
+          "explanation": "In a user message containing tool results, the tool_result blocks must come first in the content array; text before a tool_result causes a 400 error. Any explanatory text belongs after all tool_result blocks.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Retry the identical API request until the database recovers, without sending anything about the failure.",
+          "correct": false,
+          "explanation": "Re-sending the same request just regenerates the same tool_use; Claude never learns the tool failed, and the loop stalls. The documented pattern is to report the failure via tool_result with is_error so Claude can adapt, perhaps retrying later or informing the user.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Send a user message with a tool_result block citing tool_use_id \"toolu_abc123\" and is_error set to true.",
+          "correct": true,
+          "explanation": "The documented error pattern is a tool_result block referencing the originating tool_use_id, with is_error: true and the error message in content. Anthropic further advises instructive error text, such as what failed and what to try next, so Claude can recover rather than guess.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-10",
+      "question": "An enterprise architect is documenting how their AI IDE connects to a Sentry MCP server and a local filesystem MCP server at the same time. Per the MCP architecture, which statement is accurate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The IDE is an MCP client that connects directly to both servers over one shared multiplexed connection.",
+          "correct": false,
+          "explanation": "The AI application is the host, not the client, and connections are not shared. The host instantiates a separate MCP client for each server, and each client maintains its own dedicated connection; there is no single multiplexed pipe.",
+          "citation": {
+            "title": "MCP Architecture Overview",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Each MCP server embeds its own client so it can push context into the IDE without a standing connection.",
+          "correct": false,
+          "explanation": "Clients live on the host side, not inside servers: the host creates one client per server to maintain the connection and obtain context. Servers provide capabilities in response to client requests (plus notifications over the established connection), they do not embed clients.",
+          "citation": {
+            "title": "MCP Architecture Overview",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        },
+        {
+          "key": "C",
+          "text": "The IDE acts as the MCP host and instantiates one MCP client per server, each with a dedicated connection.",
+          "correct": true,
+          "explanation": "MCP defines the host as the AI application coordinating one or more clients; the host creates one client for each server it connects to, and each client keeps a dedicated connection with its corresponding server. The docs use exactly this IDE-with-Sentry-and-filesystem example.",
+          "citation": {
+            "title": "MCP Architecture Overview",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        },
+        {
+          "key": "D",
+          "text": "\"MCP server\" only refers to remote cloud programs, so the local filesystem process is technically a client.",
+          "correct": false,
+          "explanation": "The spec is explicit that \"MCP server\" refers to the program serving context regardless of where it runs; a locally-launched filesystem server using the stdio transport is still a server. Location determines transport choice, not role.",
+          "citation": {
+            "title": "MCP Architecture Overview",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-11",
+      "question": "A wealth-management firm's MCP server will expose three things: a query_positions function the model can invoke, read-only access to the firm's account schema for context, and a reusable \"quarterly review\" template users trigger explicitly. Which MCP primitives map to these, in order?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A tool (model-controlled), a resource (application-driven data), and a prompt (user-controlled template).",
+          "correct": true,
+          "explanation": "MCP's three server primitives map exactly this way: tools are executable functions the model decides to invoke, resources are passive read-only data sources the application retrieves for context, and prompts are reusable templates that users explicitly invoke, often via slash commands.",
+          "citation": {
+            "title": "Understanding MCP servers",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Three tools, since everything an MCP server exposes must be modeled as a callable tool.",
+          "correct": false,
+          "explanation": "MCP deliberately defines three distinct server primitives, not just tools. Modeling passive schema data or a user-invoked template as tools loses the control semantics: resources are application-driven and prompts are user-controlled, whereas tools are invoked at the model's discretion.",
+          "citation": {
+            "title": "Understanding MCP servers",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A prompt, a tool, and a resource, since templates execute actions and functions provide static context.",
+          "correct": false,
+          "explanation": "This mapping is inverted: the invocable query function is the tool, the read-only schema is the resource, and the review template is the prompt. Prompts do not execute actions; they are instruction templates, and resources provide data rather than executing functions.",
+          "citation": {
+            "title": "Understanding MCP servers",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A tool, an elicitation, and a sampling request, covering action, data, and templating respectively.",
+          "correct": false,
+          "explanation": "Elicitation and sampling are client-side capabilities: elicitation lets a server request additional input from the user, and sampling lets a server request LLM completions via the client. Neither represents server-exposed data or templates; those are the resource and prompt primitives.",
+          "citation": {
+            "title": "MCP Architecture Overview",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-12",
+      "question": "A dev-productivity team is packaging two MCP servers: one wrapping a local SQLite file on each engineer's laptop, and one exposing a shared CRM to hundreds of employees over the network. Which transport pairing follows MCP guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Streamable HTTP for the laptop server and stdio for the shared CRM server, since HTTP is lighter weight locally.",
+          "correct": false,
+          "explanation": "This pairing is backwards. stdio is the local-process transport with no network overhead, while stdio cannot reasonably serve hundreds of remote employees because it communicates over a spawned process's standard input/output on one machine.",
+          "citation": {
+            "title": "MCP Architecture Overview",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        },
+        {
+          "key": "B",
+          "text": "stdio for the local SQLite server, and Streamable HTTP with OAuth for the shared remote CRM server.",
+          "correct": true,
+          "explanation": "MCP's stdio transport uses standard input/output between local processes on the same machine, giving optimal performance for local servers that typically serve a single client. Streamable HTTP supports remote communication, many concurrent clients, and standard HTTP authentication, with OAuth recommended for obtaining tokens.",
+          "citation": {
+            "title": "MCP Architecture Overview",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        },
+        {
+          "key": "C",
+          "text": "stdio for both, because MCP's data layer only functions over standard input/output streams.",
+          "correct": false,
+          "explanation": "MCP's JSON-RPC data layer is transport-agnostic by design; the transport layer abstracts communication details so the same messages flow over stdio or Streamable HTTP. A shared multi-user CRM is exactly the remote scenario Streamable HTTP exists for.",
+          "citation": {
+            "title": "MCP Architecture Overview",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Streamable HTTP for both, since the stdio transport was deprecated in favor of HTTP everywhere.",
+          "correct": false,
+          "explanation": "stdio is not deprecated; it remains the recommended transport for local servers, providing direct process communication with no network overhead. Running a purely local single-user server through HTTP adds needless surface area, including localhost ports other processes could probe.",
+          "citation": {
+            "title": "MCP Architecture Overview",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D2-13",
+      "question": "A vendor builds an MCP proxy server that fronts a third-party API using a single static OAuth client ID, while letting MCP clients register dynamically. Security review flags a \"confused deputy\" risk where an attacker's client could ride a returning user's consent cookie. What mitigation does the MCP specification require?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Cache the third-party consent cookie longer so users are not annoyed by repeated consent screens.",
+          "correct": false,
+          "explanation": "The lingering consent cookie is the attack's enabler: it lets the third-party server skip consent for a request actually initiated by the attacker's dynamically registered client. Extending cookie lifetime widens the window rather than closing it.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Rely on the third-party authorization server's consent screen, since consent is its responsibility alone.",
+          "correct": false,
+          "explanation": "The third-party server only sees the proxy's static client ID, so it cannot distinguish which MCP client is behind a request, and its cookie may skip consent entirely. That blind spot is why the spec pushes the consent obligation onto the proxy itself, per client.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Disable HTTPS redirects on the authorization flow so stolen authorization codes cannot leave the proxy.",
+          "correct": false,
+          "explanation": "OAuth redirect flows are integral to the protocol and must stay on HTTPS; disabling redirects breaks legitimate clients without addressing the missing per-client consent. The spec's mitigations center on consent, exact redirect_uri validation, and state parameter checks, not removing redirects.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The proxy must obtain and record explicit user consent for each dynamically registered client.",
+          "correct": true,
+          "explanation": "The MCP security best practices state that proxy servers using static client IDs must implement per-client consent: maintain a registry of approved client_ids per user, check it before initiating third-party authorization, and show a consent page identifying the requesting client, scopes, and redirect URI. This prevents an attacker's client from silently reusing prior consent.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        }
+      ]
+    }
+  ]
+}

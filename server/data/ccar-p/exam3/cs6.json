@@ -1,0 +1,162 @@
+{
+  "examId": "ccar-p-exam3",
+  "caseId": "CS6",
+  "caseTitle": "Forge Systems — internal engineering platform rollout of Claude Code",
+  "caseScenario": "Forge Systems is a 280-engineer software company that ships a B2B developer-analytics platform. Engineering is organized around a TypeScript/Go monorepo built with Nx, containing roughly 1,800 workspace packages across product, shared libraries, and infrastructure. A six-person internal platform team owns the developer-experience toolchain and has been tasked with rolling Claude Code out to all engineers over a 90-day window. The rollout must integrate with the company's GitHub Actions CI pipeline, which runs on self-hosted runners with repository write credentials.\n\nTo avoid disruption, the platform team has defined five hard requirements that every Claude Code configuration must satisfy before any workflow reaches production. First, because Forge uses branch protection on `main` and all `release/*` branches, Claude Code must be prevented from pushing to those branches deterministically — a prompt-level instruction is not acceptable because it is probabilistic. Second, a curated internal MCP server exposes Forge's internal build graph, code-search index, and deployment APIs; this server must be defined in the project-scoped `.mcp.json` committed to the monorepo so that every engineer and every CI job uses the same server definition. Local-scope overrides that point to unofficial dev instances must not substitute for the canonical server in CI. Third, all CI jobs that invoke Claude Code must use headless (non-interactive) mode with `--allowedTools` restricted to a per-job approved list, preventing runaway tool calls in unattended pipelines. Fourth, any new Claude Code workflow proposed for the monorepo must pass a regression suite of at least 20 scenario inputs before its pull request can be merged, establishing a statistical baseline rather than a one-time manual demo. Fifth, the `secrets/` package subtree contains cryptographic key-management code that must never be read or modified by any automated process; Claude Code must be blocked from accessing that path regardless of what a user prompt requests.\n\nThe platform team is now evaluating three architectural decisions: how to enforce the branch-push and path-access security boundaries in CI, how to govern MCP server scope and precedence across the fleet, and how to structure the evaluation gate that satisfies R4 before new workflows are merged.",
+  "caseRequirements": [
+    "R1: Claude Code must never push to main or release/* branches; this boundary must be enforced deterministically via a PreToolUse hook (exit code 2), not via a prompt instruction.",
+    "R2: The internal Forge MCP server must be defined in the project-scoped .mcp.json committed to the monorepo; local-scope or user-scope server definitions must not substitute for it in CI jobs.",
+    "R3: All CI invocations of Claude Code must use headless mode (claude -p) with --allowedTools restricted to the approved tool list for that job role.",
+    "R4: Any new Claude Code workflow proposed for the monorepo must pass an automated evaluation over at least 20 distinct scenario inputs before its pull request can merge.",
+    "R5: Files under the secrets/ package subtree must never be read or written by Claude Code; this block must be enforced deterministically, not by prompt instruction."
+  ],
+  "questions": [
+    {
+      "id": "P3-CS6-01",
+      "primaryDomain": "D7",
+      "secondaryDomains": ["D5", "D3"],
+      "question": "Forge's platform team is configuring the GitHub Actions runner job that invokes Claude Code to triage failing builds. The job runs unattended with repository write credentials. Which configuration correctly satisfies both R1 and R3 for this CI job?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run claude interactively in CI, pass the branch protection policy in the system prompt alongside the full list of approved operations, and grant full tool access so the agent can freely explore build artifacts, logs, and source files without restriction.",
+          "correct": false,
+          "explanation": "Interactive mode is not the supported path for unattended CI execution, and a prompt-level branch restriction is explicitly ruled out by R1 because it is probabilistic rather than deterministic. Full tool access also violates R3's requirement for an approved per-job allowlist, and granting unrestricted file access leaves the secrets/ subtree readable when R5 requires that block be enforced deterministically.",
+          "citation": {
+            "title": "Claude Code best practices — run non-interactive mode",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run claude -p in headless mode with --allowedTools scoped to the approved list, and add a PreToolUse hook that exits with code 2 when the Bash tool is about to execute a git push targeting main or release/*.",
+          "correct": true,
+          "explanation": "Headless mode (claude -p) is the supported non-interactive path, satisfying R3 alongside --allowedTools. A PreToolUse hook that exits with code 2 is the only mechanism that deterministically blocks a tool call before it executes, converting the branch-protection rule from a probabilistic prompt instruction into a hard enforcement boundary as required by R1. The runner-up option C uses --tools to strip Bash from the agent entirely, which does block the branch push but also removes the build-triage commands the job exists to run, so it cannot honour R3's approved list for that role.",
+          "citation": {
+            "title": "Claude Code hooks — PreToolUse blocking with exit code 2",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Run claude -p in headless mode and pass --tools without Bash, so the Bash tool is removed from the agent's available tool set entirely and no shell command the agent might misuse — including any git push variant — can be executed at all.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This uses the right flag for the job: --tools controls which tools are available at all, whereas --allowedTools only controls which calls auto-approve without a permission prompt. Removing Bash does satisfy R1 in the narrow sense that an agent with no Bash tool cannot run git push. However, it does not meet R3, which requires --allowedTools scoped to the approved tool list for that job role — and the build-triage role's approved list necessarily contains Bash, because running build and log commands is the entire purpose of the job. Stripping Bash leaves the job unable to do its work, whereas a PreToolUse hook blocks only the protected branches and leaves the rest of the approved list intact.",
+          "citation": {
+            "title": "Claude Code settings — permissions and tool restrictions",
+            "url": "https://code.claude.com/docs/en/settings"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Grant the CI job the same broad repository credentials that interactive developers use, and rely entirely on GitHub's branch protection rules to reject any disallowed push at the remote server after the tool call has already executed.",
+          "correct": false,
+          "explanation": "Relying on the remote to reject the push is a detective control that still executes the push attempt and generates noise in the audit log; it does not satisfy R1's requirement for a deterministic block before the tool call executes. Broad developer credentials also violate the least-privilege principle for unattended automation.",
+          "citation": {
+            "title": "Claude Code security",
+            "url": "https://code.claude.com/docs/en/security"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS6-02",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "After the platform team commits the Forge MCP server definition to .mcp.json (project scope), a senior engineer on the payments team adds a local-scope entry (the default scope for claude mcp add) pointing to her own dev instance of the same server. Both definitions use the same server name. What happens at runtime, and how does this affect R2?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude Code merges the two definitions and routes requests to both endpoints in round-robin, so the engineer transparently gets her local dev instance for iterative testing while every CI job still targets the canonical server in .mcp.json — R2 is satisfied for both contexts simultaneously.",
+          "correct": false,
+          "explanation": "Claude Code does not merge duplicate server definitions — the entire entry from the highest-precedence scope is used, and fields are not merged across scopes. When two scopes define the same server name, precedence determines which one wins and the lower-priority definition is shadowed; Claude Code surfaces the conflict only as a warning in claude mcp list and /mcp. Assuming both endpoints are active simultaneously is a factual error about how Claude Code resolves scope conflicts.",
+          "citation": {
+            "title": "Claude Code MCP — scope configuration and precedence",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The project-scoped .mcp.json entry wins because project scope always overrides local scope in Claude Code's precedence hierarchy — R2 is therefore satisfied for the engineer's interactive sessions as well as for every CI job, since the version-controlled canonical server definition takes authority over any local-scope or user-scope override that points to an unofficial dev instance of the same named server.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a defensible conclusion — a team wanting to guarantee the canonical server is used might reasonably expect that committed project config outranks a personal override, as it does in many toolchain conventions, and project scope genuinely does outrank user scope, which is likely the source of the confusion. However, it does not meet R2 because it inverts the top of Claude Code's documented precedence order, which runs local scope, then project scope, then user scope. The engineer's local-scope definition therefore wins in her sessions, and a team that acts on this belief will fail to detect the drift and incorrectly believe R2 is satisfied.",
+          "citation": {
+            "title": "Claude Code MCP — scope hierarchy",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Claude Code detects the naming collision between the personal-scope and project-scoped definitions and raises a hard configuration conflict error, refusing to start any session until the engineer removes one of the duplicate entries — R2 is therefore self-enforcing and requires no additional team policy.",
+          "correct": false,
+          "explanation": "Claude Code warns about duplicate server definitions but does not refuse to start. It resolves the conflict by scope precedence, so the engineer's sessions proceed against her local-scope dev instance — the project-scoped entry is the one that gets shadowed — with nothing more than a warning in claude mcp list and /mcp for the platform team to notice.",
+          "citation": {
+            "title": "Claude Code MCP — configuration warnings",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The engineer's local-scope definition takes precedence over the project-scoped one in her interactive sessions, so she hits the dev instance rather than the canonical server. CI jobs, which load only the project-scoped .mcp.json, are unaffected. R2 is violated for her sessions, and the platform team must enforce a policy against local-scope server definitions that shadow .mcp.json entries.",
+          "correct": true,
+          "explanation": "Claude Code's documented precedence runs local scope, then project scope, then user scope, and the entire entry from the highest-precedence source is used rather than merged. The engineer's local-scope entry therefore shadows the canonical .mcp.json server in her terminal sessions, flagged only as a warning in claude mcp list and /mcp. CI runners have no local-scope entry in ~/.claude.json, so they remain unaffected. This correctly identifies the violation of R2 — the engineer is not using the team-sanctioned server definition — and names the remediation: a team policy (and optionally a managed-settings block) prohibiting local-scope entries that duplicate the canonical server name. This beats option B, the runner-up, because B claims project scope outranks local scope, which is factually incorrect and would lead the team to believe R2 is satisfied when it is not.",
+          "citation": {
+            "title": "Claude Code MCP — scope hierarchy and precedence",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS6-03",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D7", "D6"],
+      "question": "A platform engineer has authored a new Claude Code workflow that automates PR description generation from diff context. Before the pull request can merge, R4 requires a passing automated evaluation over at least 20 scenario inputs. Which evaluation strategy best satisfies R4 and gives the team a repeatable quality baseline?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Assemble a golden dataset of 25 representative diffs with hand-authored reference descriptions, run the workflow against all 25 inputs in CI, and score each output with a rubric-based LLM judge; gate the PR merge on achieving a pass rate above an agreed threshold.",
+          "correct": true,
+          "explanation": "A golden dataset with 25 inputs satisfies R4's count requirement and produces a statistically meaningful sample across diff types, sizes, and edge cases. A rubric-based LLM judge converts subjective description quality into a consistent score, and running the suite in CI makes it repeatable and auditable on every subsequent change. This directly beats option B, the runner-up, because B uses real production traffic rather than a controlled golden set, meaning results are non-deterministic across runs and cannot serve as a stable merge gate.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Route 20 live PR events from production to the new workflow in a shadow mode and compare outputs to what engineers actually wrote; promote the workflow if engineers prefer the generated descriptions in more than half the comparisons.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Shadow testing against real production traffic is a sound evaluation methodology and does hit R4's count of 20 inputs. However, it does not meet R4's requirement for an automated evaluation that gates the merge, because live traffic is non-deterministic: the 20 PRs available on any given day may cluster around one diff type, skew toward trivial changes, and cannot be replayed identically on future runs. The merge gate therefore cannot be reproduced or audited later. A golden dataset with fixed reference outputs provides the stable, repeatable baseline R4 requires, whereas shadow testing is better suited for post-deployment monitoring.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have the workflow author demonstrate it live to two senior engineers using a single real PR that represents a typical change; if both reviewers approve the generated description as accurate and well-structured, the workflow is considered validated and the pull request may merge.",
+          "correct": false,
+          "explanation": "A live demo on one input is not an automated evaluation and does not come close to the 20-scenario minimum mandated by R4. Two engineers approving a single case cannot establish a quality baseline or catch regressions introduced by future prompt changes, so this fails the repeatability requirement as well.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Instrument the workflow to append every generated description to a shared spreadsheet after each PR is merged, then have two engineers audit the entries weekly and block a rollback only if the observed defect rate stays below 10% over the first full month of production usage.",
+          "correct": false,
+          "explanation": "Post-deployment logging is a monitoring strategy, not a pre-merge evaluation gate. R4 requires the 20-scenario evaluation to pass before the pull request merges, so any approach that defers review to after deployment fundamentally cannot satisfy R4. A 10% defect rate in production also implies live engineers are already harmed by poor descriptions during the review period.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

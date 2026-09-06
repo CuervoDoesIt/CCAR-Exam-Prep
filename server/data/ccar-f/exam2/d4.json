@@ -1,0 +1,415 @@
+{
+  "examId": "ccar-f-exam2",
+  "domainId": "D4",
+  "domainName": "Prompt Engineering & Structured Output",
+  "questions": [
+    {
+      "id": "F2-D4-01",
+      "question": "A hotel chain's booking pipeline calls Claude Sonnet 4.5, a model that supports response prefilling, to summarize reservations as JSON. Responses keep starting with 'Here is the JSON you requested:', which breaks the downstream parser. What is the most direct prompting fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise the temperature so the model varies its phrasing away from the preamble.",
+          "correct": false,
+          "explanation": "Temperature controls randomness, not formatting discipline; raising it makes output less predictable, which is the opposite of what a parser needs. Format is steered with prefilling, explicit instructions, or structured output features, not sampling parameters.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        },
+        {
+          "key": "B",
+          "text": "Prefill the assistant turn with '{' so Claude continues directly with the JSON body.",
+          "correct": true,
+          "explanation": "On models that support it, providing a partial assistant message forces Claude to continue from that text, so prefilling '{' skips any preamble and constrains the reply to JSON. Note the scope: prefilled responses on the last assistant turn are no longer supported starting with Claude 4.6 models, where Anthropic's documented replacements are direct system-prompt instructions, XML output tags, structured outputs, or tool calling.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Lower max_tokens so there is no room left for a preamble.",
+          "correct": false,
+          "explanation": "max_tokens caps total output length; it does not change what Claude writes first. A tight cap would truncate the JSON payload itself while the preamble still appears at the start.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        },
+        {
+          "key": "D",
+          "text": "Add a stop sequence for the word 'JSON' to cut off the introduction.",
+          "correct": false,
+          "explanation": "Stop sequences end generation when matched, so stopping on 'JSON' would terminate the response during the preamble and the actual object would never be produced. Stop sequences trim the end of output; they cannot remove text that comes before the content you want.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-02",
+      "question": "An agriculture platform builds prompts that combine grading instructions, a raw soil-lab report, and a grower's question in one block of text. Claude sometimes treats sentences from the lab report as instructions. What does Anthropic recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Rewrite everything as one shorter, denser paragraph so there is less to confuse.",
+          "correct": false,
+          "explanation": "Compressing mixed content into a single paragraph makes the boundary problem worse, since instructions and data remain interleaved. The documented fix is structural separation, not compression.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Send the instructions, report, and question as three separate API requests.",
+          "correct": false,
+          "explanation": "Splitting one task across multiple requests loses the shared context needed to answer, and adds cost and latency. A single request with clearly delimited sections is the standard pattern for multi-part inputs.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Write the instructions in capital letters so they stand out from the report.",
+          "correct": false,
+          "explanation": "Typographic emphasis does not give Claude a reliable, machine-parseable boundary between content types. Anthropic's guidance for disambiguating mixed prompts is XML tags with consistent, descriptive names, not shouting.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Wrap each part in XML tags such as <instructions>, <report>, and <question>.",
+          "correct": true,
+          "explanation": "Anthropic recommends XML tags to help Claude parse complex prompts unambiguously when instructions, context, examples, and variable inputs are mixed. Wrapping each content type in its own descriptive tag reduces the chance of report text being misread as instructions.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-03",
+      "question": "A sports analytics firm wants Claude to consistently respond as a veteran basketball scout, using scouting terminology and an analytical tone across every request in their app. Where should this persona be established?",
+      "options": [
+        {
+          "key": "A",
+          "text": "In the system parameter, e.g. 'You are a veteran basketball scout with 20 years of player evaluation experience.'",
+          "correct": true,
+          "explanation": "Anthropic's guidance is to set a role in the system prompt, which focuses Claude's behavior and tone for the use case; even a single role sentence makes a measurable difference. Placing it in the system parameter applies it uniformly to every request.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Repeated at the end of every user message the app sends.",
+          "correct": false,
+          "explanation": "Restating the persona inside each user turn mixes role framing with task content, wastes tokens on repetition, and is less reliable than the dedicated mechanism. The system parameter is the documented home for role prompting.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Through fine-tuning a custom scout-persona model before launch.",
+          "correct": false,
+          "explanation": "Anthropic's guidance is to reach for prompt-level techniques first; a persistent persona is achievable with a one-line system role, without any model customization effort. Starting with the simplest effective technique is a core prompt engineering principle.",
+          "citation": { "title": "Prompt engineering overview", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview" }
+        },
+        {
+          "key": "D",
+          "text": "By setting temperature to 0 so the model locks into one personality.",
+          "correct": false,
+          "explanation": "Temperature governs sampling randomness, not persona or domain framing. A low temperature makes wording more consistent but does not instill scouting expertise or tone; that comes from role prompting in the system parameter.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-04",
+      "question": "A hospitality group's review-triage prompt classifies guest reviews as positive, negative, or mixed. It includes ten few-shot examples, all clearly positive reviews, and Claude mislabels sarcastic and mixed reviews. How should the example set be improved?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add twenty more clearly positive examples to reinforce the pattern.",
+          "correct": false,
+          "explanation": "Adding more of the same kind of example deepens the unintended pattern that everything looks positive. Anthropic warns that examples should vary enough that Claude does not pick up unintended patterns, which uniform examples create.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Delete all the examples so the model relies on its own judgment.",
+          "correct": false,
+          "explanation": "Well-crafted examples are one of the most reliable ways to steer accuracy and consistency, so removing them discards a proven lever. The problem is the set's composition, not the presence of examples.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Use 3-5 diverse examples that cover edge cases like sarcasm and mixed sentiment, wrapped in <example> tags.",
+          "correct": true,
+          "explanation": "Anthropic recommends 3-5 relevant, diverse examples that cover edge cases, structured in <example> tags so Claude can distinguish them from instructions. Covering the failure modes, sarcastic and mixed reviews, directly teaches the boundary cases the classifier is missing.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Replace the examples with a longer abstract description of each sentiment category.",
+          "correct": false,
+          "explanation": "Definitions help, but Anthropic identifies concrete examples as among the most reliable tools for steering output on classification-style tasks, especially for edge cases that are hard to describe abstractly. Dropping examples entirely for prose rules gives up that reliability.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-05",
+      "question": "A sports analytics product has two Claude features: a live in-game win-probability note that must return in well under a second, and an overnight post-game tactical report involving multi-step reasoning. Where should the team apply step-by-step 'thinking' prompting?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Both features, since more reasoning always yields better answers.",
+          "correct": false,
+          "explanation": "Thinking adds output tokens and latency, so applying it universally hurts the sub-second feature without benefit. Anthropic advises using thinking only where it meaningfully improves quality, because the tradeoff is real cost and speed.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Only the post-game report, where reasoning depth improves quality and latency is not critical.",
+          "correct": true,
+          "explanation": "Step-by-step reasoning improves complex, multi-step analysis but increases latency and token usage, so it fits the overnight report and not the sub-second widget. Anthropic explicitly notes thinking adds latency and should be used when it meaningfully improves output quality.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Neither, since reasoning style has no measurable effect on output quality.",
+          "correct": false,
+          "explanation": "This contradicts Anthropic's guidance: thinking is especially helpful for complex multistep reasoning tasks like tactical analysis. The tradeoff argument cuts against overuse, not against use where it clearly helps.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Only the live widget, because fast tasks need the most careful reasoning.",
+          "correct": false,
+          "explanation": "This inverts the tradeoff: the live widget's sub-second budget cannot absorb the extra tokens and latency that thinking introduces. Simple, latency-critical lookups are exactly where Anthropic suggests constraining or skipping extended reasoning.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-06",
+      "question": "A farm co-op feeds Claude an 80-page land-lease agreement plus agronomy reports and asks about a member's water-use obligations. Answers often cite irrelevant sections. Which documented technique best grounds the response in the right passages?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Increase max_tokens so Claude has room to discuss every section.",
+          "correct": false,
+          "explanation": "A larger output budget encourages longer answers, not better-targeted ones; the problem is retrieval focus within a long document, not output space. Grounding techniques change what Claude attends to, which max_tokens cannot do.",
+          "citation": { "title": "Context windows", "url": "https://docs.claude.com/en/docs/build-with-claude/context-windows" }
+        },
+        {
+          "key": "B",
+          "text": "Split the agreement into dozens of small requests and merge the answers in code.",
+          "correct": false,
+          "explanation": "Fragmenting a long document destroys cross-references, such as definitions in one section governing obligations in another, and multiplies cost. Anthropic's long-context guidance is to keep the document intact and use structuring plus quote grounding within one request.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Move the question to the top of the prompt, above the documents.",
+          "correct": false,
+          "explanation": "This is backwards relative to Anthropic's long-context guidance, which places longform data near the top and the query at the end; queries at the end improved response quality by up to 30% in Anthropic's tests. It also does not add any grounding step.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Ask Claude to first extract relevant quotes into <quotes> tags, then answer based only on those quotes.",
+          "correct": true,
+          "explanation": "Anthropic recommends grounding long-document answers in quotes: have Claude quote the relevant parts first, then perform the task from those quotes. This focuses the model on relevant content and helps it ignore the rest of the document, directly addressing the irrelevant-citation problem.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-07",
+      "question": "A resort operator uses Claude Sonnet 4.5, which supports the temperature parameter, for two workloads: routing guest complaints into fixed categories, and drafting playful social media captions. How should temperature be set per Anthropic's guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Near 0 for complaint classification; closer to 1 for the creative captions.",
+          "correct": true,
+          "explanation": "Anthropic's API guidance is to use temperature closer to 0 for analytical or multiple-choice-style tasks and closer to 1 for creative, generative tasks. Classification benefits from low-randomness consistency, while caption writing benefits from varied, creative sampling.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        },
+        {
+          "key": "B",
+          "text": "Near 1 for classification so the model explores all possible categories.",
+          "correct": false,
+          "explanation": "High temperature adds randomness, which makes category assignments less consistent between identical inputs, exactly what a routing system must avoid. Exploring the label space is done through prompt design and examples, not sampling noise.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        },
+        {
+          "key": "C",
+          "text": "0 for both, since temperature 0 guarantees byte-identical outputs every time.",
+          "correct": false,
+          "explanation": "The docs explicitly note that even at temperature 0.0 results are not fully deterministic, and forcing 0 on the creative workload would flatten the varied, playful output the captions need. Temperature should match the task type, not be globally zeroed.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        },
+        {
+          "key": "D",
+          "text": "It does not matter, because temperature only affects the length of responses.",
+          "correct": false,
+          "explanation": "Temperature controls the randomness injected into token sampling, not response length; length is governed by the prompt and max_tokens. Ignoring it forfeits a documented lever for matching output behavior to task type.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-08",
+      "question": "An agtech company extracts soil-sensor readings from field technician notes into JSON consumed directly by an ingestion service. Prose-prompted JSON occasionally arrives with commentary around it or misspelled keys. What is the most reliable structured-output approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add 'RETURN ONLY VALID JSON' in capital letters to the prompt.",
+          "correct": false,
+          "explanation": "Instructions reduce but do not eliminate formatting drift, since Claude is still free-generating prose that happens to look like JSON. Schema-constrained tool calls exist precisely because instruction-only JSON is not dependable enough for machine consumers.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Post-process responses with regex to strip commentary and fix keys.",
+          "correct": false,
+          "explanation": "Regex cleanup treats symptoms and breaks whenever the wrapper text or malformation pattern changes; it cannot repair a hallucinated or misspelled key reliably. Constraining generation at the source with a schema is the robust approach.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "C",
+          "text": "Define a record_reading tool whose input_schema is a JSON Schema, and consume the tool_use block's input.",
+          "correct": true,
+          "explanation": "Client tools are defined with a JSON Schema input_schema, and Claude returns a structured tool_use block whose input targets that schema, giving the application well-formed, key-correct data instead of free-text JSON. Anthropic's tool-use docs present this as the way to get schema-conformant structured calls.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Lower the temperature to zero so the JSON is always well formed.",
+          "correct": false,
+          "explanation": "Low temperature increases consistency but does not impose any schema; a consistently wrong key stays wrong at temperature 0. Structural guarantees come from schema-constrained tool use, not from sampling settings.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-09",
+      "question": "A sports data team defined an extract_boxscore tool with a JSON Schema, but Claude sometimes answers game questions in prose without calling the tool, breaking their pipeline. What is the documented way to require the tool call on every request?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add sterner wording to the system prompt telling Claude to always use the tool.",
+          "correct": false,
+          "explanation": "System-prompt wording steers tool triggering but does not guarantee it; Anthropic notes that to require a tool call rather than rely on prompting, you should set tool_choice. Prompting is the soft lever, tool_choice is the hard one.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Set the tool_choice parameter to force Claude to call extract_boxscore.",
+          "correct": true,
+          "explanation": "The default tool_choice of auto lets Claude decide whether to call a tool or respond directly. The API provides tool_choice settings to force tool use, guaranteeing the response contains the structured tool_use block the pipeline depends on.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "C",
+          "text": "Send every request twice and keep whichever response includes a tool call.",
+          "correct": false,
+          "explanation": "Duplicate requests double cost and latency and still provide no guarantee either attempt calls the tool. The API exposes tool_choice precisely so applications do not need probabilistic retry tricks for a deterministic requirement.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Increase max_tokens so Claude has enough room to both answer and call the tool.",
+          "correct": false,
+          "explanation": "Whether Claude calls a tool is a decision made under tool_choice, not a function of output budget. max_tokens only caps response length and has no effect on tool triggering.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-10",
+      "question": "A hospitality concierge app needs to display a stay summary and a restaurant recommendation in two separate UI panels, parsed from one Claude response. Prose responses are hard to split reliably. Which prompting technique does Anthropic suggest for parseable multi-part output?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask for two paragraphs and always treat the first as the summary.",
+          "correct": false,
+          "explanation": "Paragraph-position conventions are fragile: Claude may add an introduction, merge sections, or produce three paragraphs, and the parser silently mis-assigns content. Explicit named delimiters are the reliable alternative.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Make two separate API calls, one per panel.",
+          "correct": false,
+          "explanation": "Two calls double latency and cost and can produce inconsistent content between panels, such as a recommendation that contradicts the summary. A single structured response with tagged sections keeps the parts coherent and cheap to parse.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Split the response on sentence boundaries using an NLP library.",
+          "correct": false,
+          "explanation": "Heuristic sentence segmentation cannot tell which sentences belong to which panel and breaks as soon as phrasing varies. Anthropic's approach is to have Claude label its own output sections with tags so parsing is exact.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Instruct Claude to place its output inside named XML tags like <summary> and <recommendation>.",
+          "correct": true,
+          "explanation": "Anthropic recommends using XML tags not only to structure inputs but also to direct the model to output within tags, giving downstream code exact, unambiguous markers to extract each part. This makes multi-part responses trivially and reliably parseable.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-11",
+      "question": "A sports analytics startup keeps rewording its scouting-report prompt based on gut feel, and the team cannot agree whether the latest version is better. According to Anthropic, what should be in place before investing further in prompt engineering?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Clear success criteria, a way to empirically test against them, and a first draft prompt.",
+          "correct": true,
+          "explanation": "Anthropic's prompt engineering guide assumes exactly these prerequisites: defined success criteria, empirical tests against those criteria, and a draft prompt to improve. Without evaluations, prompt changes cannot be judged as improvements, which is the team's current problem.",
+          "citation": { "title": "Prompt engineering overview", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview" }
+        },
+        {
+          "key": "B",
+          "text": "An upgrade to the largest available Claude model so prompt quality matters less.",
+          "correct": false,
+          "explanation": "Model selection is one lever among several, and Anthropic notes some criteria like latency and cost are sometimes better addressed by choosing a different model, but no model removes the need to measure results. Without evals the team still cannot tell whether outputs improved.",
+          "citation": { "title": "Prompt engineering overview", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview" }
+        },
+        {
+          "key": "C",
+          "text": "A batch of few-shot examples added immediately to the current prompt.",
+          "correct": false,
+          "explanation": "Examples are a powerful technique, but applying techniques before establishing success criteria and tests repeats the same vibes-driven loop. Anthropic's ordering is explicit: define success and build evals first, then engineer the prompt.",
+          "citation": { "title": "Prompt engineering overview", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview" }
+        },
+        {
+          "key": "D",
+          "text": "A dataset collected for fine-tuning a custom scouting model.",
+          "correct": false,
+          "explanation": "Fine-tuning is a heavier intervention that still requires evaluation criteria to validate, and Anthropic's guidance favors prompt-level iteration measured against evals before more complex approaches. The missing ingredient here is measurement, not model customization.",
+          "citation": { "title": "Prompt engineering overview", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D4-12",
+      "question": "A farm co-op's prompt reads simply 'Make the irrigation report better.' Output quality varies wildly between runs. Anthropic compares Claude to a brilliant but new employee. Applying that principle, what should the co-op change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Repeat the same instruction three times so the model takes it seriously.",
+          "correct": false,
+          "explanation": "Repetition adds no information; a vague instruction repeated is still vague. The new-employee framing says the model lacks context on your norms, and only added specificity supplies that context.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Raise the temperature so Claude shows more initiative in interpreting the request.",
+          "correct": false,
+          "explanation": "Higher temperature increases sampling randomness, amplifying the run-to-run variance the co-op is complaining about. Consistency comes from precise instructions, not from asking the model to guess more creatively.",
+          "citation": { "title": "Messages API reference", "url": "https://docs.claude.com/en/api/messages" }
+        },
+        {
+          "key": "C",
+          "text": "Spell out explicitly what 'better' means: the audience, required sections, format, and success criteria.",
+          "correct": true,
+          "explanation": "Anthropic's clarity principle is to treat Claude like a brilliant new employee who lacks context on your norms: the more precisely you explain what you want, the better the result. Concrete, verifiable instructions such as audience, structure, and format turn a vague wish into a repeatable task.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Shorten the prompt further, since shorter prompts always yield more focused output.",
+          "correct": false,
+          "explanation": "Brevity is not the goal; sufficient, well-organized detail is. Anthropic favors concise but complete instructions, and the current prompt fails because it omits what success looks like, not because it is too long.",
+          "citation": { "title": "Prompting best practices", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    }
+  ]
+}

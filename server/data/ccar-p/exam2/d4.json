@@ -1,0 +1,381 @@
+{
+  "examId": "ccar-p-exam2",
+  "domainId": "D4",
+  "domainName": "Evaluation, Testing & Optimization",
+  "questions": [
+    {
+      "id": "P2-D4-01",
+      "question": "An e-learning platform uses Claude to write feedback on student essays. Reviewers disagree about whether outputs are 'encouraging enough,' so eval scores swing between graders. How should the team make this subjective quality measurable and consistent?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Drop the criterion, since encouragement is inherently unmeasurable and evals should stick to exact-match facts.",
+          "correct": false,
+          "explanation": "Anthropic's guidance shows even 'hazy' qualities can be quantified with well-defined qualitative scales applied consistently. Abandoning a criterion users care about leaves a real success dimension unmanaged.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "B",
+          "text": "Let each grader use personal judgment but average many graders' scores to wash out disagreement.",
+          "correct": false,
+          "explanation": "Averaging undefined judgments hides inconsistency rather than removing it, and it does not scale. The documented approach is an explicit rubric so the criterion is applied the same way every time, by humans or an LLM grader.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Write an explicit Likert rubric (e.g., 1 = discouraging, 5 = warm and specific praise) and have an LLM grader apply it, outputting only the score.",
+          "correct": true,
+          "explanation": "Anthropic's eval guidance uses LLM-based Likert grading for subjective qualities like tone and empathy, with clearly defined scale anchors so the rubric is applied consistently. Defined rubrics turn subjective outputs into automatable, comparable metrics.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Measure encouragement indirectly by counting exclamation marks in each response with a regex.",
+          "correct": false,
+          "explanation": "Surface proxies are gameable and misaligned with the actual quality; a response full of exclamation marks can still be dismissive. Code-graded checks suit categorical outputs, while nuanced tone assessment is a documented LLM-grading use case.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-02",
+      "question": "An insurance claims team iterates on a summarization prompt daily against the same 150 eval cases and celebrates when scores hit 96%. At launch, production quality is visibly worse. What eval-design flaw most likely explains the gap, and how should it be fixed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The prompt overfit to the iteration set; reserve a held-out set of cases that is never used during tuning to confirm improvements generalize.",
+          "correct": true,
+          "explanation": "Repeatedly optimizing against one fixed set selects for quirks of those cases rather than general capability, so measured gains stop reflecting real-world performance. Keeping cases the prompt was never tuned on, drawn from the real task distribution, restores an honest generalization signal.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "The eval set was too large; shrink it to 20 hand-picked cases the team can review deeply.",
+          "correct": false,
+          "explanation": "This moves in the wrong direction: Anthropic explicitly advises prioritizing volume, preferring more questions with automated grading over fewer hand-graded ones. A tiny curated set amplifies overfitting and noise.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "The scores prove the prompt is fine; production complaints should be dismissed until the eval score drops.",
+          "correct": false,
+          "explanation": "Evals are a proxy for real-world outcomes, and Anthropic's design principle is that evals must mirror your real task distribution. When production disagrees with the eval, the eval's representativeness is what needs auditing.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Success criteria were the problem; replace the quantitative target with a general goal like 'summaries should be good.'",
+          "correct": false,
+          "explanation": "Vague goals are the opposite of Anthropic's guidance, which calls for specific, measurable criteria. The failure here is generalization measurement, not the existence of a numeric target.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-03",
+      "question": "A restaurant tech startup A/B tests two prompts for a menu Q&A bot on 12 examples: Prompt A scores 9/12, Prompt B scores 8/12. The lead wants to ship Prompt A immediately. What is the strongest objection?",
+      "options": [
+        {
+          "key": "A",
+          "text": "None; a higher score on any shared test set is decisive evidence.",
+          "correct": false,
+          "explanation": "A one-case difference on 12 examples is well within noise and could easily invert on a resample. Anthropic's eval guidance exists precisely because decisions need enough measurement signal to be trustworthy.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "The test is invalid because prompt comparisons require human graders rather than automated checks.",
+          "correct": false,
+          "explanation": "Automated grading is encouraged, not disqualifying: Anthropic recommends structuring questions to allow automated grading and even accepts slightly lower-signal automated grades in exchange for volume. The flaw here is sample size, not automation.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Twelve examples cannot distinguish a one-answer gap from noise; scale to a large automated-graded set (hundreds of cases) covering edge cases before deciding.",
+          "correct": true,
+          "explanation": "Anthropic's eval design principle is to prioritize volume: more questions with slightly lower-signal automated grading beats few hand-graded examples, and sets should mirror the real distribution including edge cases. Larger samples are what make a small score difference meaningful rather than luck.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "A/B testing prompts is unnecessary because success criteria, once defined, guarantee outcomes.",
+          "correct": false,
+          "explanation": "Criteria define the target; A/B testing against baselines is one of Anthropic's listed measurement methods for verifying you hit it. Defining success and empirically testing candidates are complementary steps, not substitutes.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-04",
+      "question": "Six months after launching a claims-intake agent, an insurer's eval dashboard still shows 94% on the original test set, yet adjusters report growing failure rates on new storm-damage claim formats that did not exist at launch. What should the team institute?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Retire evals post-launch, since production monitoring dashboards make offline test sets redundant.",
+          "correct": false,
+          "explanation": "Monitoring and evals answer different questions: monitoring detects that behavior changed, while evals verify fixes before redeployment. Anthropic's practice combines production observability with rubric-based evaluation, not one replacing the other.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "B",
+          "text": "Monitor production inputs for distribution shift and continuously fold new claim formats into the eval set so it keeps mirroring real traffic.",
+          "correct": true,
+          "explanation": "A static eval frozen at launch stops mirroring the real-world task distribution as inputs drift, which is why the score stays high while quality falls. Anthropic's eval principle is task fidelity against your actual distribution, and its production guidance adds tracing to surface changed behavior early.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Raise the pass threshold from 94% to 99% on the existing set to force quality upward.",
+          "correct": false,
+          "explanation": "Tightening the bar on unrepresentative cases optimizes the wrong target harder. Achievable, relevant criteria matter, but the core failure is that the measured distribution no longer matches production inputs.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "D",
+          "text": "Assume the model provider silently degraded the model and switch vendors before changing any evals.",
+          "correct": false,
+          "explanation": "The evidence points to input drift, not model change: the original set still passes while novel formats fail. Diagnosing from traces and refreshed eval data comes before architectural or vendor decisions.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-05",
+      "question": "A restaurant tech company's ordering assistant has stable traffic, but its monthly Claude bill has tripled since two prompt 'improvements' shipped. No one can say which change caused it. What practice would have caught this cost regression early?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Cap max_tokens aggressively across all requests so cost cannot rise regardless of prompt changes.",
+          "correct": false,
+          "explanation": "max_tokens only bounds output; input-side growth from bloated prompts, tool definitions, and tool results continues unmetered, and truncated outputs create quality failures. Measurement, not blind capping, is the control.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Review the invoice quarterly and renegotiate pricing when totals climb.",
+          "correct": false,
+          "explanation": "Invoice review detects regressions months late and cannot attribute them to a change. Anthropic's experience is that token usage is a dominant, measurable driver, which argues for per-change instrumentation rather than after-the-fact billing analysis.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "C",
+          "text": "Track token usage per request as a first-class metric alongside quality in every eval run and release, alerting on growth against a baseline.",
+          "correct": true,
+          "explanation": "Anthropic reports token usage by itself explained about 80% of performance variance in its agent evals and treats token economics as a core operational fact, with agents using multiples of chat usage. Collecting token counts and cost per eval run makes any regression attributable to the change that shipped it.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "D",
+          "text": "Cost tracking is unnecessary because prompt changes cannot meaningfully affect spend at stable traffic.",
+          "correct": false,
+          "explanation": "Prompt and tool-definition tokens are billed input on every request, so a longer prompt multiplies across all traffic. Anthropic's pricing docs make explicit that tools, schemas, and results all add input tokens.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-06",
+      "question": "An e-learning tutor pipeline (moderation check, retrieval, answer generation, citation formatting) must respond in under 4 seconds end to end. The team only measures total latency, and SLA breaches are hard to diagnose. What does Anthropic-style success-criteria discipline suggest?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set a specific, measurable latency budget per stage (e.g., p95 targets summing under 4s) and measure each stage against its target.",
+          "correct": true,
+          "explanation": "Anthropic's guidance calls for specific, measurable, multidimensional criteria, with latency expressed in forms like '95% of responses under 200ms' rather than vague goals. Decomposing the end-to-end SLA into per-stage budgets makes breaches diagnosable and each stage independently optimizable.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "B",
+          "text": "Track only average end-to-end latency, since percentiles overcomplicate dashboards.",
+          "correct": false,
+          "explanation": "Averages hide tail behavior where SLA breaches live; the documented example criteria use percentile framing (95% under a threshold). A 3.9s average can coexist with routine 8-second outliers.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "C",
+          "text": "Remove the moderation stage first, because safety checks are always the dominant latency cost.",
+          "correct": false,
+          "explanation": "This assumes a bottleneck without measurement and trades away a safety control. Guardrails and latency are both success dimensions; Anthropic's approach is multidimensional criteria evaluated together, not sacrificing one unmeasured.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "D",
+          "text": "Adopt a latency target only after user complaints establish what feels slow.",
+          "correct": false,
+          "explanation": "Waiting for complaints makes users the monitoring system. Achievable targets grounded in benchmarks and requirements should be set before launch so regressions are caught by measurement, not sentiment.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-07",
+      "question": "An insurer's claims agent takes many tool-calling steps per claim: fetch policy, request photos, estimate damage, draft decision. QA proposes grading every intermediate step against one golden trajectory. What evaluation granularity does Anthropic's agent-evaluation experience recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Grade each step against the golden path and fail runs that deviate anywhere, ensuring maximal rigor.",
+          "correct": false,
+          "explanation": "Anthropic found agents legitimately reach correct goals via alternative paths, so step-locked grading punishes valid behavior. Their approach deliberately avoided validating every intermediate step.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "B",
+          "text": "Only measure per-step tool-call syntax validity, since correct calls guarantee correct claims outcomes.",
+          "correct": false,
+          "explanation": "Syntactically valid calls can still produce wrong decisions; syntax checks measure plumbing, not task success. End-state fidelity against the claim's correct outcome is the signal that matters.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "C",
+          "text": "Skip automated evaluation for agents entirely and rely on spot-checking transcripts by hand.",
+          "correct": false,
+          "explanation": "Hand spot-checks lack the volume automated evals provide and miss regressions between checks. Anthropic pairs automated end-state evaluation and LLM judges with targeted human testing, rather than substituting one for the other.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Prioritize end-state evaluation of the final claim outcome, adding discrete checkpoints only for critical state changes like payment authorization.",
+          "correct": true,
+          "explanation": "Anthropic's documented practice is end-state evaluation, accepting that agents may find alternative valid paths, with discrete checkpoints tracking specific state changes in complex workflows. This grades what the business cares about while still guarding irreversible steps.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-08",
+      "question": "An e-learning company wants automated grading of AI-generated lesson summaries on accuracy, completeness, and source quality. Early attempts with ad-hoc grader prompts give erratic verdicts. Which grader architecture reflects Anthropic's findings?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have the same model instance that wrote each summary grade its own output for efficiency.",
+          "correct": false,
+          "explanation": "Anthropic's best practice is to use a different model than the one generating outputs for grading, reducing self-preference bias. Self-grading by the producing instance is the weakest configuration.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Use a single LLM judge with an explicit rubric scoring defined criteria (e.g., factual accuracy, completeness, source quality on 0.0-1.0) with a pass-fail grade.",
+          "correct": true,
+          "explanation": "Anthropic found a single LLM judge evaluating against a specific rubric was the most consistent arrangement, using criteria like factual accuracy, citation accuracy, completeness, and source quality each scored 0.0-1.0 with pass-fail. Rubric specificity, not judge count, drove reliability.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "C",
+          "text": "Replace LLM grading with exact string match against one reference summary per lesson.",
+          "correct": false,
+          "explanation": "Exact match suits categorical outputs like sentiment labels; free-form summaries have many valid phrasings, so string equality would fail correct outputs. LLM-based and similarity-based grading are the documented fits for open-ended text.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Run five independent judges with no shared rubric and average their free-form impressions.",
+          "correct": false,
+          "explanation": "Anthropic's experience was that the single rubric-guided judge outperformed looser multi-judge arrangements for consistency. Averaging unanchored impressions preserves the original problem: no defined criteria being applied uniformly.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-09",
+      "question": "A restaurant tech PM writes this launch gate for an allergen-question bot: 'The assistant should be safe and helpful about allergens.' Engineering cannot tell when the gate is met. Per Anthropic's success-criteria guidance, which rewrite is best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "'The assistant should feel trustworthy to diners,' adding an emotional dimension for completeness.",
+          "correct": false,
+          "explanation": "This remains unmeasurable and unfalsifiable; it swaps one vague adjective for another. Good criteria are specific and measurable, using quantitative metrics or well-defined qualitative scales.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "B",
+          "text": "'Zero errors of any kind, forever, on all possible questions.'",
+          "correct": false,
+          "explanation": "Criteria must also be achievable, grounded in benchmarks and realistic model capabilities; an absolute-zero standard is untestable and guarantees permanent failure. Targets like error-rate thresholds over defined trials are the documented pattern.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "C",
+          "text": "'On a 500-case allergen eval, at least 99.5% of answers correctly flag listed allergens, and under 0.1% of responses give unsafe guidance; p95 latency under 2s.'",
+          "correct": true,
+          "explanation": "This mirrors Anthropic's stated criteria for good success criteria — specific, measurable, achievable, and relevant — with multidimensional targets covering task fidelity, safety rate, and latency. Even hazy notions like 'safe' become quantified thresholds over defined trial counts.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "D",
+          "text": "'Pass an informal demo where the founder asks five allergen questions before launch.'",
+          "correct": false,
+          "explanation": "A five-question demo has neither volume nor coverage of edge cases, which Anthropic's eval principles require. Demos are anecdotes; gates need eval sets mirroring the real task distribution.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-10",
+      "question": "An insurance carrier's automated eval suite for a fraud-triage agent passes consistently, yet a pilot group of adjusters keeps finding failure types the suite never flags, such as confidently fabricated policy citations on unusual claims. What does Anthropic's evaluation experience say about this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep human testing in the loop: human testers catch edge-case failures automated evals miss, like hallucinated details and biased source selection, which then seed new automated cases.",
+          "correct": true,
+          "explanation": "Anthropic reports that automated evaluations miss edge cases and that human testers caught exactly these failure classes, including hallucinations on unusual queries and source-selection bias. The findings feed back into eval sets, so automation and human review compound.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "B",
+          "text": "Disable the automated suite, since human review has demonstrated automated evals are unreliable.",
+          "correct": false,
+          "explanation": "Automation provides the volume and regression protection humans cannot; Anthropic's principle is to automate when possible and prioritize volume. The lesson is complementarity, not replacement.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Instruct adjusters to stop testing unusual claims because evals should target typical traffic only.",
+          "correct": false,
+          "explanation": "Eval design should include edge cases precisely because they expose failure modes typical cases hide. Suppressing the discovery channel institutionalizes blind spots in a fraud domain where rare cases carry the risk.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Treat fabricated citations as acceptable if overall accuracy stays above target, since criteria are multidimensional.",
+          "correct": false,
+          "explanation": "Multidimensionality means adding criteria (e.g., a citation-accuracy dimension), not netting safety-relevant failures against aggregate scores. Anthropic's own judge rubric scored citation accuracy as its own criterion.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D4-11",
+      "question": "An e-learning vendor serving minors must debug why its tutoring agent sometimes takes bizarre multi-step trajectories, but privacy policy forbids engineers from reading student conversations. How did Anthropic reconcile this same tension in production?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Skip observability entirely; non-deterministic agents cannot be meaningfully debugged anyway.",
+          "correct": false,
+          "explanation": "Anthropic argues the opposite: because agents make dynamic, non-deterministic decisions, debugging requires new approaches, and they added full production tracing to diagnose failures systematically. Non-determinism raises the need for observability.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "B",
+          "text": "Trace agent decision patterns and interaction structures without monitoring the contents of individual conversations.",
+          "correct": true,
+          "explanation": "Anthropic's documented practice is production tracing that monitors agents' decision patterns and interaction structures while deliberately not monitoring individual conversation content, preserving user privacy. This structural view still reveals root causes and unexpected behaviors in trajectories.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "C",
+          "text": "Grant engineers full transcript access, since debugging needs always override privacy commitments.",
+          "correct": false,
+          "explanation": "Anthropic's example demonstrates content access is not required: structural tracing diagnosed failures while maintaining user privacy. For a minors-serving product, content exposure is also a compliance risk, not just a policy preference.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "D",
+          "text": "Rely solely on end-of-session star ratings from students to infer where trajectories went wrong.",
+          "correct": false,
+          "explanation": "Outcome ratings cannot localize which step or tool decision derailed a trajectory, and they arrive too sparsely to debug systematically. Success criteria and measurement should be specific enough to guide diagnosis, which trace-level structure provides.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        }
+      ]
+    }
+  ]
+}

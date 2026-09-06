@@ -1,0 +1,381 @@
+{
+  "examId": "ccar-p-exam1",
+  "domainId": "D4",
+  "domainName": "Evaluation, Testing & Optimization",
+  "questions": [
+    {
+      "id": "P1-D4-01",
+      "question": "A B2B SaaS team's support-summarization pilot impressed stakeholders on 15 hand-picked tickets. Leadership wants to scale to 50,000 tickets/month next quarter. Before scaling, what does Anthropic's evaluation guidance say the team should build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A weekly meeting where product managers hand-review 15 sampled outputs for quality.",
+          "correct": false,
+          "explanation": "Tiny hand-graded samples cannot detect regressions at production scale or across the real input distribution. Anthropic's guidance prioritizes larger automated test sets over occasional manual review.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "A production dashboard first; evals can be added later once real traffic reveals failure modes.",
+          "correct": false,
+          "explanation": "Monitoring is necessary but reactive: it finds failures after customers experience them. Anthropic recommends defining success criteria and building evaluations before deployment so changes can be tested empirically first.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "C",
+          "text": "A large, automated eval suite that mirrors the real ticket distribution, includes edge cases, and is graded automatically where possible.",
+          "correct": true,
+          "explanation": "Anthropic's eval design principles are: be task-specific (mirror real-world distribution, include edge cases like ambiguous or malformed inputs), automate grading, and prioritize volume — many automatically graded cases beat a few hand-graded ones. This is the prerequisite for safely scaling and iterating.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "A fine-tuned model, since evals only matter when training custom models.",
+          "correct": false,
+          "explanation": "Evaluations are core to prompt-based development, not just fine-tuning: they measure whether prompt, model, or pipeline changes improve or regress performance. Anthropic's workflow is define success criteria, then develop tests, then iterate empirically.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-02",
+      "question": "An insurance company routes claims into exactly one of six categorical queues. They need to grade 5,000 eval cases per run, cheaply and deterministically, within a limited eval budget. Which grading approach fits best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Code-graded exact match against gold labels, normalizing case and whitespace.",
+          "correct": true,
+          "explanation": "For categorical answers with clear-cut correct responses, Anthropic recommends exact-match code grading: it is fast, free per case, and perfectly reproducible. That enables the high-volume automated evals the guidance calls for.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "An LLM judge scoring each routing decision 1-5 on a Likert scale.",
+          "correct": false,
+          "explanation": "Model-graded Likert scales suit subjective qualities like tone or empathy, not deterministic category membership. It adds cost and grader noise to a task where string comparison is exact and free.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Human adjusters grading all 5,000 outputs each run for maximum accuracy.",
+          "correct": false,
+          "explanation": "Human grading is the slowest and most expensive method; Anthropic advises avoiding it where automation is possible. For unambiguous labels it adds cost without adding signal, and it throttles iteration speed.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Cosine similarity between the model's output embedding and each queue name's embedding.",
+          "correct": false,
+          "explanation": "Embedding similarity measures semantic closeness for open-ended text consistency, not categorical correctness; near-miss categories can embed closely and pass wrongly. Exact match is the appropriate metric for discrete labels.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-03",
+      "question": "A healthcare startup uses an LLM judge to score patient-message drafts for empathy. Scores look suspiciously high and disagree with clinicians. Per Anthropic guidance on model-based grading, which practice set addresses these pitfalls?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have the production model grade its own outputs to keep the judge perfectly aligned with generation.",
+          "correct": false,
+          "explanation": "Self-grading invites systematic bias toward the model's own style. Anthropic's best practice is to use a different model to evaluate outputs than the one that produced them.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "B",
+          "text": "Ask the judge simply 'Is this empathetic? yes/no' to remove rubric complexity.",
+          "correct": false,
+          "explanation": "Vague criteria are exactly what produce inflated, uncalibrated judgments. The guidance is to give the judge a clear rubric with defined scale anchors and criteria, not to strip the rubric away.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Raise the pass threshold from 3/5 to 4/5 so fewer outputs pass.",
+          "correct": false,
+          "explanation": "Moving the threshold on a biased, uncalibrated grader just relocates the error; it does not make scores meaningful. Calibration against trusted human judgments must come before threshold tuning.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Use a different model as judge, give it an explicit rubric with anchored scale definitions, and calibrate its scores against clinician-labeled samples.",
+          "correct": true,
+          "explanation": "This combines Anthropic's documented mitigations for LLM-as-judge pitfalls: a separate grader model to reduce self-preference bias, a clear anchored rubric so scores are grounded, and validation against human expert labels so automated scores are trusted only once they track human judgment.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-04",
+      "question": "A trading-compliance assistant runs on a model version approaching deprecation. The team must migrate to a newer Claude model without breaching a 99.9% availability SLA or degrading accuracy. What is the correct migration process?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Swap the model string in production during a low-traffic window and watch error dashboards.",
+          "correct": false,
+          "explanation": "This tests on customers. Model behavior can shift on prompts that previously worked, and dashboards only catch failures after they occur; regression evals exist to catch them before rollout.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Run the full regression eval suite against the new model, compare against the current baseline and thresholds, fix prompt regressions, then roll out gradually.",
+          "correct": true,
+          "explanation": "Anthropic's empirical workflow treats model changes like any other change: measure against your predefined success criteria and eval baseline before shipping. Comparing new-model results with baseline scores identifies regressions to remediate offline, and gradual rollout bounds residual risk.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "C",
+          "text": "Skip re-testing: newer Claude models are strictly better, so existing prompts can only improve.",
+          "correct": false,
+          "explanation": "Aggregate capability gains do not guarantee improvement on your specific task and prompts; behavior differences can regress task-specific metrics. Only running your evals against the new model verifies that.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Rewrite all prompts from scratch for the new model before any measurement, since old prompts are invalid.",
+          "correct": false,
+          "explanation": "Rewriting before measuring discards a working baseline and makes it impossible to attribute changes. The empirical approach is measure first, then modify only what the eval data shows regressed.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-05",
+      "question": "An e-commerce chatbot team improved their system prompt and it beats the current version on offline evals. The change touches refund-handling language, where mistakes are costly. How should they ship it to 100% of traffic?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Canary the new prompt on a small traffic slice, compare live quality, latency, and error metrics against the control, then ramp up with a rollback path.",
+          "correct": true,
+          "explanation": "Offline evals are necessary but cannot cover the full production distribution, so Anthropic's measurement-driven philosophy extends to rollout: validate against real traffic incrementally with defined success metrics and quick reversal. This bounds the blast radius of any eval blind spot in a high-stakes flow.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "B",
+          "text": "Ship to 100% immediately; passing offline evals is proof the prompt is safe.",
+          "correct": false,
+          "explanation": "Eval suites approximate production but never fully mirror it; distribution shift and unseen edge cases remain. For consequential changes, staged exposure with live measurement catches what offline testing misses.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Run both prompts on every request and have a third model pick the better answer live.",
+          "correct": false,
+          "explanation": "Doubling every request's inference plus a judge call multiplies cost and latency in perpetuity — an anti-pattern versus a temporary canary. Anthropic's guidance favors the simplest system that meets requirements.",
+          "citation": { "title": "Building Effective Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Hold the change until quarterly release and ship it bundled with other prompt updates.",
+          "correct": false,
+          "explanation": "Batching many changes destroys attribution: if metrics move, you cannot tell which change caused it. Empirical iteration depends on measuring changes individually against a baseline.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-06",
+      "question": "A legal-tech firm signs an SLA: interactive drafting responses must feel responsive, with tail latency contractually capped. Their dashboard currently shows only average response time, which looks fine despite user complaints. What should they measure instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Average latency per day, but segmented by customer tier.",
+          "correct": false,
+          "explanation": "Segmenting averages still hides the tail: a small fraction of very slow requests can breach an SLA while averages look healthy. Percentiles expose the distribution that averages conceal.",
+          "citation": { "title": "Reducing latency", "url": "https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        },
+        {
+          "key": "B",
+          "text": "Total tokens generated per request, since tokens determine latency completely.",
+          "correct": false,
+          "explanation": "Output length strongly influences latency but is not the SLA metric itself; queueing, model choice, and infrastructure also matter. Token usage belongs on the cost dashboard alongside — not instead of — latency percentiles.",
+          "citation": { "title": "Reducing latency", "url": "https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        },
+        {
+          "key": "C",
+          "text": "Latency percentiles (p50/p95/p99) plus time to first token (TTFT), since streaming responsiveness is what users perceive.",
+          "correct": true,
+          "explanation": "Anthropic's latency guidance distinguishes baseline latency from time to first token, which is the key responsiveness measure when streaming. Percentile tracking (p50/p95/p99) is how tail behavior — the thing SLAs and user complaints are about — becomes visible and enforceable.",
+          "citation": { "title": "Reducing latency", "url": "https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        },
+        {
+          "key": "D",
+          "text": "Model-graded response quality scores, since quality complaints usually masquerade as latency complaints.",
+          "correct": false,
+          "explanation": "Quality evals answer a different question; they cannot verify a latency SLA. Latency is one of Anthropic's explicitly listed success-criteria dimensions and needs its own direct measurement.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-07",
+      "question": "A customer-service platform sends the same 9,000-token system prompt, tool definitions, and policy documents with every one of ~40,000 daily requests. Input-token spend dominates their bill and finance mandates a 50% cost cut without changing behavior. What is the highest-leverage first move?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Compress the policy documents into a 500-token summary, accepting some behavioral drift.",
+          "correct": false,
+          "explanation": "Summarizing changes model behavior and violates the mandate. Caching cuts the cost of the repeated prefix without altering what the model sees.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Enable prompt caching with a cache_control breakpoint after the stable prefix (tools, system prompt, policy docs) so subsequent requests read it at a fraction of base input price.",
+          "correct": true,
+          "explanation": "Prompt caching is designed exactly for large, stable prefixes reused across requests: cache reads are charged at a small fraction of base input-token price, while writes cost slightly more. The cache follows tools-then-system-then-messages prefix ordering, so the stable content must come first and remain byte-identical.",
+          "citation": { "title": "Prompt caching", "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Move all 40,000 daily conversations to the Batches API for the 50% discount.",
+          "correct": false,
+          "explanation": "Batch processing trades latency for cost — results arrive asynchronously, which is unusable for live customer-service chats. Batches suit non-interactive workloads, not real-time conversations.",
+          "citation": { "title": "Batch processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "Lower max_tokens across all requests to reduce the input-token bill.",
+          "correct": false,
+          "explanation": "max_tokens caps output tokens; it does nothing about the repeated 9,000-token input prefix that dominates spend. It also risks truncating answers mid-sentence.",
+          "citation": { "title": "Reducing latency", "url": "https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-08",
+      "question": "A compliance team must classify 300,000 archived communications monthly. Results are consumed in a next-day report; there is no interactivity requirement, but the budget is tight. Which API strategy fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Stream each request over the Messages API with tight timeouts to finish faster.",
+          "correct": false,
+          "explanation": "Streaming improves perceived responsiveness for interactive users; it neither discounts cost nor helps throughput for offline bulk jobs. This workload has no human waiting on each response.",
+          "citation": { "title": "Streaming Messages", "url": "https://docs.claude.com/en/docs/build-with-claude/streaming" }
+        },
+        {
+          "key": "B",
+          "text": "Spread synchronous requests across the month to stay under rate limits at full price.",
+          "correct": false,
+          "explanation": "This meets rate limits but forfeits the discount designed for exactly this pattern and adds orchestration complexity. Asynchronous batching is the purpose-built mechanism for large offline volumes.",
+          "citation": { "title": "Batch processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Use extended thinking on a frontier model to maximize classification quality per message.",
+          "correct": false,
+          "explanation": "This spends more per request on a task that needs volume efficiency, moving in the opposite direction of the budget constraint. Match capability spend to task difficulty and measure with evals before paying for extra reasoning.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "D",
+          "text": "Submit the classifications through the Message Batches API, which processes asynchronously at a 50% discount and returns results well within the next-day window.",
+          "correct": true,
+          "explanation": "Batch processing offers 50% off standard pricing for asynchronous workloads processed within 24 hours — purpose-built for high-volume, non-time-sensitive jobs like nightly compliance classification. The next-day report requirement fits the asynchronous completion window comfortably.",
+          "citation": { "title": "Batch processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-09",
+      "question": "A telecom assistant handles 80% simple FAQs and 20% complex billing disputes. Running everything on the largest model breaks the cost budget; running everything on the smallest fails dispute-resolution evals. What architecture does Anthropic's guidance support?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A routing step classifies each query and sends FAQs to a fast, cheaper model (e.g., Haiku) while disputes go to a more capable model.",
+          "correct": true,
+          "explanation": "This is the routing workflow from Building Effective Agents: classify inputs and direct them to specialized downstream handling, explicitly including routing easy questions to smaller models and hard ones to more capable models for cost and speed optimization. Latency guidance likewise recommends choosing the fastest model that meets each task's quality bar.",
+          "citation": { "title": "Building Effective Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Run every query on both models in parallel and return whichever answer arrives first.",
+          "correct": false,
+          "explanation": "Racing models pays for both on every request — worsening cost — and 'fastest' is usually the less capable answer on disputes. Routing spends the premium model only where evals show it is needed.",
+          "citation": { "title": "Building Effective Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Use the small model everywhere and raise temperature on disputes to unlock more capability.",
+          "correct": false,
+          "explanation": "Temperature controls sampling randomness, not capability; raising it does not close a quality gap on complex reasoning and may add inconsistency. It is also no longer an available lever — temperature, top_p, and top_k are deprecated and return a 400 error for non-default values on Claude Opus 4.7 and later. Model selection, not sampling parameters, is the capability lever.",
+          "citation": { "title": "Reducing latency", "url": "https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        },
+        {
+          "key": "D",
+          "text": "Use the large model everywhere but cut its system prompt in half to offset the cost.",
+          "correct": false,
+          "explanation": "Trimming instructions saves some input tokens but risks degrading behavior across all traffic, and it leaves the fundamental mismatch — premium capability on trivial queries — untouched. Routing addresses the 80/20 structure directly.",
+          "citation": { "title": "Building Effective Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-10",
+      "question": "A consumer fintech app's advice feature feels sluggish: full answers take 12 seconds to appear, and responses ramble. Product wants perceived latency fixed this sprint without switching models. Which combination follows Anthropic's latency guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the feature to the Batches API to leverage its optimized throughput.",
+          "correct": false,
+          "explanation": "Batches are asynchronous with results returned over hours, not milliseconds — the opposite of interactive responsiveness. Batch is a cost tool for offline workloads.",
+          "citation": { "title": "Batch processing", "url": "https://docs.claude.com/en/docs/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "B",
+          "text": "Enable streaming so tokens render as generated, and prompt for concise answers with an appropriate max_tokens ceiling.",
+          "correct": true,
+          "explanation": "Anthropic's latency playbook without changing models: stream responses so users see output immediately (improving perceived responsiveness and TTFT), and reduce output tokens — ask Claude for concise responses and set an appropriate max_tokens limit. Fewer generated tokens directly shortens completion time.",
+          "citation": { "title": "Reducing latency", "url": "https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        },
+        {
+          "key": "C",
+          "text": "Raise max_tokens substantially so the model never pauses to plan its budget.",
+          "correct": false,
+          "explanation": "max_tokens is a cap, not a scheduler; raising it permits longer (slower) outputs and does nothing for time to first token. The guidance goes the other way: constrain and shorten outputs.",
+          "citation": { "title": "Reducing latency", "url": "https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        },
+        {
+          "key": "D",
+          "text": "Disable streaming to eliminate server-sent-event overhead from the response path.",
+          "correct": false,
+          "explanation": "SSE overhead is negligible; non-streaming forces users to wait for the entire generation before seeing anything, maximizing perceived latency. Streaming is the documented technique for responsive experiences.",
+          "citation": { "title": "Streaming Messages", "url": "https://docs.claude.com/en/docs/build-with-claude/streaming" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D4-11",
+      "question": "After weeks of tuning, a legal summarization prompt scores 100% on the team's 25-case eval set, yet attorneys report worsening production quality. What is the most likely diagnosis and remedy per Anthropic's eval guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The graders are too strict; relax rubric thresholds until production sentiment and eval scores agree.",
+          "correct": false,
+          "explanation": "Loosening the rubric to force agreement corrupts the measurement instead of fixing it. When evals and reality disagree, the eval set's representativeness is the first suspect, not the threshold.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "The model is degrading over time; switch providers and re-run the same 25 cases.",
+          "correct": false,
+          "explanation": "A perfect score on a saturated 25-case set carries almost no signal about production, whichever model runs it. Changing models without fixing the measurement leaves the team equally blind.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        },
+        {
+          "key": "C",
+          "text": "The prompt has overfit a tiny unrepresentative set; expand the suite to hundreds of cases mirroring real document distribution, add edge cases, and keep a held-out set that tuning never touches.",
+          "correct": true,
+          "explanation": "Iterating against 25 fixed cases optimizes for those cases, not the task — classic eval overfitting. Anthropic's principles are to mirror the real-world task distribution including edge cases (ambiguous inputs, unusual formats) and to prefer large volumes of automatically graded cases; a held-out set preserves an honest generalization measure.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://docs.claude.com/en/docs/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "100% eval performance proves the prompt is fine; retrain the attorneys on how to read summaries.",
+          "correct": false,
+          "explanation": "Evals are a proxy for real-world success criteria, not the goal itself; when expert users report regressions, the proxy has failed. Dismissing production feedback inverts the empirical, criteria-driven approach.",
+          "citation": { "title": "Define your success criteria", "url": "https://docs.claude.com/en/docs/test-and-evaluate/define-success" }
+        }
+      ]
+    }
+  ]
+}

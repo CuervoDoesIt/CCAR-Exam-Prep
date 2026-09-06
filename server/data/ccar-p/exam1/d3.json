@@ -1,0 +1,585 @@
+{
+  "examId": "ccar-p-exam1",
+  "domainId": "D3",
+  "domainName": "Integration (Tool Use, MCP, Agent SDK)",
+  "questions": [
+    {
+      "id": "P1-D3-01",
+      "question": "A fintech team is building a portfolio assistant on the Messages API. Claude returns stop_reason 'tool_use' with a get_positions tool_use block (id toolu_01AB). The team must continue the loop correctly to avoid 400 errors under a strict uptime SLA. What is the correct next request?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send a new assistant-role message containing a tool_result block with the position data.",
+          "correct": false,
+          "explanation": "Tool results are returned by your application in a user-role message, not an assistant message. Anthropic's docs specify that after executing the tool you continue the conversation with a message whose role is 'user' containing a tool_result block.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "B",
+          "text": "Append the assistant message with its tool_use content, then a user message whose content starts with a tool_result block referencing tool_use_id toolu_01AB.",
+          "correct": true,
+          "explanation": "This is the documented loop: preserve the assistant turn containing the tool_use block, execute the tool, then reply with a user message where tool_result blocks come first and each references the matching tool_use_id. Tool results must immediately follow their corresponding tool_use blocks with no messages in between.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Send the result back using a dedicated 'tool' role message, as with other LLM APIs.",
+          "correct": false,
+          "explanation": "The Claude API has no 'tool' or 'function' role. Anthropic integrates tools directly into the user/assistant structure: assistant messages carry tool_use blocks and user messages carry tool_result blocks.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Re-send the original request with the position data appended to the system prompt so Claude can answer in one call.",
+          "correct": false,
+          "explanation": "Discarding the tool_use turn breaks the documented round trip and loses the model's reasoning state; it also risks 'tool_use ids found without tool_result' errors when history is reused. The intended flow is to return a tool_result matched by tool_use_id, not to smuggle results into the system prompt.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-02",
+      "question": "A payments support agent calls a lookup_transaction tool that intermittently times out against a slow core-banking API. The product SLA requires the agent to degrade gracefully instead of crashing the conversation. How should the application report the failed execution back to Claude?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Remove the tool_use block from the message history and re-ask the user's question.",
+          "correct": false,
+          "explanation": "Editing out the tool_use block hides the failure from the model and produces an inconsistent history. Anthropic's guidance is to complete the loop by returning a tool_result for every tool_use so Claude can adapt its response.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "B",
+          "text": "Return a plain text block describing the error before the tool_result block in the user message.",
+          "correct": false,
+          "explanation": "Text placed before tool_result blocks causes a 400 error: in a user message containing tool results, the tool_result blocks must come first in the content array. Error information belongs inside the tool_result itself.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Return a tool_result with is_error set to true and an instructive message such as 'Timeout after 5s. Retry after 60 seconds.'",
+          "correct": true,
+          "explanation": "The documented pattern for tool execution failures is a tool_result with is_error: true and an informative error string, so Claude can recover, retry, or explain the failure to the user. Anthropic explicitly recommends instructive error messages that state what went wrong and what to try next.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Retry the backend call silently in a loop until it succeeds, then return the successful result.",
+          "correct": false,
+          "explanation": "Unbounded silent retries against a slow API violate the latency SLA and can hang the conversation. Bounded retries are reasonable, but persistent failures should still be surfaced via is_error so the model can degrade gracefully.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-03",
+      "question": "A logistics agent asks Claude to check inventory, carrier ETAs, and customs status. Claude's single response contains three tool_use blocks for three independent read-only tools. To minimize end-to-end latency, how should the application execute and return results?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Execute the three calls concurrently, then send one user message containing all three tool_result blocks, each matched by tool_use_id.",
+          "correct": true,
+          "explanation": "The API allows any execution strategy, and independent read-only calls are usually safe to run in parallel for lower latency. The docs require one tool_result per tool_use block, returned together in the next user message and matched via tool_use_id.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "B",
+          "text": "Send three separate user messages, one tool_result each, so Claude can process them incrementally.",
+          "correct": false,
+          "explanation": "Splitting results across messages breaks the formatting contract: all tool_result blocks answering one assistant turn must arrive together in the immediately following user message. Interleaving extra messages triggers API errors about unmatched tool_use ids.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "C",
+          "text": "Return only the fastest result and omit the others to stay under the latency budget.",
+          "correct": false,
+          "explanation": "Every tool_use block needs a corresponding tool_result. If a call is skipped or fails, the docs say to still return a tool_result for it (with is_error and a brief explanation) rather than omitting it.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "D",
+          "text": "Merge the three outputs into a single tool_result block referencing the first tool_use_id.",
+          "correct": false,
+          "explanation": "Results must be matched one-to-one: each tool_use id gets its own tool_result with that tool_use_id. Merging results under one id leaves the other tool_use blocks unresolved and the request fails.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-04",
+      "question": "An e-commerce platform exposes an issue_refund tool. Finance flags a risk: if Claude ever emits duplicate or parallel refund calls, or the app retries after a network timeout, customers could be double-refunded. Which combination best mitigates this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a system prompt line: 'Never call issue_refund twice for the same order.'",
+          "correct": false,
+          "explanation": "Prompt instructions are probabilistic, not guarantees, and they do nothing about application-level retries after timeouts. Anthropic's agent guidance favors deterministic guardrails for consequential actions rather than relying on prompts alone.",
+          "citation": { "title": "Building Effective Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Trust the model: Claude never emits more than one tool call per response.",
+          "correct": false,
+          "explanation": "This is factually wrong. By default Claude may call multiple tools in a single response, so a design that assumes one call per turn is unsafe for non-idempotent operations.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "C",
+          "text": "Lower max_tokens so the response cannot contain a second tool_use block.",
+          "correct": false,
+          "explanation": "max_tokens is a length limit, not a tool-call limit; truncation can instead cut a tool call off midway and produce unusable input. It provides no idempotency protection for retries either.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Set disable_parallel_tool_use in tool_choice, and enforce idempotency keys in the refund backend so retried calls are deduplicated.",
+          "correct": true,
+          "explanation": "tool_choice supports disable_parallel_tool_use to ensure at most one tool call per turn, which is appropriate for side-effecting operations. Pairing that with server-side idempotency keys makes app-level retries safe, a deterministic guardrail rather than a prompt-based hope.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-05",
+      "question": "A B2B SaaS ticketing pipeline must classify every inbound ticket by emitting a classify_ticket tool call with a structured schema — a plain-text reply is a pipeline failure. Prompting alone still yields occasional text-only responses. What is the most reliable fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set tool_choice to {\"type\": \"tool\", \"name\": \"classify_ticket\"} so Claude must call that specific tool.",
+          "correct": true,
+          "explanation": "Forcing tool use via tool_choice type 'tool' guarantees the response is a call to the named tool, which is the documented way to get schema-conforming structured output from a specific tool every time. Combined with a strict schema this removes the text-only failure mode entirely.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "B",
+          "text": "Set tool_choice to {\"type\": \"any\"} so Claude is required to respond with a tool call.",
+          "correct": false,
+          "explanation": "'any' forces some tool call but not necessarily classify_ticket; if other tools are defined, Claude could pick one of those. When exactly one named tool must be used, type 'tool' is the precise mechanism.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "Keep tool_choice 'auto' but add 'Always call a tool first before responding' to the system prompt.",
+          "correct": false,
+          "explanation": "System-prompt steering increases tool use but remains probabilistic; the docs recommend setting tool_choice when you need to require a tool call rather than rely on prompting. For a pipeline where any miss is a failure, forcing is correct.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Set tool_choice to {\"type\": \"none\"} and parse the classification out of the text reply.",
+          "correct": false,
+          "explanation": "'none' prevents tool calls entirely, which is the opposite of the requirement. Parsing free text reintroduces the brittleness that tool schemas exist to eliminate.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-06",
+      "question": "A CRM vendor wrapped all 42 of its REST endpoints as individual agent tools (create_contact, get_contact, list_notes, ...). Agents now chain 6-8 calls per task, blowing the latency budget and confusing tool selection. Per Anthropic's tool-design guidance, what should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add longer descriptions to all 42 tools so the agent can distinguish them better.",
+          "correct": false,
+          "explanation": "Better descriptions help, but they do not fix the structural problem: thin 1:1 API wrappers force the agent into long, error-prone call chains. Anthropic's guidance is that tools should consolidate multiple discrete API operations under the hood.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Expose all endpoints but instruct the agent in the system prompt to plan its call sequence first.",
+          "correct": false,
+          "explanation": "Planning prompts do not reduce the number of round trips or the context consumed by 42 tool definitions. The guidance is to redesign the tool surface for agent workflows, not to prompt around a poor agent-computer interface.",
+          "citation": { "title": "Building Effective Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Consolidate into a few task-oriented tools (e.g., a customer_context tool that fetches contact, notes, and open deals in one call), namespaced by service.",
+          "correct": true,
+          "explanation": "Anthropic recommends building a small number of thoughtful, workflow-oriented tools that handle multiple API calls internally, plus namespacing (e.g., crm_contacts_search) to aid selection. Fewer, higher-level tools cut round trips, tokens, and misselection.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Switch every endpoint to tool_choice 'any' so the agent always makes progress with a call.",
+          "correct": false,
+          "explanation": "Forcing some tool call each turn does not reduce chain length or tool confusion; it can even force calls when none is appropriate. tool_choice controls whether a tool is called, not how well the tool surface fits the task.",
+          "citation": { "title": "Define tools", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-07",
+      "question": "An agent's search_customers tool returns raw API payloads: UUIDs, mime types, and image URLs. Engineers observe the agent hallucinating identifiers in follow-up calls and burning context. Under a tight token budget, what does Anthropic recommend for the tool's response design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Return the full raw payload so the agent never lacks information it might need.",
+          "correct": false,
+          "explanation": "Low-signal technical fields like uuid and mime_type waste the agent's limited context and increase hallucination risk. Anthropic's guidance is to return only high-signal, contextually relevant information.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Return semantically meaningful fields (names, human-readable summaries) by default, with a response_format parameter for a 'detailed' mode when identifiers are needed.",
+          "correct": true,
+          "explanation": "Anthropic found natural-language names and high-signal fields significantly outperform cryptic identifiers at reducing hallucinations, and recommends a response_format parameter so agents can request concise or detailed output. This keeps default responses token-efficient while preserving access to technical IDs.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Base64-encode the payload to compress it before returning it to the model.",
+          "correct": false,
+          "explanation": "Base64 makes content larger and unreadable to the model; it does not reduce tokens meaningfully and destroys signal. The fix is semantic curation of the response, not encoding tricks.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Move the raw payload into the system prompt so it is cached and free to reuse.",
+          "correct": false,
+          "explanation": "Tool outputs are per-request data, not stable prefix content, so they defeat cache reuse and still consume context. Untrusted or dynamic content also belongs in tool_result blocks, not the system prompt.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-08",
+      "question": "A legal-tech e-discovery agent's search_documents tool can match 20,000 documents. Returning everything overflows the context window and blows the per-request cost budget. What is Anthropic's recommended tool design for this situation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise max_tokens and let Claude decide which documents matter.",
+          "correct": false,
+          "explanation": "max_tokens limits output, not the tool result's size in the input; a 20,000-document result still floods the context window and cost. The tool itself must constrain what it returns.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Have the tool silently return only the first 10 matches with no indication more exist.",
+          "correct": false,
+          "explanation": "Silent truncation misleads the agent into believing the result set is complete. Anthropic recommends helpful truncation messages that tell the agent how much was omitted and steer it toward more targeted, efficient queries.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Split retrieval across 20 parallel tool calls so no single result is too large.",
+          "correct": false,
+          "explanation": "Parallel calls reduce wall-clock latency, not total tokens: all results still land in the same context window. The problem is result volume, which pagination and filtering address; parallelism does not.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "D",
+          "text": "Implement pagination, filtering, and truncation with sensible defaults, plus truncation messages that guide the agent toward narrower queries.",
+          "correct": true,
+          "explanation": "Anthropic's tool-writing guidance notes that agent context is scarce while computer memory is cheap, so tools should paginate, filter, and truncate with sensible default limits. Informative truncation messages help the agent adopt token-efficient search strategies.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-09",
+      "question": "A healthcare company deploys a remote MCP server exposing read, write, and admin tools. To simplify onboarding, the OAuth integration requests every scope in scopes_supported up front for all users. A security review objects. What scope model does MCP security guidance recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep broad up-front scopes but shorten token lifetimes to limit exposure.",
+          "correct": false,
+          "explanation": "Short lifetimes shrink the window but not the blast radius: a stolen broad token still enables lateral access to unrelated tools while valid. MCP guidance targets the scope breadth itself, not just token lifetime.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        },
+        {
+          "key": "B",
+          "text": "Use a single omnibus 'full-access' scope so audits only have one permission to review.",
+          "correct": false,
+          "explanation": "Wildcard and omnibus scopes are explicitly listed as common mistakes: they mask per-operation user intent, create audit noise, and maximize compromise impact. Least privilege requires granular, purpose-scoped permissions.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        },
+        {
+          "key": "C",
+          "text": "Issue a minimal initial scope set for low-risk operations and elevate incrementally via scope challenges when privileged tools are first attempted.",
+          "correct": true,
+          "explanation": "MCP security best practices prescribe a progressive, least-privilege scope model: minimal initial scopes, incremental elevation through targeted WWW-Authenticate scope challenges, and logging of elevation events. This constrains the blast radius of any compromised token and keeps audit trails meaningful.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        },
+        {
+          "key": "D",
+          "text": "Drop OAuth scopes and enforce all authorization in the LLM system prompt per user role.",
+          "correct": false,
+          "explanation": "Authorization must be enforced deterministically by the server, not by prompt text the model may ignore or an attacker may inject around. Prompts are not a security boundary; verified tokens and server-side checks are.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-10",
+      "question": "An enterprise MCP server fronts an internal HR API. To ship faster, a developer proposes accepting whatever bearer token the MCP client sends and forwarding it unmodified to the HR API. Why does the MCP specification prohibit this design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "It is 'token passthrough': servers must reject tokens not explicitly issued to them (audience validation), since forwarding breaks security controls, audit attribution, and trust boundaries.",
+          "correct": true,
+          "explanation": "The MCP authorization spec forbids token passthrough. Accepting tokens without validating the audience claim lets attackers reuse tokens issued for other services, bypasses rate limiting and validation controls, and makes downstream logs misattribute the caller.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        },
+        {
+          "key": "B",
+          "text": "Because MCP requires all servers to be anonymous; tokens may never traverse an MCP connection.",
+          "correct": false,
+          "explanation": "MCP fully supports OAuth-protected servers; tokens are expected in remote deployments. The prohibition is specifically on passing through tokens that were not issued to the MCP server itself.",
+          "citation": { "title": "MCP Authorization Specification", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization" }
+        },
+        {
+          "key": "C",
+          "text": "Because bearer tokens are too large and would exceed the model's context window.",
+          "correct": false,
+          "explanation": "Tokens travel in protocol/transport metadata, not in model context, so size is irrelevant. The objection is a security-boundary violation, not a token-count problem.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        },
+        {
+          "key": "D",
+          "text": "It is only a problem for stdio transport; for HTTP transport, passthrough is the recommended pattern.",
+          "correct": false,
+          "explanation": "Token passthrough is forbidden regardless of transport; the risks (audience confusion, control circumvention, broken audit trails) are transport-independent. MCP servers must not accept tokens that were not explicitly issued for them.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-11",
+      "question": "A vendor operates an MCP proxy server that uses a static OAuth client ID with a third-party authorization server, while allowing MCP clients to register dynamically. Pen-testers show that a consent cookie set for a legitimate client lets a malicious client obtain authorization codes without a consent screen. What is this attack, and the required mitigation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Session hijacking; rotate session identifiers on every request.",
+          "correct": false,
+          "explanation": "Session-handle attacks involve stealing or guessing state handles, not exploiting skipped consent screens. Rotating handles does not address the consent-cookie bypass at the third-party authorization server.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        },
+        {
+          "key": "B",
+          "text": "Tool poisoning; scan tool descriptions from the server for embedded malicious instructions.",
+          "correct": false,
+          "explanation": "Malicious tool descriptions are a real supply-chain concern, but this scenario is an OAuth flow abuse, not description-based manipulation of the model. The vulnerability lives in the proxy's consent handling, not the tool metadata.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        },
+        {
+          "key": "C",
+          "text": "SSRF; block private IP ranges when fetching OAuth metadata URLs.",
+          "correct": false,
+          "explanation": "SSRF concerns clients being induced to fetch internal URLs during OAuth discovery. Here the attacker exploits skipped user consent via a cookie, which is a different attack class with a different mitigation.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        },
+        {
+          "key": "D",
+          "text": "The confused deputy problem; the proxy must implement and store per-client consent before forwarding to the third-party authorization flow.",
+          "correct": true,
+          "explanation": "This is the textbook MCP confused-deputy attack: static client ID plus dynamic registration plus a consent cookie lets attackers skip consent and steal authorization codes. The spec says MCP proxy servers MUST obtain per-client user consent, validate redirect URIs exactly, and check consent before initiating third-party authorization.",
+          "citation": { "title": "MCP Security Best Practices", "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-12",
+      "question": "During a deployment tool call, an MCP server realizes it needs the user to pick a target environment (dev/staging/prod) and confirm a maintenance window — structured, non-sensitive input gathered mid-operation through the client's UI. Which MCP primitive is designed for this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Sampling, so the server can ask the client's LLM to infer the intended environment.",
+          "correct": false,
+          "explanation": "Sampling requests LLM completions from the client, not human input, and having a model guess a production-impacting choice is unsafe. Sampling is also deprecated as of MCP protocol version 2026-07-28, so new implementations should not adopt it.",
+          "citation": { "title": "MCP Specification: Sampling", "url": "https://modelcontextprotocol.io/specification/2026-07-28/client/sampling" }
+        },
+        {
+          "key": "B",
+          "text": "Elicitation in form mode, sending a message and a JSON schema (e.g., an enum of environments) that the client renders for the user.",
+          "correct": true,
+          "explanation": "Elicitation exists precisely for servers to request structured user input mid-interaction: form mode carries a requestedSchema (flat primitives, including enums) the client renders and validates, with accept/decline/cancel actions. Note servers must not use form mode for secrets like passwords or API keys — URL mode handles those.",
+          "citation": { "title": "MCP Specification: Elicitation", "url": "https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation" }
+        },
+        {
+          "key": "C",
+          "text": "Roots, so the client can expose the environment list as filesystem boundaries.",
+          "correct": false,
+          "explanation": "Roots communicate filesystem/workspace boundaries from client to server; they are not a mechanism for asking users questions. Using roots for interactive input misapplies the primitive.",
+          "citation": { "title": "MCP Specification: Roots", "url": "https://modelcontextprotocol.io/specification/2026-07-28/client/roots" }
+        },
+        {
+          "key": "D",
+          "text": "Resources, publishing an 'environments' resource the model can read to decide on its own.",
+          "correct": false,
+          "explanation": "Resources expose data for context; they cannot pause a tool call to collect a human decision. The requirement here is explicit user input with validation, which is elicitation's role among the MCP primitives.",
+          "citation": { "title": "What is the Model Context Protocol (MCP)?", "url": "https://modelcontextprotocol.io/docs/getting-started/intro" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-13",
+      "question": "A desktop IDE (MCP client) connects to a local code-analysis MCP server. Compliance requires the server to operate only within the specific project directories the user has opened — never the whole disk. Which MCP capability communicates these boundaries?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Prompts: ship a prompt template instructing the server to stay inside the project folder.",
+          "correct": false,
+          "explanation": "MCP prompts are reusable templates surfaced to users; they do not constrain server behavior. Directory boundaries need a protocol-level signal, not instruction text.",
+          "citation": { "title": "What is the Model Context Protocol (MCP)?", "url": "https://modelcontextprotocol.io/docs/getting-started/intro" }
+        },
+        {
+          "key": "B",
+          "text": "Elicitation: ask the user to type the allowed path before every file operation.",
+          "correct": false,
+          "explanation": "Repeatedly eliciting paths is poor UX and still leaves enforcement to chance. Roots exist so the client can declare workspace boundaries once and update them as the workspace changes.",
+          "citation": { "title": "MCP Specification: Elicitation", "url": "https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation" }
+        },
+        {
+          "key": "C",
+          "text": "Roots: the client exposes the opened project directories as roots, and the server scopes its operations to them.",
+          "correct": true,
+          "explanation": "Roots are the MCP client primitive for communicating filesystem boundaries — the URIs a server is expected to operate within — with change notifications as the workspace evolves. Defense-in-depth still applies: the server and OS sandboxing should also enforce the boundary, since roots are advisory.",
+          "citation": { "title": "MCP Specification: Roots", "url": "https://modelcontextprotocol.io/specification/2026-07-28/client/roots" }
+        },
+        {
+          "key": "D",
+          "text": "Sampling: the server requests a completion to determine which directories look safe.",
+          "correct": false,
+          "explanation": "Sampling requests LLM generations via the client and has nothing to do with declaring directory scope; it is also deprecated in the 2026-07-28 protocol revision. Boundary communication is what roots are for.",
+          "citation": { "title": "MCP Specification: Sampling", "url": "https://modelcontextprotocol.io/specification/2026-07-28/client/sampling" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-14",
+      "question": "A bank builds an operations agent on the Claude Agent SDK. Policy: read-only tools run automatically, but any wire_transfer MCP tool call requires explicit human sign-off — with a guarantee the check cannot be silently skipped. Which configuration meets this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Allow-list the read-only tools, route wire_transfer to the canUseTool approval callback, and add a PreToolUse hook as a backstop that runs on every call.",
+          "correct": true,
+          "explanation": "The SDK evaluates hooks, deny rules, ask rules, permission mode, allow rules, then canUseTool: allow rules auto-approve read-only tools while unmatched calls fall through to the callback for human approval. A PreToolUse hook runs before every other step and can deny even in bypassPermissions mode, giving the non-skippable guarantee.",
+          "citation": { "title": "Agent SDK: Configure permissions", "url": "https://docs.claude.com/en/api/agent-sdk/permissions" }
+        },
+        {
+          "key": "B",
+          "text": "Use permissionMode bypassPermissions and instruct the agent in its system prompt to ask before transferring money.",
+          "correct": false,
+          "explanation": "bypassPermissions auto-approves nearly everything that reaches the mode check, and a prompt instruction is not an enforcement mechanism. Anthropic warns to use this mode only in fully trusted, controlled environments.",
+          "citation": { "title": "Agent SDK: Configure permissions", "url": "https://docs.claude.com/en/api/agent-sdk/permissions" }
+        },
+        {
+          "key": "C",
+          "text": "Add wire_transfer to allowedTools so every transfer is routed through the SDK's approval UI.",
+          "correct": false,
+          "explanation": "This does the opposite: a bare allowedTools entry auto-approves the tool, and auto-approved calls skip the canUseTool callback entirely. The docs explicitly warn that permission checks placed in the callback are silently bypassed for allow-listed tools.",
+          "citation": { "title": "Agent SDK: Configure permissions", "url": "https://docs.claude.com/en/api/agent-sdk/permissions" }
+        },
+        {
+          "key": "D",
+          "text": "Set permissionMode to dontAsk so the SDK prompts a human on every wire_transfer call.",
+          "correct": false,
+          "explanation": "dontAsk never prompts: anything not pre-approved is denied outright and canUseTool is never called. It creates a hard-deny surface, not a human-approval workflow.",
+          "citation": { "title": "Agent SDK: Configure permissions", "url": "https://docs.claude.com/en/api/agent-sdk/permissions" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-15",
+      "question": "A managed-services firm runs week-long infrastructure remediations with an Agent SDK service that restarts nightly. Engineers must pick up each incident with full prior context the next morning, and occasionally branch an investigation to try an alternative fix. What is the idiomatic SDK approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Persist the full transcript in your own database and re-send it as the prompt after each restart.",
+          "correct": false,
+          "explanation": "Manually replaying transcripts duplicates what the SDK already provides and loses SDK-managed state. Sessions exist so context is maintained across exchanges without hand-rolled replay.",
+          "citation": { "title": "Agent SDK: Work with sessions", "url": "https://docs.claude.com/en/api/agent-sdk/sessions" }
+        },
+        {
+          "key": "B",
+          "text": "Increase the context window so a single continuous process can run for the whole week.",
+          "correct": false,
+          "explanation": "The constraint is process restarts, not window size; no context window setting survives a dead process. Durable continuity across runs is a session-management feature, not a token limit.",
+          "citation": { "title": "Agent SDK overview", "url": "https://docs.claude.com/en/api/agent-sdk/overview" }
+        },
+        {
+          "key": "C",
+          "text": "Start a fresh query each morning and ask the agent to re-derive yesterday's findings from logs.",
+          "correct": false,
+          "explanation": "Re-deriving state is slow, costly, and lossy compared to resuming stored session state. It also cannot support branching from a known prior point the way session forking does.",
+          "citation": { "title": "Agent SDK: Work with sessions", "url": "https://docs.claude.com/en/api/agent-sdk/sessions" }
+        },
+        {
+          "key": "D",
+          "text": "Use SDK sessions: resume the incident's session by ID after each restart, and fork it when testing an alternative remediation path.",
+          "correct": true,
+          "explanation": "Sessions are the Agent SDK's mechanism for maintaining context across exchanges, with resume for continuing after interruption and forking for branching into alternate paths from the same history. This matches both the nightly-restart and try-an-alternative requirements directly.",
+          "citation": { "title": "Agent SDK: Work with sessions", "url": "https://docs.claude.com/en/api/agent-sdk/sessions" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-16",
+      "question": "An Agent SDK migration assistant must audit a large monorepo: dependency analysis, test inventory, and API-usage scanning. One agent doing everything keeps exhausting its context with file contents before it can write the report. What SDK capability best addresses this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set a higher max_tokens so the agent can hold more files in its response.",
+          "correct": false,
+          "explanation": "max_tokens governs output length, not how much investigation material fits in the input context. The bottleneck is accumulated context from exploration, which output limits cannot solve.",
+          "citation": { "title": "Reducing latency", "url": "https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        },
+        {
+          "key": "B",
+          "text": "Spawn subagents for each audit track; each works in its own context and returns condensed findings to the orchestrating agent.",
+          "correct": true,
+          "explanation": "Subagents are the SDK's mechanism for delegating focused subtasks to specialized agents with separate context, so raw exploration stays out of the parent's window and only distilled results return. This mirrors Anthropic's orchestrator-workers pattern for parallelizable research-style work.",
+          "citation": { "title": "Agent SDK: Subagents", "url": "https://docs.claude.com/en/api/agent-sdk/subagents" }
+        },
+        {
+          "key": "C",
+          "text": "Use hooks to delete older tool results from the transcript whenever context fills up.",
+          "correct": false,
+          "explanation": "Hooks run custom code at lifecycle points such as gating tool calls; they are not a context-partitioning strategy, and blind deletion risks losing findings the report needs. Isolating exploration in subagent contexts is the designed solution.",
+          "citation": { "title": "Agent SDK overview", "url": "https://docs.claude.com/en/api/agent-sdk/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Run three independent full agents and concatenate their three final reports without coordination.",
+          "correct": false,
+          "explanation": "Uncoordinated agents duplicate work and produce conflicting conclusions with no synthesis step. Anthropic's guidance pairs parallel workers with an orchestrator that assigns subtasks and integrates results.",
+          "citation": { "title": "Building Effective Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D3-17",
+      "question": "A code-generation product streams responses, but users wait many seconds staring at nothing while Claude generates a large write_file tool input, because parameter JSON is buffered server-side before delivery. The team wants fragments to render immediately. What should they do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Poll the Messages API with smaller max_tokens chunks and stitch the tool input together across requests.",
+          "correct": false,
+          "explanation": "Splitting generation across truncated requests corrupts tool-call state and multiplies cost and latency; max_tokens truncation can cut a parameter off mid-JSON. Streaming delivery is a first-class feature, not something to emulate by polling.",
+          "citation": { "title": "Streaming Messages", "url": "https://docs.claude.com/en/docs/build-with-claude/streaming" }
+        },
+        {
+          "key": "B",
+          "text": "Move code generation into a text block and regex the code out, since text streams token by token.",
+          "correct": false,
+          "explanation": "Abandoning the tool schema sacrifices structured, validated inputs and reintroduces brittle parsing. The platform already supports streaming tool inputs without buffering; there is no need to give up tool use for latency.",
+          "citation": { "title": "Fine-grained tool streaming", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/fine-grained-tool-streaming" }
+        },
+        {
+          "key": "C",
+          "text": "Enable fine-grained tool streaming by setting eager_input_streaming: true on the tool, accumulate input_json_delta fragments, and guard the final parse since partial or invalid JSON is possible.",
+          "correct": true,
+          "explanation": "Fine-grained tool streaming skips server-side buffering and JSON validation, so fragments of large parameters arrive as Claude generates them; it is enabled per-tool via eager_input_streaming with streaming on. Because inputs are unvalidated, you must accumulate deltas, guard the parse, and return unparseable input to Claude as an is_error tool_result.",
+          "citation": { "title": "Fine-grained tool streaming", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/fine-grained-tool-streaming" }
+        },
+        {
+          "key": "D",
+          "text": "Set disable_parallel_tool_use so the single tool call streams faster.",
+          "correct": false,
+          "explanation": "disable_parallel_tool_use limits how many tools are called per turn; it has no effect on server-side buffering of a parameter's JSON. Time-to-first-fragment is addressed by fine-grained (eager) input streaming.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        }
+      ]
+    }
+  ]
+}

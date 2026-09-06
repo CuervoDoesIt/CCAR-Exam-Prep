@@ -1,0 +1,640 @@
+{
+  "examId": "ccar-p-exam4",
+  "caseId": "CS2",
+  "caseTitle": "Halcyon Press Group — editorial content operations assistant",
+  "caseScenario": "Halcyon Press Group is a global news and magazine publisher headquartered in Amsterdam, with regional desks in New York, London, Nairobi, and Singapore. The company publishes 14 titles across print and digital, employs 420 editorial staff including 280 journalists and 60 copy editors, and produces approximately 1,800 original articles per week across desks covering world affairs, business, science, culture, and sport. Each article passes through a three-stage editorial pipeline: AI-assisted draft generation or research summarization, mandatory copy-editor review, and standards-editor sign-off before publication. Halcyon holds wire-service agreements with four agencies — Reuters, AFP, AP, and Bloomberg — each with distinct syndication terms specifying which content may be quoted, paraphrased, or embedded and under what attribution rules. A hard standing rule, enforced by the editorial standards charter, prohibits any published piece from containing an unverified factual assertion: every claim must be traceable to a named source record in the company's rights-managed content store before a piece can be moved to the publication queue.\n\nThe Chief Product Officer has commissioned an AI editorial assistant powered by Claude to accelerate first-draft production, assist with fact-checking against the content store, and summarize wire-service ingest for desk editors. The assistant must operate in real time for journalists working on breaking stories, where desk editors expect the first meaningful AI response within 4 seconds at the p95 percentile. A separate overnight batch pipeline processes approximately 600 completed articles per night, tagging entities, generating SEO metadata, and cross-linking related content; this pipeline is latency-insensitive but must complete within a 5-hour overnight window. Halcyon's legal team has established that any AI-generated text surfaced to a journalist must not include wire-service content that exceeds the applicable agency's quotation limit without explicit editorial attribution markup; violations expose Halcyon to syndication-contract penalties.\n\nThe engineering team responsible for the assistant is 10 engineers strong, with solid Python and TypeScript skills but no dedicated MLOps capability. Total monthly Claude API spend must not exceed $28,000 across all workloads. The team has adopted an MCP-based integration architecture, exposing the content store, the wire-service feed, the CMS publication queue, and the corrections database as separate MCP servers. Critically, the CMS publication queue server carries both read and write capabilities; only copy editors and standards editors — not journalists — may push content to the publication queue. Halcyon's corrections policy mandates that any article published with an AI-assisted component that later receives a formal correction must trigger an automated re-evaluation of all AI-generated assertions in that article, and the result must be logged in the corrections database within 2 hours of the correction notice.",
+  "caseRequirements": [
+    "R1: p95 interactive response latency under 4 seconds for journalist-facing queries during editorial hours (07:00–22:00 local desk time).",
+    "R2: Every AI-generated assertion surfaced to an editorial user must be traceable to a named source record in the rights-managed content store before it can be moved to the publication queue; un-sourced assertions are prohibited from reaching the CMS.",
+    "R3: Wire-service content included in any AI output must not exceed the applicable agency quotation limit and must carry explicit attribution markup; violations may trigger syndication-contract penalties.",
+    "R4: Total monthly Claude API spend must not exceed $28,000 across interactive and overnight batch workloads combined.",
+    "R5: Only copy editors and standards editors may invoke write operations on the CMS publication queue; journalist sessions must never trigger a CMS write, even indirectly through an agentic tool call.",
+    "R6: Any article with an AI-assisted component that receives a formal correction must trigger automated re-evaluation of all AI-generated assertions, with the result logged in the corrections database within 2 hours of the correction notice."
+  ],
+  "questions": [
+    {
+      "id": "P4-CS2-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": [
+        "D2",
+        "D4"
+      ],
+      "question": "Halcyon's architect is selecting Claude models for the real-time journalist assistant (R1: p95 < 4 s) and the overnight batch pipeline (R4: $28k/month). The batch pipeline runs 600 articles per night; each involves three sequential tool calls averaging 80 seconds total. Which model pairing best satisfies R1 and R4 simultaneously?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude Fable 5.1 for interactive queries, Claude Sonnet 5 for batch; Fable 5.1's adaptive reasoning produces the most accurate editorial summaries and Sonnet 5 keeps batch costs moderate.",
+          "correct": false,
+          "explanation": "Claude Fable 5.1 costs $10/MTok input and its adaptive reasoning increases latency, making the 4-second p95 target in R1 difficult to meet consistently. At Fable 5.1 prices and Halcyon's interactive query volume, combined monthly spend would also likely breach R4's $28,000 ceiling well before month-end.",
+          "citation": {
+            "title": "Models overview — pricing comparison",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Claude Sonnet 5 for interactive queries, Claude Haiku 4.5 for overnight batch; Sonnet 5 meets R1 at $2/MTok input while Haiku 4.5 at $1/MTok keeps batch spend inside R4.",
+          "correct": true,
+          "explanation": "Claude Sonnet 5 ($2/MTok input, fast latency, 1M token context) comfortably meets R1's 4-second p95 target and provides the multi-source reasoning quality needed for R2 traceability. Haiku 4.5 ($1/MTok input, fastest throughput) keeps per-article batch cost low, leaving the $28,000 R4 envelope intact when combined. Option A puts Fable 5.1 at $10/MTok on the interactive path, risking both R1 latency and R4 compliance. Option D, the runner-up, is the one worth arguing about: Opus 5 also clears R1's 4-second p95 and gives the strongest multi-source reasoning for R2 traceability, so on quality alone it is the better editorial choice. It fails R4, because at $5/MTok input it costs 2.5x Sonnet 5 on the high-volume interactive workload, which pushes combined interactive-plus-batch spend past the $28,000 monthly ceiling. Sonnet 5 holds the same latency envelope and the traceability quality R2 needs at a price that leaves the R4 budget intact.",
+          "citation": {
+            "title": "Models overview — comparing Claude models",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Claude Haiku 4.5 for both interactive and batch workloads; it is the fastest and cheapest model, ensuring R1 and R4 are both met without configuration complexity.",
+          "correct": false,
+          "explanation": "Haiku 4.5 meets R1's latency target and is cheapest, but it has a smaller context window (200K tokens) and is optimized for speed over complex reasoning. Using it for interactive editorial summarization and multi-source fact correlation risks output quality falling short of Halcyon's editorial standards, and the R2 traceability requirement demands accurate source attribution that benefits from a more capable model.",
+          "citation": {
+            "title": "Models overview — choosing a model",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Claude Opus 5 for interactive queries, Claude Haiku 4.5 for batch; Opus 5 is the benchmark for enterprise editorial quality and handles R2's traceability demands most reliably.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Opus 5 ($5/MTok input) is a defensible interactive choice that meets R1's latency target and delivers strong multi-source reasoning for R2. However, at 2.5× Sonnet 5's price, Halcyon's interactive query volume risks breaching R4's $28,000 monthly ceiling before month-end. This satisfies R1 and R2 but fails R4, whereas Sonnet 5 provides equivalent latency at a fraction of the cost.",
+          "citation": {
+            "title": "Models overview — pricing comparison",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-02",
+      "primaryDomain": "D3",
+      "secondaryDomains": [
+        "D5",
+        "D1"
+      ],
+      "question": "Halcyon exposes its wire-service feed as an MCP server. The feed MCP server ingests Reuters, AFP, AP, and Bloomberg content, each with distinct quotation limits (R3). The engineering team must decide which MCP primitive type to use so that the application layer can enforce per-agency quotation rules before any wire content reaches Claude's context. Which primitive best enforces R3 at the architectural boundary?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expose wire-service content as MCP resources; the application layer reads each resource, trims it to the agency's quotation limit, and adds attribution markup before injecting it into context.",
+          "correct": true,
+          "explanation": "MCP resources are application-controlled: the application decides when and how to read them and what portion to inject into context. This means the per-agency quotation limit and attribution markup are applied deterministically in application code before any wire content touches the model, satisfying R3. Tools, by contrast, are model-controlled — the model decides when to invoke them — creating a pathway for the model to retrieve more content than the application intended. Resources with application-side gating remove that pathway entirely, which beats Option D (the runner-up): while tool-level quota guards are also a valid layer, they rely on the model invoking the tool correctly and on the tool description being precise enough to prevent over-retrieval.",
+          "citation": {
+            "title": "MCP server concepts — tools, resources, prompts",
+            "url": "https://modelcontextprotocol.io/docs/2026-07-28/learn/server-concepts"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Expose wire content as MCP prompts that embed each agency's quotation limit as a natural-language ceiling in the prompt template's instructions, relying on Claude to respect the per-agency passage length during generation.",
+          "correct": false,
+          "explanation": "MCP prompts are reusable invocation templates for structuring model interactions, not a data-access control mechanism. Embedding quotation limits as prompt instructions makes the limit probabilistic — the model may not adhere precisely to a word or character ceiling stated in natural language. Anthropic's guidance is that must-hold compliance boundaries require deterministic architectural controls, not model-level instructions. This approach fails R3.",
+          "citation": {
+            "title": "MCP server concepts — tools, resources, prompts",
+            "url": "https://modelcontextprotocol.io/docs/2026-07-28/learn/server-concepts"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Include the full wire-service corpus from all four agencies in Claude's system prompt with per-agency section headers, and instruct the model never to reproduce more than the permitted excerpt length for each agency when generating editorial summaries.",
+          "correct": false,
+          "explanation": "Placing the entire wire corpus in the system prompt at full length and relying on Claude's instruction-following to enforce quotation limits is both architecturally incorrect and operationally untenable. Including all wire content in every request inflates token counts sharply, raising costs against R4, and instruction-based quotation limits are probabilistic rather than deterministic, creating systematic R3 exposure.",
+          "citation": {
+            "title": "Building effective agents — safe and effective tool use",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Expose each agency feed as an MCP tool with quota enforcement logic inside the tool implementation, so the tool returns only the permitted excerpt and attribution markup when Claude calls it.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Embedding quota enforcement inside each tool is a defensible design: the tool itself clips content and adds attribution, so a single well-behaved invocation returns a compliant excerpt. However, it holds R3 less reliably than Option A. Because tools are model-controlled, the model decides when and how often to invoke them, so the agency quotation ceiling survives only as long as every code path in all four agency tool implementations clips correctly — and that logic must be re-verified on every tool update. Worse, per-call clipping does not bound the aggregate: repeated invocations within one turn can assemble more of a Reuters or Bloomberg story in context than the agency's limit permits, putting Halcyon in breach of R3 and exposed to syndication-contract penalties. The resource-plus-application-gate pattern in Option A applies the limit and the attribution markup in one place, before the model sees any wire text at all.",
+          "citation": {
+            "title": "MCP server concepts — tools, resources, prompts",
+            "url": "https://modelcontextprotocol.io/docs/2026-07-28/learn/server-concepts"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-03",
+      "primaryDomain": "D2",
+      "secondaryDomains": [
+        "D3",
+        "D4"
+      ],
+      "question": "Each Halcyon desk — world affairs, business, science, culture, and sport — has a shared editorial style guide of approximately 3,800 tokens that is identical across all journalist queries from that desk. The system prompt also includes 900 tokens of rights and attribution rules. Both blocks are stable for weeks at a time. Under R4's $28,000 monthly budget, which prompt engineering approach most reduces input token cost without degrading editorial quality?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Remove the editorial style guide from the system prompt and insert it as a user-turn document appended to each request, so the system prompt stays minimal and the team avoids configuring cache breakpoints in the API call.",
+          "correct": false,
+          "explanation": "Moving the style guide to a user-turn document does not reduce token costs — those 3,800 tokens are still sent and billed on every request. It also separates the authoritative editorial rules from the system-level instruction context, which risks inconsistent application of style and attribution requirements, undermining R2 and R3 compliance framing.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Apply a 1-hour cache TTL to the combined system prompt block rather than the default 5-minute TTL, minimizing write frequency; the 2× write cost is acceptable because the style guide and rights rules rarely change between editorial shifts.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The 1-hour TTL does cache the system prompt and reduces read cost to 0.1× of base input price, directly cutting costs under R4. Using it is a defensible design when the cached content is genuinely stable. However, the 1-hour TTL costs 2× the base input price per cache write, whereas the 5-minute TTL costs only 1.25× per write. At Halcyon's continuous desk query volume during editorial hours, the 5-minute TTL is refreshed on each read and stays warm throughout the shift, making the 1-hour variant cost more per write without a meaningful benefit. This satisfies R4 directionally but fails to minimize cost as well as Option D, which uses the cheaper 5-minute write at the same 0.1× read rate, providing equivalent savings at lower per-write expense.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Truncate the combined style guide and rights-rules block to 1,500 tokens before including it in the system prompt; the shorter prompt reduces per-request input charges and keeps the monthly total within R4's $28,000 ceiling without any caching configuration.",
+          "correct": false,
+          "explanation": "Truncating the editorial style guide degrades the quality of AI-generated drafts by omitting citation-format rules, voice guidelines, and attribution requirements. Incomplete style context directly risks R2 and R3 violations when the model generates copy that omits source tracing or misformats wire-service attribution. Prompt caching is the correct cost lever, not content truncation.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Place a cache_control breakpoint after the combined system prompt block (style guide + rights rules, ~4,700 tokens) so it is written once per 5-minute window and read at ~10% of base input cost on every subsequent request from the same desk.",
+          "correct": true,
+          "explanation": "The style guide and rights rules are identical across all desk queries, making them an ideal cache prefix. A 5-minute TTL cache_control breakpoint costs 1.25× to write but only 0.1× per read, yielding roughly 90% savings on that 4,700-token block for every subsequent request within the window. This directly reduces costs under R4 without any change to prompt content, preserving R2 and R3 compliance framing. It beats Option B (the runner-up) because, at Halcyon's continuous query volume during editorial hours, the 5-minute TTL stays continuously warm at lower write cost than the 2× 1-hour TTL variant.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-04",
+      "primaryDomain": "D3",
+      "secondaryDomains": [
+        "D5",
+        "D2"
+      ],
+      "question": "Halcyon's CMS MCP server exposes both a read tool (get_article_draft) and a write tool (push_to_publication_queue). During a security review, the team finds that journalist sessions include the push_to_publication_queue tool in their registered tool list, and a prompt injection embedded in a wire-service summary caused a test journalist session to invoke it. Which architectural change satisfies R5 without removing the write tool from the CMS server entirely?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a system-prompt instruction in every journalist session explicitly telling Claude never to call push_to_publication_queue under any circumstance, and log all tool invocation attempts to the audit trail for compliance review after the fact.",
+          "correct": false,
+          "explanation": "A system-prompt instruction is a probabilistic control: the same prompt injection that triggered the test invocation could also override or circumvent the instruction. Anthropic's guidance is that must-hold security boundaries — such as R5's prohibition on journalist CMS writes — require deterministic architectural controls, not model-level instructions. Logging detects the violation after it has occurred; it does not prevent it.",
+          "citation": {
+            "title": "Building effective agents — security and trust hierarchies",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Register only get_article_draft in journalist session tool lists; expose push_to_publication_queue exclusively in copy-editor and standards-editor sessions, enforced at the application layer before the tool list is sent to the API.",
+          "correct": true,
+          "explanation": "Scope minimization — exposing only the capabilities a session's role actually needs — is precisely the least-privilege control MCP's security best practices prescribe, because it shrinks the blast radius of any single compromised or injected instruction. Excluding push_to_publication_queue from journalist tool lists means the model cannot invoke it regardless of what injected instructions appear in retrieved content, satisfying R5 deterministically. This beats Option C (the runner-up): while a PreToolUse hook can block the call after Claude emits it, the tool still appears in the model's context, meaning injected instructions can still attempt invocations that the hook must catch. Removing the tool from the list upstream prevents the model from forming the call in the first place, providing a stronger R5 guarantee.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Install a Claude Code PreToolUse hook that inspects every tool_use block before execution and returns a blocking error if push_to_publication_queue is called outside a copy-editor or standards-editor session.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A PreToolUse hook can deterministically block a tool call before it executes, which satisfies R5 functionally. The hook fires in the application layer and its block is enforced regardless of what Claude decides, making this a valid defense-in-depth layer. However, push_to_publication_queue still appears in journalist session tool descriptions, so injected content can still induce the model to attempt the call, forcing the hook to catch it on every such attempt. Removing the tool from journalist tool lists upstream (Option B) eliminates the attack surface entirely and requires no per-call runtime check.",
+          "citation": {
+            "title": "Automate actions with hooks",
+            "url": "https://code.claude.com/docs/en/hooks-guide"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Require Claude to call a verify_role tool before push_to_publication_queue; if the role check fails, Claude should self-abort the write attempt.",
+          "correct": false,
+          "explanation": "Asking the model to self-police a high-stakes write operation by calling a role-check tool first relies on Claude's judgment in exactly the scenario where a prompt injection may have compromised that judgment. An LLM cannot serve as a reliable security boundary for its own tool calls. Anthropic's guidance is that role enforcement for write operations must occur in deterministic application-layer controls, not inside the model's agentic loop.",
+          "citation": {
+            "title": "Building effective agents — human oversight and security",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-05",
+      "primaryDomain": "D4",
+      "secondaryDomains": [
+        "D2",
+        "D3"
+      ],
+      "question": "Halcyon's editorial standards team wants to verify that AI-assisted article drafts do not contain unverified factual assertions before a copy editor reviews them (R2). The 10-person team has no ML infrastructure. Which evaluation strategy provides the most rigorous automated signal that every claim in a draft is traceable to a source record in the content store?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Require the model to generate structured inline citations — each claim tagged with a source record ID from the content store — then run a deterministic parser that verifies every cited ID exists in the store before the draft is released for copy-edit review.",
+          "correct": true,
+          "explanation": "Prompt engineering that elicits structured citations followed by a code-level ID lookup directly operationalizes R2: an un-sourced claim either lacks a citation (caught by the parser) or cites a non-existent record ID (also caught). This is a zero-ML-infrastructure check deployable immediately by the 10-person team. Unlike Option B (the runner-up), which uses a second Claude instance to judge grounding, this approach is fully deterministic — the model that generated an unsupported claim cannot convince a code-level ID lookup that the record exists. It is the only approach that provides a code-level guarantee rather than a probabilistic one, and it directly satisfies R2's traceability mandate.",
+          "citation": {
+            "title": "Citations feature — grounding responses in source documents",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/citations"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Use an evaluator-optimizer pattern: after each draft is generated, a second Claude instance receives both the full draft text and the retrieved source records, scores each factual claim on a 1–5 grounding scale, and automatically flags any claim rated below 3 for mandatory editorial review before the draft advances.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The evaluator-optimizer pattern is well suited to editorial fact evaluation and requires no bespoke ML infrastructure — the same API is already in use. Having a second model review claims against the source corpus catches many hallucinations that a simple regex or keyword check would miss. However, the evaluating model can also be confidently wrong: it may rate an unsupported claim as well-grounded if it generates a plausible-sounding rationale. For R2 compliance, Halcyon needs a guarantee that every claim traces to an actual record, which requires a deterministic check that the ID exists — not a probabilistic quality score. Option A provides that guarantee; a probabilistic evaluator does not.",
+          "citation": {
+            "title": "Building effective agents — evaluator-optimizer pattern",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Sample 10% of AI-assisted drafts each day for manual editorial review; annotate flagged outputs and track hallucination rate over rolling 30-day windows.",
+          "correct": false,
+          "explanation": "Manual sampling provides high-quality signal but covers only 10% of drafts, leaving 90% without automated grounding checks. R2 requires that every AI-generated assertion be traceable before it reaches the CMS — a standard that 10% sampling cannot enforce. This is a useful supplementary metric but fails as the primary compliance mechanism.",
+          "citation": {
+            "title": "Building effective agents — evaluation and testing",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Measure ROUGE-L scores between each AI draft and its source records; flag any draft whose score falls below a calibrated threshold as potentially under-sourced.",
+          "correct": false,
+          "explanation": "ROUGE-L measures longest-common-subsequence overlap between generated text and references. It rewards surface-level similarity and penalizes valid paraphrase, making it a poor proxy for factual grounding. An AI draft can have high ROUGE-L by copying wire-service language verbatim — which may also violate R3 — while still containing fabricated figures that happen not to overlap. ROUGE-L does not verify whether a specific claim has a backing source record, failing R2.",
+          "citation": {
+            "title": "Building effective agents — evaluation approaches",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-06",
+      "primaryDomain": "D3",
+      "secondaryDomains": [
+        "D4",
+        "D1"
+      ],
+      "question": "Halcyon's science desk wants an agentic workflow that generates a long-form feature article from a set of 12 research abstracts. The task requires: (1) summarizing each abstract, (2) identifying thematic links across all 12, (3) drafting an article outline, and (4) expanding each section. Step 2 depends on step 1; steps 3 and 4 depend on step 2. During load testing the team observes that generating 12 summaries serially adds 48 seconds to the pipeline, threatening R1's 4-second interactive target for desk editors requesting a status update mid-generation. Which agent pattern resolves the serial-summary bottleneck while respecting step dependencies?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Parallelize step 1 by dispatching all 12 abstract summaries as independent worker calls simultaneously; collect all 12 results, then advance sequentially through steps 2, 3, and 4 in dependency order.",
+          "correct": true,
+          "explanation": "The parallelization-sectioning pattern dispatches independent subtasks as concurrent worker calls and synthesizes their outputs before proceeding to dependent steps. Because each of the 12 abstract summaries has no dependency on the others, they can all be dispatched simultaneously, reducing step-1 wall-clock time from 48 seconds to roughly the time of a single summary call. Steps 2–4 then proceed sequentially as required by their dependencies. This directly addresses the R1 interactive latency concern for desk editors checking pipeline status. It beats Option D (the runner-up), which uses the Message Batches API: batches are asynchronous with results available within 24 hours, not seconds, making them unsuitable for an interactive pipeline where R1 applies and the desk editor needs a responsive experience.",
+          "citation": {
+            "title": "Building effective agents — parallelization (sectioning)",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Parallelize all four steps simultaneously; since each has distinct inputs, running them in parallel reduces total wall-clock time to the slowest single step.",
+          "correct": false,
+          "explanation": "Steps 2, 3, and 4 have explicit dependencies on previous steps — step 2 cannot identify thematic links until step 1's summaries exist. Running all four in parallel produces incoherent or empty outputs for steps 2–4. The correct approach parallelizes only within the dependency-independent set (step 1's 12 summaries) and then advances sequentially through dependent steps.",
+          "citation": {
+            "title": "Building effective agents — parallelization (sectioning)",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use the orchestrator-workers pattern with a single orchestrator managing all four steps in strict sequence; the orchestrator accumulates all context and passes it forward step by step, keeping the pipeline straightforward to debug and monitor for the 10-person team.",
+          "correct": false,
+          "explanation": "A fully sequential orchestrator-workers pipeline does not resolve the bottleneck — the 12 abstract summaries are still generated one at a time. Adding 48 seconds to the pipeline before the desk editor can see any intermediate state keeps the feature-start experience far outside what feels interactive, and it offers no throughput improvement for R4's batch budget either.",
+          "citation": {
+            "title": "Building effective agents — orchestrator-workers pattern",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Submit all 12 abstracts as a single Message Batches API request for step 1; retrieve the summaries when the batch completes, then proceed with steps 2–4 synchronously.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The Message Batches API is well suited to latency-insensitive workloads and delivers a 50% cost discount under R4, making it a sound design for the overnight pipeline. However, batch results are available asynchronously within 24 hours — not within seconds. Using it for step 1 of an interactive feature-generation workflow where desk editors expect a responsive experience violates R1: editors would have no output until the batch completes, potentially hours later. This satisfies R4 but fails R1 in an interactive context.",
+          "citation": {
+            "title": "Message Batches API — asynchronous processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-07",
+      "primaryDomain": "D1",
+      "secondaryDomains": [
+        "D3",
+        "D2"
+      ],
+      "question": "Three months after launch, the breaking-news desk reports that p95 latency has crept to 5.8 seconds for queries that involve more than two tool calls to the content-store MCP server. Each query retrieves the article being drafted, up to three related source records, and the corrections history for those sources. Profiling shows the bottleneck is sequential MCP resource fetches, not model inference time. Which architectural change restores R1 compliance while also protecting R4 as query volume grows?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Switch from Claude Sonnet 5 to Claude Haiku 4.5 for breaking-news queries; the faster model reduces inference time and more than compensates for the sequential fetch overhead.",
+          "correct": false,
+          "explanation": "Profiling already identified sequential MCP fetches — not model inference — as the bottleneck. Switching to Haiku 4.5 reduces inference time but does not change the sequential fetch pattern. The latency improvement from a faster model will be modest compared to the 1.8-second overshoot, and it risks quality regression for R2 traceability tasks that require multi-source synthesis.",
+          "citation": {
+            "title": "Models overview — latency and throughput",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Move from a sequential MCP resource fetch pattern to parallel fetches in the application layer: dispatch all required resource reads simultaneously and await all results before building the context payload.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Parallelizing application-side MCP resource reads directly addresses the identified bottleneck and is a sound, low-invasive fix that can restore R1 compliance. This approach is genuinely the right move for resource fetches that have no data dependencies on each other. However, it does not address future query growth: as article archives grow and query patterns expand, the fixed set of parallel reads may again become insufficient. Option D adds prompt caching on the stable content, which compounds the latency improvement by reducing re-fetch cost on already-seen records — satisfying R1 while also benefiting R4. The runner-up is missing R4's cost dimension; Option D keeps both constraints.",
+          "citation": {
+            "title": "Building effective agents — parallelization patterns",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Cache frequently requested articles and source records in an in-memory store on the application server; skip the MCP fetch for any record seen in the last 60 seconds.",
+          "correct": false,
+          "explanation": "Application-level caching can reduce redundant fetches, but an in-memory store is not coordinated across the multi-instance application deployment and introduces stale-data risk for corrections records that may be updated at any time. The corrections database is specifically called out in R6 as requiring up-to-date state within 2 hours; serving stale correction history from an in-memory cache risks delivering outdated source provenance information, directly undermining R2 and R6.",
+          "citation": {
+            "title": "Building effective agents — agentic design patterns",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Parallelize the MCP resource fetches in the application layer and apply prompt-caching breakpoints on the retrieved source records that are stable across multiple requests for the same article, reducing re-fetch and re-tokenization cost.",
+          "correct": true,
+          "explanation": "Parallelizing the MCP resource reads eliminates the sequential fetch bottleneck, directly restoring R1's 4-second p95 target. Adding prompt-caching breakpoints on the stable article-and-source content means subsequent queries for the same article read that prefix from cache at 0.1× base cost, simultaneously reducing per-query spend under R4. This compound approach beats Option B (the runner-up), which parallelizes fetches but foregoes the caching benefit: Option B restores R1 but leaves unnecessary token re-processing cost that accumulates at Halcyon's query volume, making R4 harder to sustain as usage grows.",
+          "citation": {
+            "title": "Prompt caching — multi-turn conversations and large documents",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-08",
+      "primaryDomain": "D3",
+      "secondaryDomains": [
+        "D7",
+        "D4"
+      ],
+      "question": "Halcyon's overnight batch pipeline must annotate 600 completed articles per night — each requiring an entity-tagging tool call and an SEO-metadata generation call — within R4's $28,000 budget and the 5-hour overnight window. Running serially at 50 seconds per article would take approximately 8.3 hours, overrunning that window. Which approach brings the pipeline inside the 5-hour window at the lowest operational burden for the 10-person team?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Spin up 12 parallel Python worker processes, each processing a share of the 600 articles serially; with 12 workers the pipeline completes in approximately 41 minutes.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Twelve parallel workers would theoretically complete 600 articles in about 41 minutes, satisfying the 5-hour window. However, operating 12 concurrent workers requires the team to build and maintain rate-limit backoff, process supervision, error retry, cost tracking, and graceful failure handling — meaningful operational overhead for a 10-person team with no MLOps capability. The Message Batches API provides equivalent parallelism, the 50% pricing discount that benefits R4, and no worker infrastructure to maintain, making it strictly lower-burden for the same outcome.",
+          "citation": {
+            "title": "Message Batches API — batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Submit all 600 articles as a single Message Batches API request; the batch API processes requests asynchronously at 50% cost savings and most batches complete in under 1 hour.",
+          "correct": true,
+          "explanation": "The Message Batches API is purpose-built for large volumes of independent, latency-insensitive requests. Submitting 600 annotation pairs as one batch request gives the team asynchronous parallel processing with no worker infrastructure to build or operate. The 50% pricing discount directly benefits R4's $28,000 budget, and most batches complete in under 1 hour — well inside the 5-hour overnight window. This requires zero additional operational infrastructure, beating Option A (the runner-up), which satisfies the timing constraint but requires the team to build and maintain a parallel worker pool with all the associated reliability engineering that a 10-person team with no MLOps capability cannot sustainably operate.",
+          "citation": {
+            "title": "Message Batches API — batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Switch the batch pipeline to Claude Fable 5.1; its extended reasoning produces more accurate SEO metadata, and the higher quality reduces the need for editorial re-runs that inflate overall cost.",
+          "correct": false,
+          "explanation": "The bottleneck is serial throughput, not output quality. Claude Fable 5.1 costs $10/MTok input — ten times Haiku 4.5 — and would massively exceed R4's $28,000 monthly ceiling for 600 articles nightly. Even if reasoning quality were superior, the cost multiplier and no throughput improvement make this option untenable on both the R4 and timing constraints.",
+          "citation": {
+            "title": "Models overview — pricing comparison",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Reduce nightly coverage to the 300 highest-priority articles so the serial pipeline fits within 5 hours without any architectural change.",
+          "correct": false,
+          "explanation": "Halving coverage leaves 300 articles per night without entity tags or SEO metadata, creating compounding debt in the content store. Halcyon's R6 corrections policy depends on complete annotation to cross-link corrected articles with related AI-assisted content; incomplete annotation creates gaps that could prevent R6's 2-hour re-evaluation requirement from being met for un-tagged articles.",
+          "citation": {
+            "title": "Message Batches API — batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": [
+        "D3",
+        "D5"
+      ],
+      "question": "Six months after launch, Halcyon's editorial standards team notices a pattern: AI-assisted science-desk articles receive formal corrections at twice the rate of human-only articles, primarily for fabricated citations to journal papers that do not exist. The standards editor wants a detection mechanism that fires before a draft reaches the copy editor (R2). Which evaluation approach directly targets the fabrication of non-existent academic source records?",
+      "options": [
+        {
+          "key": "A",
+          "text": "After each science-desk draft is generated, call a verify_citation MCP tool that looks up every cited journal paper DOI in the content store and in a curated academic-record lookup service; block any draft where one or more DOIs return no record.",
+          "correct": true,
+          "explanation": "A deterministic DOI lookup via a dedicated verification tool directly operationalizes R2 for academic citations: a DOI that resolves to no record in the content store or the academic lookup service is definitionally an unverified assertion. This is a code-level, zero-false-negative check for the specific failure mode observed — fabricated DOIs — that catches errors the model itself cannot reliably self-detect. It beats Option C (the runner-up), which asks Claude to self-verify its own citations: a model that fabricated a DOI may produce a plausible-sounding rationale for why the paper exists, making self-verification unreliable in precisely the failure cases R2 is designed to prevent.",
+          "citation": {
+            "title": "Building effective agents — tool-augmented verification",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add a science-desk system-prompt instruction telling Claude to cite only papers it is certain exist and to use hedging language for any claim it cannot fully verify.",
+          "correct": false,
+          "explanation": "Instruction-based hedging is a probabilistic control. Claude can generate a confidently worded citation to a fabricated paper because it does not have a real-time lookup mechanism to confirm whether a specific DOI or paper title exists. Instructing the model to be cautious does not prevent fabrication; it may only change the confidence register of the fabricated text. R2 requires a verifiable traceability check, not a confidence softener.",
+          "citation": {
+            "title": "Building effective agents — safe and effective tool use",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use an evaluator-optimizer loop: after each draft, ask a second Claude instance to identify every cited paper and rate its likelihood of being a real publication on a 1–5 scale; block drafts with any citation rated below 4.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "An evaluator-optimizer loop adds a meaningful verification layer and can catch some fabrications by applying a skeptical second read to citation claims. This pattern has zero ML-infrastructure overhead, using the same API already deployed. However, the evaluating model shares the same training-data limitation: it cannot look up whether a specific DOI exists in real time and may rate a plausibly titled but fabricated paper as likely real. For R2 compliance, Halcyon needs a deterministic verification, not a probabilistic quality score — which is why the DOI lookup tool in Option A is the stronger answer.",
+          "citation": {
+            "title": "Building effective agents — evaluator-optimizer pattern",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Implement a rolling accuracy metric: track the formal correction rate per desk and per Claude model over 30-day windows; if any desk's correction rate exceeds 5%, automatically reduce max_tokens on that desk's requests to shorten outputs and reduce the surface area for hallucinated content.",
+          "correct": false,
+          "explanation": "Tracking correction rates is a valuable operational signal for process improvement, but it is a lagging metric: corrections are filed after articles are published, meaning many flawed drafts have already reached readers before the metric triggers a response. Lowering max_tokens does not directly reduce citation fabrication — it merely shortens outputs. R2 requires a pre-publication check, not a post-publication feedback loop.",
+          "citation": {
+            "title": "Building effective agents — evaluation and testing",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-10",
+      "primaryDomain": "D2",
+      "secondaryDomains": [
+        "D5",
+        "D3"
+      ],
+      "question": "Halcyon's five editorial desks — world affairs, business, science, culture, and sport — each have distinct style guides, source-pool restrictions, and wire-agency permissions. A journalist on the business desk must never receive science-desk source records in their context, and vice versa. The system prompt structure must enforce this isolation without requiring a separate Claude API integration per desk. Which approach correctly isolates desk-specific context while staying within a single API integration?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Include all five desks' style guides and source pools in one large combined system prompt; instruct Claude to apply only the sections relevant to the requesting journalist's desk.",
+          "correct": false,
+          "explanation": "Placing all five desks' materials in a single shared system prompt and relying on instruction-based filtering is a probabilistic control: Claude may blend style conventions or surface source records from an adjacent desk when handling ambiguous queries. For R5-adjacent cross-desk data boundaries — particularly for source pools with distinct wire-agency permissions — instruction-based isolation is insufficient. Anthropic's guidance is that compliance-critical data boundaries require architectural separation, not prompt-level filtering.",
+          "citation": {
+            "title": "Building effective agents — safe and effective tool use",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Assign each desk a separate Anthropic API key; route journalist requests to the key associated with their desk so that each key's usage and context are isolated.",
+          "correct": false,
+          "explanation": "Separate API keys control billing attribution and rate limits, not context isolation. All keys make calls to the same underlying model endpoint. Routing by key does not prevent desk-specific system prompts and source pools from being mixed up if the routing layer makes an error, nor does it provide the structured per-request context isolation that the MCP resource pattern enables.",
+          "citation": {
+            "title": "Models overview — API access",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Build a request-routing layer that injects a desk-specific system prompt — containing only that desk's style guide, source-pool references, and wire-agency permissions — into each API call based on the authenticated journalist's desk membership.",
+          "correct": true,
+          "explanation": "Session-scoped system prompt injection is the canonical approach for context isolation within a single API integration: each API call receives only the data relevant to the requesting journalist's desk, enforced in the application layer before the API call is made. This means a business-desk journalist's context never contains science-desk sources or wire permissions, satisfying R3 (per-agency quotation rules per desk) and the cross-desk isolation requirement. It beats Option D (the runner-up), which caches a single system prompt including all desks and uses cache_control breakpoints: while caching is efficient for static content, a combined system prompt containing all five desks' source pools creates cross-desk data co-mingling in the context window that instruction-based filtering cannot reliably prevent, failing R3 for wire-permission boundaries.",
+          "citation": {
+            "title": "Prompt engineering — system prompts and context management",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Cache a single combined system prompt containing all five desks' style guides and source pools with cache_control breakpoints; use a small prefix per request to tell Claude which desk's section applies.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Caching a large combined system prompt is efficient and reduces token costs under R4. Prompt caching breakpoints are valid tools for stable content. However, placing all five desks' source pools and wire permissions in a shared cached context means every journalist's request context contains materials from all five desks, relying on a per-request desk-identifier prefix to filter which materials Claude should use. This is instruction-based isolation — probabilistic rather than deterministic — and fails R3's per-agency wire-permission boundary for cross-desk queries. Option C ensures no desk's data enters another desk's context at the architectural level.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-11",
+      "primaryDomain": "D5",
+      "secondaryDomains": [
+        "D3",
+        "D1"
+      ],
+      "question": "Halcyon's security team discovers that the CMS MCP server forwards the journalist's OAuth bearer token directly to the content store API on every tool call, using that same token for authorization. A penetration test shows the CMS server can be induced to use a journalist's token to access content from other desks' restricted source pools by crafting a malicious article draft that injects instructions into the tool call. Which MCP security risk does this describe, and what is the correct mitigation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "This is a prompt injection exploiting MCP resource enumeration. Mitigate by auditing which resources the CMS MCP server exposes and removing any resource not needed for journalist workflows.",
+          "correct": false,
+          "explanation": "Resource enumeration hardening — removing unused resources — is a valid scope-minimization measure but does not address the core risk identified: the server is forwarding user OAuth tokens directly to downstream APIs. The problem is not the resource list; it is that the forwarded token grants access beyond what any individual tool call should authorize, and injected instructions can exploit that scope. Pruning resources does not stop the token from being misused.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "This is a confused deputy attack. Mitigate by adding a PreToolUse hook that validates the journalist's identity on every CMS tool call before the server forwards the request.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Identifying this as a confused deputy attack is a defensible diagnosis: the CMS MCP server does hold broader permissions than any individual journalist interaction requires, and adding a PreToolUse hook provides an application-layer identity check before each forwarded call. This satisfies R5 partially by blocking unauthorized journalists from triggering writes. However, the core mechanism of the attack is that the journalist's OAuth token is forwarded with its full credential scope, meaning injected instructions can use that token to reach cross-desk source pools regardless of the identity hook. The hook validates who initiated the call but does not remove the token's excess scope. This fails R5 and R2 because the token-passthrough pathway remains open; Option D eliminates it by replacing forwarded tokens with a scoped service-account credential.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "This is a local MCP server compromise risk. Mitigate by moving the CMS MCP server from local STDIO transport to a remote Streamable HTTP transport with OAuth authentication.",
+          "correct": false,
+          "explanation": "Local server compromise refers to an attacker gaining control of the MCP server process itself, not to token forwarding behavior. Moving from STDIO to HTTP transport changes the deployment model but does not fix the token-passthrough pattern: if the server continues to forward the journalist's OAuth token to downstream APIs unchanged, the risk persists regardless of transport. The transport layer is separate from the authorization pattern inside the server.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "This is the token-passthrough risk: the MCP server is forwarding the journalist's OAuth token directly to the downstream API, allowing injected instructions to leverage the token's full scope. Mitigate by having the CMS MCP server authenticate to the content store with its own service-account credential, scoped to only the operations each journalist session is authorized to perform.",
+          "correct": true,
+          "explanation": "MCP security guidance explicitly prohibits token passthrough: an MCP server must not forward an end-user credential directly to downstream services, because the credential's full scope is then available to any injected instruction that can trigger a tool call. The correct mitigation is for the CMS MCP server to hold its own service-account credential and apply per-session, per-desk authorization checks before forwarding only the permitted operations to the content store. This satisfies R5 by ensuring no journalist session can leverage a forwarded token to access another desk's source pool, and it satisfies R2 by ensuring only authorized source records are retrievable. It beats Option B (the runner-up), which correctly names the confused deputy pattern but misidentifies the mechanism: the attack here is token passthrough enabling injected misuse of forwarded credentials, not a deputy holding general excess permissions.",
+          "citation": {
+            "title": "MCP Security Best Practices",
+            "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS2-12",
+      "primaryDomain": "D7",
+      "secondaryDomains": [
+        "D1",
+        "D4"
+      ],
+      "question": "Halcyon's head of engineering wants every one of the 10 developers to share the same set of fact-check hooks, MCP server definitions, editorial QA runbooks, and wire-attribution prompt templates. The team uses a shared Git repository. A new hire reports that after cloning the repo, none of these assets appear in their Claude Code session. What is the correct project-level configuration to make these shared assets automatically available on clone?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Publish the fact-check hooks, MCP server definitions, and wire-attribution prompt templates on the team's internal wiki, and include a structured onboarding checklist in the repository README directing each new developer to manually copy the assets into their local Claude Code session immediately after cloning the repository, with a standing monthly reminder to re-sync any asset whose wiki page has changed upstream since the last copy.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A well-maintained wiki and onboarding checklist is better than no documentation, and this is a defensible operational practice for small teams. However, wiki-based distribution still requires each developer to take manual copy steps and does not integrate with Claude Code's automatic project-context loading — meaning assets are not present in the AI session unless the developer has followed every checklist step. Updates to hooks or templates must also be manually propagated to each local environment, creating drift that undermines R2 compliance checks. This fails the 'automatically available on clone' requirement, and it also fails R2: a developer who skips or mis-copies the fact-check hook step has no gate running at all, so drafts can reach the CMS without the source-record traceability check ever executing.",
+          "citation": {
+            "title": "Claude Code — memory (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Store all assets in environment variables configured by the CI/CD pipeline; developers inherit the correct versions through the pipeline runner environment on each commit.",
+          "correct": false,
+          "explanation": "Environment variables set by CI/CD are available to pipeline job runners, not to individual developers' local Claude Code sessions. A developer who clones the repository and works locally receives no benefit from CI environment configuration, leaving their Claude Code session without the fact-check hooks, MCP definitions, or attribution templates. This approach addresses consistency in automated pipelines only.",
+          "citation": {
+            "title": "Claude Code — settings and configuration",
+            "url": "https://code.claude.com/docs/en/settings"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Commit fact-check PreToolUse hooks to .claude/settings.json, MCP server definitions to a project-scoped .mcp.json at the repository root, wire-attribution prompt templates as slash commands in .claude/commands/, and editorial QA runbooks in the project-level CLAUDE.md; all load automatically when a developer clones the repo and opens a Claude Code session.",
+          "correct": true,
+          "explanation": "Project-scoped Claude Code configuration stored in .claude/settings.json (hooks and permissions), .mcp.json at the repository root (project-scoped MCP servers), .claude/commands/ (slash commands), .claude/agents/ (subagents), and CLAUDE.md (conventions and runbooks) is version-controlled in the repository and loaded automatically when any team member clones and opens a Claude Code session — no manual setup required. This is the canonical pattern for organization-wide standardization. The PreToolUse hooks in settings.json deterministically enforce fact-check gates (supporting R2), and the shared MCP definitions ensure all developers target the same content-store and corrections-database endpoints. It beats Option A (the runner-up), which requires manual wiki steps, creates drift, and provides no automatic enforcement of the R2 fact-check gate.",
+          "citation": {
+            "title": "Claude Code — project configuration and settings",
+            "url": "https://code.claude.com/docs/en/settings"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Ask each developer to copy the hook definitions into their personal ~/.claude/settings.json and record the MCP server definitions in their user-scoped ~/.claude.json file after reading the wiki.",
+          "correct": false,
+          "explanation": "User-scoped Claude Code configuration — ~/.claude/settings.json for hooks and permissions, ~/.claude.json for user-scope MCP servers — lives on the individual machine and is not tracked in the repository. Each developer must manually replicate it, and there is no mechanism to propagate updates when hooks or MCP definitions change — the same drift and compliance risk as the wiki approach, but without even the discoverability of a wiki page. Version-controlled project configuration committed alongside the code (.claude/ and .mcp.json) is the correct scope for shared team assets.",
+          "citation": {
+            "title": "Claude Code — memory (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,604 @@
+{
+  "examId": "ccar-p-exam3",
+  "caseId": "CS5",
+  "caseTitle": "Veridian Industrial Systems — field-service and equipment-maintenance assistant",
+  "caseScenario": "Veridian Industrial Systems manufactures large-scale process automation equipment—centrifugal compressors, heat exchangers, and variable-frequency industrial drives—primarily for chemical and petrochemical plant customers across North America, Europe, and the Middle East. The company operates a global field-service workforce of approximately 2,400 technicians who perform commissioning, scheduled preventive maintenance, and emergency breakdown response at customer sites. Each technician carries a ruggedized tablet pre-loaded with a field application, but plant environments impose severe connectivity constraints: radio-frequency shielding in compressor halls, explosion-proof zones that prohibit cellular repeaters, and underground equipment vaults routinely produce 4–8 hours of complete network isolation per shift. Veridian's installed base encompasses 47,000 discrete equipment units, and the authoritative maintenance corpus spans 18,000 pages of model-specific service manuals, torque tables, and engineering change notices updated quarterly.\n\nVeridian's engineering leadership has approved deployment of a Claude-powered maintenance assistant embedded in the tablet application. The assistant's primary functions are fault-code interpretation, step-by-step repair guidance, part-number lookup, and safety-procedure surfacing. Critically, every procedure that involves lockout/tagout (LOTO), pressure isolation, or energized-conductor work is classified as a human-confirmation step under Veridian's EHS (Environment, Health & Safety) policy: the technician must explicitly acknowledge the step before the assistant continues. The company's CMMS (Computerized Maintenance Management System) is the system of record; every field action taken with AI assistance must be logged there with technician ID, equipment unit ID, and timestamp. Regulatory requirements in the EU and the UAE additionally mandate that no customer-site operational data—fault codes, live sensor readings, or plant process parameters—may be transmitted to third-party AI infrastructure without an executed data-processing agreement with each customer.\n\nThe product team has set a p95 interactive response-time target of under 3 seconds when the device is online, to match the pacing of in-person supervisor guidance. The rollout begins with a pilot of 120 technicians serving Veridian's largest account, Helion Petrochemical, before expanding to the full workforce. The architecture must therefore prove correctness on the Helion deployment before it is locked for global scale. A governance review is scheduled 90 days post-launch; Veridian's Chief Safety Officer has indicated that any audit finding linking an AI response to an unguided LOTO step would halt the program immediately.",
+  "caseRequirements": [
+    "R1: The assistant must remain fully functional—fault lookup, repair guidance, and safety surfacing—for at least 8 hours of continuous network isolation per shift.",
+    "R2: Every procedure step classified as lockout/tagout, pressure isolation, or energized-conductor work must trigger an explicit human-confirmation gate; the assistant must not advance past that step without recorded technician acknowledgment.",
+    "R3: Every response that recommends a repair action must cite the specific Veridian maintenance-manual section number it is drawn from; improvised procedures not traceable to the corpus are prohibited.",
+    "R4: p95 end-to-end response latency must be under 3 seconds on the interactive path when the device is online.",
+    "R5: Every field action taken with AI assistance must be logged to Veridian's CMMS with technician ID, equipment unit ID, and UTC timestamp before the technician proceeds to the next step.",
+    "R6: No customer-site operational data (fault codes, sensor readings, plant process parameters) may be transmitted to third-party AI infrastructure without an executed data-processing agreement with that customer."
+  ],
+  "questions": [
+    {
+      "id": "P3-CS5-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Veridian's architect must choose a base architecture for the field assistant that satisfies the 8-hour offline requirement (R1) while keeping p95 latency under 3 seconds online (R4) and preventing customer data from reaching third-party AI infrastructure without an agreement (R6). Which architecture best satisfies all three constraints simultaneously?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Bundle a compressed, quantized version of the approved manual corpus on the device as a vector store; use an on-device inference runtime for offline work; switch to the Anthropic API (Claude Haiku 4.5) online, but only send fault codes already covered by a customer DPA.",
+          "correct": true,
+          "explanation": "This architecture satisfies all three constraints: the on-device vector store plus local inference covers R1 (8-hour offline), Claude Haiku 4.5 via API covers R4 (lowest-latency current model), and restricting API calls to fault codes with an executed DPA satisfies R6 by design rather than by filter. Unlike option B, the control is architectural—data lacking a DPA never reaches the API path. Unlike option C, offline capability is never disabled, and no fragile strip layer can misconfigure.",
+          "citation": {
+            "title": "Models overview — Claude Haiku 4.5",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Deploy a small on-device model for offline use; route all online requests through a self-hosted Claude API proxy that identifies and strips operational data fields before forwarding the sanitized request to the Anthropic API, satisfying R1 directly and aiming to satisfy R6 through the strip filter.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Stripping operational data at a proxy layer addresses R6 in spirit, satisfies R1 with on-device inference, and can hit R4 if the proxy adds little overhead—making this a genuinely defensible design a competent architect might choose. However, it does not meet R6 because stripping relies on correctly identifying every data field in every future request format; a misconfiguration or new field silently transmits customer data. An architectural gate (DPA check before routing) is more robust than a filter. The small on-device model may also lack the reasoning depth for complex fault diagnosis, risking R3 quality.",
+          "citation": {
+            "title": "Tool use overview — client vs. server execution",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Run Claude exclusively via the Anthropic API for all interactions; cache the full 18,000-page corpus in prompt cache to hit sub-3-second latency; disable the assistant when offline.",
+          "correct": false,
+          "explanation": "Disabling the assistant when offline directly violates R1, which requires 8 hours of full functionality per shift. Plant environments with extended connectivity gaps would leave technicians without guidance for entire shifts—an unacceptable safety gap given LOTO classification duties. Prompt caching can help with R4 but cannot address the offline availability requirement, which is a hard constraint, not a performance optimization.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use the Message Batches API to pre-compute answers to all known fault codes nightly; serve cached answers offline; submit new fault codes as batch jobs with results returned within 24 hours.",
+          "correct": false,
+          "explanation": "Batch pre-computation cannot handle novel fault combinations or real-time diagnostic chains that arise during an actual breakdown. The 24-hour result window of the Message Batches API makes it unsuitable for interactive guidance (R4). It also cannot satisfy R2's real-time confirmation gate requirement for LOTO steps, since gate logic must fire dynamically based on the specific step reached.",
+          "citation": {
+            "title": "Batch processing — Message Batches API",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-02",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D3", "D5"],
+      "question": "During online operation, the assistant must retrieve the relevant manual section, surface it to Claude, and return a cited response within the 3-second p95 budget (R4). The 18,000-page corpus is static for the quarter. Which prompting and caching strategy best achieves this latency target without violating R6?",
+      "options": [
+        {
+          "key": "A",
+          "text": "On each request, inject the full corpus into the system prompt without cache breakpoints; rely on Claude's long-context retrieval ability to find the relevant section.",
+          "correct": false,
+          "explanation": "Injecting 18,000 pages without cache breakpoints means every request pays full input-token processing cost, making sub-3-second p95 latency (R4) essentially impossible at scale. The corpus tokens would dominate request time and cost regardless of the underlying model speed. Prompt caching exists precisely to avoid re-processing stable content on every call.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Cache the entire 18,000-page corpus as a single system-prompt block with a 1-hour TTL breakpoint (2x write cost, 0.1x read cost); send the fault code plus live sensor readings directly in the user message to give Claude the most complete diagnostic context available.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Caching the corpus with a 1-hour TTL is technically valid (2x write cost, 0.1x read cost thereafter) and would help R4 once the cache is warm—making this a plausible choice a practitioner might defend. However, including live sensor readings in the user message transmits customer-site operational data to the Anthropic API, violating R6 for any customer without an executed DPA. The data-handling violation is a blocking problem that the caching benefit cannot offset. The correct approach sends only the pre-filtered manual section, not raw plant telemetry.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use tool_choice: any to force Claude to call a corpus-search tool on every request; let the tool fetch the section; cache nothing because the manual updates quarterly.",
+          "correct": false,
+          "explanation": "Quarterly updates do not preclude caching within the quarter; a 5-minute TTL cache refreshed on each request captures the stable corpus for the entire quarter. Forcing a tool call on every request adds an extra round-trip and re-processes uncached tool definitions each time, adding latency rather than reducing it compared to pre-retrieving the section before the API call.",
+          "citation": {
+            "title": "Define tools — forcing tool use",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Place the tool definitions at the first cache breakpoint and the pre-retrieved relevant manual section (fetched offline via vector search before the API call) in the messages array; keep the system prompt short and static.",
+          "correct": true,
+          "explanation": "This follows the correct breakpoint ordering (tools → system → messages) and keeps only the pre-retrieved section in the live message path, minimizing uncached tokens per request. Vector search narrows the corpus to the relevant pages before the API call, so the input is small and fast—hitting R4. The approach sends only the pre-filtered section, not raw sensor data or plant telemetry, so R6 is respected. Stable tool definitions are cached and re-used across requests, unlike option A (no caching) or option B (R6 violation).",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-03",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "The assistant must log every AI-assisted field action to Veridian's CMMS before the technician advances to the next step (R5), and must enforce human-confirmation gates for LOTO steps (R2). Which integration pattern correctly positions these controls in the agentic loop?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add CMMS logging as a post-processing step after the technician completes the full work order; surface LOTO gates as instructional text in Claude's response and rely on the technician to re-read them before proceeding.",
+          "correct": false,
+          "explanation": "Post-completion logging does not satisfy R5, which requires the log entry before the technician proceeds to the next step—not after the entire work order is done. Instructional text for LOTO gates is insufficient for R2; the requirement calls for a recorded acknowledgment gate, not a passive reminder that can be skipped or overlooked during time-pressured field work.",
+          "citation": {
+            "title": "Handle tool calls — is_error and tool_result",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Define a log_action tool and a confirm_loto tool; include them in the assistant's tool set with clear descriptions; instruct Claude in the system prompt to always call log_action after each step and to always call confirm_loto before advancing past any LOTO-classified procedure step.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a reasonable tool design and would often work, satisfying R3 citation and R5 logging in normal operation—making it a genuinely defensible architecture. However, it does not meet R2 because it relies on Claude consistently choosing to call the tools via prompt instruction rather than through a deterministic architectural constraint. A model that omits a tool call—due to context pressure, a prompt-injection attempt, or an unusual fault sequence—would advance past a LOTO step without a recorded gate. R2 is a hard safety boundary, not a behavioral preference that can be entrusted to probabilistic model behavior.",
+          "citation": {
+            "title": "Define tools — controlling Claude's output",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Define log_action and confirm_loto as tools; have the orchestration layer parse Claude's output for LOTO-classified steps and programmatically block advancement until confirm_loto returns a recorded acknowledgment; call log_action in the same turn before unblocking.",
+          "correct": true,
+          "explanation": "Placing the LOTO gate and CMMS log call in the orchestration layer—not inside Claude's probabilistic decision—converts them from behavioral guidance into deterministic controls. The orchestrator inspects each proposed step, classifies it against Veridian's LOTO taxonomy, and withholds the next message to Claude until both the confirmation and log entry are complete. This satisfies R2 (recorded gate before advancement) and R5 (log before next step) regardless of what Claude outputs, because the controls are enforced by code, not by model behavior. It beats option B because the safety guarantee does not depend on Claude reliably choosing to call the tools.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use tool_choice: none to prevent Claude from calling tools directly; have the application layer detect LOTO keywords in Claude's text output using regex; log to CMMS when keywords are detected.",
+          "correct": false,
+          "explanation": "Keyword-based detection of LOTO steps is brittle: novel phrasing, synonym variation, or corpus-specific terminology can all cause misses. tool_choice: none prevents Claude from calling any tools, eliminating the structured action surface entirely and making R3 (cited section) harder to enforce programmatically. Regex pattern matching on model output is not a reliable safety control for a hard R2 boundary that the CSO's audit will scrutinize.",
+          "citation": {
+            "title": "Define tools — tool_choice options",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-04",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "Veridian wants the assistant to automatically cross-reference a fault code against three data sources in parallel: (1) the on-device vector store, (2) Veridian's parts catalog API, and (3) the equipment's maintenance history in the CMMS. The architect must decide how to structure this lookup within the 3-second p95 budget (R4). Which approach is correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use tool_choice: any with disable_parallel_tool_use set to false, define all three lookups as separate tools, and let Claude call them in a single parallel turn; collect all three tool_results in one user message before resuming.",
+          "correct": true,
+          "explanation": "Setting disable_parallel_tool_use: false (the default) inside tool_choice allows Claude to emit multiple tool_use blocks in a single response turn. The application layer executes all three lookups concurrently and returns all three tool_result blocks in a single subsequent user message, keeping the total round-trip count to one API call for the lookup phase. This is the canonical parallel tool use pattern and directly addresses R4 by avoiding sequential round-trips that would multiply latency. The three results are then available for R3 citation in the final response. Option C, the runner-up, is a genuine contender: pre-assembling the three sources on the application layer is a legitimate prompt-chaining pattern, it keeps the Claude call simple, and it can hold R4 on a straightforward lookup. Its weakness surfaces on branching diagnoses — with parallel tool use disabled, any follow-up data the fault trail demands must be gathered in a second application-layer assembly and a second API turn, which reintroduces exactly the serial round-trips that put the 3-second p95 in R4 at risk. Native parallel tool use keeps the single-turn latency profile while leaving Claude free to widen the lookup when the diagnosis requires it.",
+          "citation": {
+            "title": "Define tools — tool_choice and disable_parallel_tool_use",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Call each lookup tool sequentially using tool_choice: tool, passing the result of each into the next prompt turn so Claude can reason incrementally about each data source before proceeding.",
+          "correct": false,
+          "explanation": "Sequential tool calls triple the number of API round-trips needed to gather the same information. Each round-trip adds network and inference latency. For a p95 target of under 3 seconds (R4), three sequential turns for a single fault lookup are highly likely to exceed the budget, especially under plant-floor network conditions with variable connectivity. Parallel collection is both faster and architecturally simpler for this use case.",
+          "citation": {
+            "title": "Define tools — forcing tool use",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Retrieve all three data sources on the application layer before the Claude call, merge them into a single pre-assembled context block, then invoke Claude with disable_parallel_tool_use: true so the response path stays simple and predictable without additional tool round-trips.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Pre-assembling context before the Claude call is a valid prompt-chaining pattern and can satisfy R4 if assembly is fast—this is a defensible approach that keeps the Claude call simple. However, setting disable_parallel_tool_use: true in the subsequent turn blocks Claude from requesting additional parallel lookups if the first response reveals a need for more data, reducing diagnostic flexibility. More critically, this pattern also forfeits the ability to let Claude drive follow-up lookups dynamically when a fault diagnosis branches unexpectedly. Option A preserves both parallelism and adaptability without violating R4.",
+          "citation": {
+            "title": "Define tools — tool_choice and disable_parallel_tool_use",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Run all three lookups as MCP server tools exposed via a remote MCP server; rely on MCP's internal concurrency to parallelize execution without modifying the Claude tool call structure.",
+          "correct": false,
+          "explanation": "MCP server tools on a remote connector add network hops that increase latency rather than reducing it. More critically, sending fault codes to a remote MCP server transmits customer-site data to third-party infrastructure, violating R6 for customers without a DPA. The MCP connector is appropriate for data that is permitted to leave the device, not for plant-floor operational data under Veridian's data-residency constraints.",
+          "citation": {
+            "title": "MCP connector",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-05",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D3", "D2"],
+      "question": "A technician working on a high-pressure heat exchanger asks the assistant: 'What's the fastest way to open the inlet isolation valve while the exchanger is still pressurized?' Veridian's safety policy classifies pressurized-line entry as a LOTO step requiring human confirmation (R2). The assistant must respond correctly without deceiving or endangering the technician. What is the right behavior?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Answer the question directly with the fastest procedure from the manual, then append a safety disclaimer at the end of the response noting that LOTO normally applies.",
+          "correct": false,
+          "explanation": "Providing the procedure first and appending a disclaimer inverts the safety hierarchy. Anthropic's guidance is that safety-critical actions should not proceed without appropriate human controls in place. A disclaimer at the end does not constitute the recorded acknowledgment gate required by R2, and a technician who acts on the first part of the response may do so before reading the disclaimer—especially under time pressure in an emergency.",
+          "citation": {
+            "title": "Building effective agents — safety and human oversight",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Decline to answer any question involving pressurized equipment and instruct the technician to call the EHS hotline instead.",
+          "correct": false,
+          "explanation": "A blanket refusal on pressurized-equipment questions defeats the purpose of the assistant and is unnecessary. The right behavior is gate-controlled guidance: surface the LOTO requirement, trigger the confirmation gate, and then provide the cited procedure once acknowledgment is recorded. Total refusal also leaves the technician without the corpus-backed guidance that could prevent a worse improvised action taken without any reference at all.",
+          "citation": {
+            "title": "Building effective agents — when to pause and verify",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Detect the pressurized-line classification, trigger the confirm_loto gate before returning any procedure text, cite the relevant manual section (R3) only after acknowledgment is recorded, and log the gate event to the CMMS (R5).",
+          "correct": true,
+          "explanation": "This sequence satisfies all applicable requirements: the orchestration layer detects the LOTO classification (R2), the gate fires before any procedural content is revealed, the section citation follows acknowledgment (R3), and the CMMS log captures the gate event with technician ID (R5). It also follows Anthropic's guidance that agents operating in safety-critical contexts should pause and verify before irreversible or high-risk actions. Unlike option A, no procedure is provided before the acknowledgment is recorded. Unlike option B, the technician still receives complete corpus-backed guidance once the gate is cleared. Option D, the runner-up, is the most tempting alternative because it mirrors how an experienced technician actually triages risk and it avoids gate fatigue on routine work. It fails R2, which is written as a taxonomy match rather than a risk judgment: the gate must fire whenever the procedure class is LOTO, pressure isolation, or energized-conductor work, so making the model the arbiter allows phrasing or context length to suppress a gate that policy requires. It also means no gate event exists to log under R5 on precisely the cases where the audit trail matters most.",
+          "citation": {
+            "title": "Building effective agents — safety and human oversight",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Ask Claude to evaluate whether the technician's specific request sounds genuinely unsafe given the described equipment state; if Claude's in-context assessment determines the action seems like a routine, lower-risk maneuver, allow the response to proceed without triggering the formal LOTO gate.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Delegating LOTO classification to Claude's in-context judgment seems operationally sensible—experienced technicians do make contextual safety calls—but it does not meet R2. The policy is not 'trigger LOTO gate if Claude thinks it sounds unsafe'; it is 'trigger LOTO gate whenever the procedure class matches the taxonomy.' Using model judgment as the gate arbiter introduces failure modes: a manipulative prompt, unusual phrasing, or a long context window could cause the gate to be skipped. This is a plausible approach that practitioners might try, but R2 requires deterministic classification by the orchestration layer, not probabilistic assessment by the model.",
+          "citation": {
+            "title": "Building effective agents — safety and human oversight",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-06",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D3", "D1"],
+      "question": "The Helion Petrochemical pilot ran for 60 days. Technicians report that 22% of fault-code lookups return a 'No matching section found' response, even though the corpus contains the relevant content. The product team needs to diagnose whether the failure is in retrieval, in Claude's reasoning, or in corpus coverage. What is the most systematic evaluation approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expand the system prompt to instruct Claude to search more broadly before returning 'no match'; measure whether the miss rate drops over the next 30 days in production.",
+          "correct": false,
+          "explanation": "Prompt modification without first identifying the failure layer is hypothesis-driven guesswork. If the failure is in the vector-retrieval step (documents never surfaced to Claude), adjusting Claude's instructions will have no effect whatsoever. Running a 30-day measurement cycle before diagnosing the root cause delays resolution and means technicians continue receiving unhelpful responses for another month—a significant operational and safety cost.",
+          "citation": {
+            "title": "Building effective agents — evaluation and iteration",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Log the raw fault code, the top-k retrieved chunks, and the Claude response for each miss; evaluate retrieval recall separately from generation accuracy using a held-out annotated set of fault-code/section pairs.",
+          "correct": true,
+          "explanation": "Separating retrieval recall evaluation from generation accuracy is the standard diagnostic decomposition for RAG systems. Logging the top-k retrieved chunks reveals whether the relevant section was ever surfaced to Claude (retrieval failure) or whether Claude failed to use a correctly retrieved section (generation failure). A held-out annotated set provides ground truth for both layers independently, giving the team actionable data in one evaluation cycle. The logged data also satisfies future auditor requests about R3 compliance coverage, so it serves dual purposes. Option C, the runner-up, is a reasonable experiment — it does test the generation-side hypothesis, and its rollback trigger shows appropriate respect for R4. It is nonetheless the weaker choice because it probes only one of the three candidate layers: a model upgrade leaves the retrieval step untouched, so if the relevant section was never surfaced the miss rate will not move and two weeks are spent learning nothing. It also puts the R4 3-second budget at risk for the entire pilot cohort, whereas this option isolates retrieval from generation offline with production untouched.",
+          "citation": {
+            "title": "Building effective agents — evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Switch the online path to Claude Opus 5 for all lookups; run for two weeks with full latency monitoring and measure whether the miss rate drops compared to the Haiku 4.5 baseline; roll back immediately if p95 latency exceeds the 3-second budget set by R4.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Upgrading to Claude Opus 5 is a defensible hypothesis if the failure is generation-side—the larger model may better synthesize ambiguous section matches, and the rollback plan addresses R4 risk. This approach would expose whether the failure is in Claude's reasoning. However, it does not satisfy R4 risk-free: Opus 5 carries higher latency than Haiku 4.5, and running a live production investigation that may breach the 3-second budget for the full pilot cohort is unnecessary when option B can diagnose the failure layer without changing the production model. Diagnose first, then prescribe.",
+          "citation": {
+            "title": "Models overview — Claude Opus 5",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Ask technicians to flag missed lookups in the app UI; use those flags to retrain the vector store embeddings on flagged fault codes exclusively.",
+          "correct": false,
+          "explanation": "User flagging provides a noisy, incomplete signal: technicians under time pressure often will not flag misses, and the flags do not distinguish retrieval failures from generation failures. Retraining embeddings only on flagged cases without a systematic evaluation may fix some misses while introducing regression on currently working queries. This is a reactive fix that addresses symptoms without diagnosing the root cause.",
+          "citation": {
+            "title": "Building effective agents — iteration and feedback",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-07",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D5", "D4"],
+      "question": "Ninety days after launch, Veridian's Chief Safety Officer schedules the governance review. She asks: 'How do we know the assistant has never advanced past a LOTO step without a recorded technician acknowledgment since go-live?' The product team must provide a satisfying, auditable answer. Which approach best answers her question?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Show the CSO the system prompt instructing Claude not to advance past LOTO steps, and explain that Claude's training makes it reliably refuse safety-violating requests.",
+          "correct": false,
+          "explanation": "A system prompt is a probabilistic behavioral constraint, not an audit record. Showing the prompt cannot demonstrate what the system actually did across tens of thousands of technician interactions over 90 days. Claude's training dispositions describe general tendencies, not deterministic enforcement of application-specific safety gates. This answer would not satisfy a professional safety auditor seeking evidence of what actually occurred.",
+          "citation": {
+            "title": "Building effective agents — human oversight",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Pull the CMMS log and demonstrate that every work order with a LOTO-classified step contains a confirmation event record (with technician ID and timestamp) that precedes the next-step log entry; show the count of work orders where this ordering was violated.",
+          "correct": true,
+          "explanation": "The CMMS log, established as the architectural system of record under R5, provides tamper-evident evidence of what actually happened in the field. By verifying that every LOTO-step record is followed by a confirmation event that precedes the next-step entry—with technician ID and timestamp—the team can demonstrate compliance or surface any violations. This is the only approach that answers the CSO's question with historical data rather than design intent, directly leveraging R5 logging as an audit artifact. Option C, the runner-up, is not a bad idea — a structured red-team exercise is a control Veridian's program should have, and it would expose bypass paths that a log review cannot. It is the wrong answer to this particular question because it is prospective: it establishes that the gate resists attack today, not that R2 held on every work order already completed since go-live. Only the R5 trail carries that retrospective proof.",
+          "citation": {
+            "title": "Building effective agents — maintaining human oversight",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Commission a structured red-team exercise where security testers and EHS specialists spend one to two weeks attempting to bypass LOTO gates using adversarial prompts, edge-case fault sequences, and social-engineering approaches; report results to the CSO as evidence that the system resists known attack vectors.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Red-team testing is a sound ongoing safety practice and should be part of Veridian's security program—this is a genuinely appropriate control that a well-designed program would include. However, it answers 'can the gate be bypassed today under adversarial conditions' rather than 'was the gate bypassed in the 90 days already on record.' A clean red-team result is prospective evidence and cannot demonstrate that R2 actually held across every completed work order, which is precisely what the CSO asked. Only the R5 audit trail carries that historical proof, which is why option B answers the governance review and this does not.",
+          "citation": {
+            "title": "Building effective agents — safety testing",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Export Claude's conversation logs and manually review a 5% sample for LOTO steps; extrapolate the compliance rate to the full population using statistical confidence intervals.",
+          "correct": false,
+          "explanation": "Sampling conversation logs is labor-intensive and provides a probabilistic estimate rather than a definitive audit. A 5% sample could miss the one work order where a gate was skipped, and confidence intervals acknowledge that uncertainty rather than resolving it. The CMMS log (R5) records every action precisely to make sampling unnecessary and to provide exhaustive verification rather than extrapolation.",
+          "citation": {
+            "title": "Building effective agents — evaluation and logging",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-08",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Veridian wants to expose the maintenance corpus to the assistant via MCP so that future model upgrades require no re-embedding. An engineer proposes hosting an MCP server on the plant floor's local network. The security team flags two risks: confused-deputy attacks and token passthrough. Which MCP design correctly mitigates both risks given Veridian's constraints?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Host the MCP server on the local plant network; pass the technician's session token through to the corpus tool so the server can authenticate which caller issued the request; scope all tool access to read-only corpus resources.",
+          "correct": false,
+          "explanation": "Passing the technician's session token through the MCP server to an underlying service is the token-passthrough anti-pattern that Anthropic explicitly prohibits. An MCP server should hold its own credentials for downstream resources, never relay caller credentials. Token passthrough creates a vector where a compromised MCP server could exfiltrate credentials and impersonate technicians against other services beyond the corpus.",
+          "citation": {
+            "title": "MCP architecture",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Use Anthropic's remote MCP connector instead of building a local server; configure it with a read-only Veridian corpus API key scoped to manual content only; rely on Anthropic's infrastructure isolation and authentication model to handle confused-deputy and token passthrough risks without additional custom mitigations.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A remote MCP connector hosted on Anthropic's infrastructure would mitigate both named security risks through Anthropic's own controls—making this architecturally sound for non-regulated workloads. However, it would transmit corpus lookups that embed fault codes and plant identifiers from the technician's context to third-party infrastructure, violating R6 for customers without an executed DPA. The security properties of the remote connector do not resolve the data-residency constraint; that requires keeping the server within the plant perimeter as in option D.",
+          "citation": {
+            "title": "MCP connector",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Expose the full CMMS database as an MCP resource alongside the corpus; give the MCP server broad database credentials so it can respond to any technician query without pre-scoping.",
+          "correct": false,
+          "explanation": "Broad database credentials on an MCP server violate the principle of scope minimization: a compromised local server would have access to Veridian's full CMMS, including every customer's maintenance history. The MCP server should hold credentials scoped to the minimum data set required for corpus lookup only, not the entire CMMS. This maximizes blast radius, exposes other customers' operational data contrary to R6, and puts write access to the CMMS system of record that R5 depends on into the hands of a plant-floor service.",
+          "citation": {
+            "title": "MCP architecture — security considerations",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Host the MCP server on the local plant network; give the server its own read-only corpus credentials; validate that every incoming tool request matches an allow-list of tool names and parameter shapes before executing; never relay caller tokens downstream.",
+          "correct": true,
+          "explanation": "This design mitigates both named risks: the server holds its own credentials rather than relaying caller tokens (no passthrough), and an allow-list of tool names and parameter shapes blocks confused-deputy attacks where a malicious request tries to invoke an unintended tool or pass unexpected parameters. Hosting on the local plant network keeps corpus access within the perimeter, consistent with R6. This matches Anthropic's MCP security guidance of scope minimization. It beats option B because it avoids transmitting plant data to third-party infrastructure, satisfying the data-residency requirement that option B violates.",
+          "citation": {
+            "title": "MCP architecture — security considerations",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D6"],
+      "question": "The Helion pilot will be evaluated for global rollout after 90 days. Veridian's product team must define a test plan that demonstrates R3 compliance (every repair action cites a manual section) at scale before the governance review. Which evaluation design is most rigorous for this requirement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run automated pattern matching for citation presence on all responses; for a stratified sample (by equipment model and fault class), have a domain expert verify that the cited section actually matches the recommended action; track both presence rate and accuracy rate separately.",
+          "correct": true,
+          "explanation": "This two-layer approach combines the scalability of automated presence detection with expert verification of citation accuracy. Stratifying by equipment model and fault class ensures coverage of the corpus's diversity, not just high-frequency queries. Tracking both rates gives the governance review two distinct metrics: did the assistant cite anything (R3 presence), and did it cite the right thing (R3 accuracy). Option B only provides the first metric. This design is feasible within the 90-day window and actionable before global rollout decisions are finalized.",
+          "citation": {
+            "title": "Building effective agents — evaluation and human-in-the-loop",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Build an automated evaluator that checks every response for a section-number pattern match using a regex or structured-output field; flag responses where no citation pattern is found; generate weekly reports on the flagged rate and share with the governance review team and the CSO's office throughout the pilot period.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Automated pattern matching for section numbers catches missing citations efficiently at scale—a meaningful improvement over manual sampling and sufficient to detect R3 absence violations. This is a defensible evaluation approach that covers citation presence comprehensively. However, it cannot verify citation accuracy: a response may cite section 4.3.2 when the correct section is 7.1.1, passing the pattern check while giving the technician guidance from the wrong procedure. Presence alone is not enough for R3 compliance; accuracy verification requires the domain expert layer that option A adds.",
+          "citation": {
+            "title": "Building effective agents — automated evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Manually review 100 randomly sampled responses from the pilot; mark each as 'cited' or 'uncited'; report the citation rate and confidence interval to the governance review.",
+          "correct": false,
+          "explanation": "A 100-response manual sample from a 90-day pilot with 120 technicians likely totals tens of thousands of interactions; 100 responses gives a confidence interval too wide to certify compliance. Moreover, manual review of citation presence does not verify citation accuracy—a response can include a section number that is wrong or misapplied, which is as dangerous to a technician as no citation at all.",
+          "citation": {
+            "title": "Building effective agents — evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use an LLM-as-judge prompt that asks a second Claude instance to rate each response's citation quality on a 1–5 scale; average the scores across all pilot responses and present the aggregate to the CSO.",
+          "correct": false,
+          "explanation": "LLM-as-judge evaluation can be useful for subjective quality dimensions, but asking Claude to judge whether a Veridian section number is accurate requires the judge to have ground-truth access to the 18,000-page corpus. Without providing the relevant section to the judge prompt, the rating is an opinion, not a verification. A score of 4/5 for a hallucinated section number would still fail R3 when reviewed by the CSO. Domain expert verification, as in option A, provides the ground truth the judge prompt cannot supply.",
+          "citation": {
+            "title": "Building effective agents — evaluation approaches",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-10",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D3"],
+      "question": "During the pilot, technicians complain that the assistant's responses are verbose—averaging 400 words per repair step—slowing them down on the plant floor. The team wants to shorten responses without degrading R3 citation quality or R2 gate behavior. Which change correctly addresses verbosity while preserving both safety and citation requirements?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add 'Be concise; limit each step to 50 words' to the system prompt and let Claude decide how to balance brevity with citation detail in each response.",
+          "correct": false,
+          "explanation": "A word-limit instruction creates a competing directive with R3's citation requirement. A 50-word cap may force Claude to omit section numbers or truncate safety warnings to meet the limit, trading citation quality for brevity. Leaving the balance to Claude's in-context judgment means the safety trade-off is uncontrolled and varies unpredictably across different fault types and response patterns.",
+          "citation": {
+            "title": "Prompt engineering best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add few-shot examples of ideal short responses to the system prompt; let the examples implicitly guide Claude toward the desired brevity and citation format without imposing a word count.",
+          "correct": false,
+          "explanation": "Few-shot examples are an effective prompting technique for style guidance and can improve citation format consistency. However, they are a soft behavioral nudge, not a structural guarantee. A novel fault type that does not resemble the examples may produce a verbose response that reverts to the pre-change pattern, and the approach provides no reliable signal to the orchestration layer for R2 gate detection.",
+          "citation": {
+            "title": "Prompt engineering best practices — few-shot examples",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Switch to Claude Haiku 4.5 for all responses given its faster and typically more concise generation; run a 1-week A/B test comparing Haiku 4.5 responses against the current model baseline on average word count and on citation presence rate; promote Haiku 4.5 if both metrics improve.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Claude Haiku 4.5 is already the recommended model for latency (R4) and tends toward more concise responses—making this a plausible hypothesis that a practitioner would reasonably test. A 1-week A/B test with citation rate monitoring is a legitimate evaluation approach. However, model-driven brevity is not guaranteed to preserve R3 citation quality: a more concise model may omit section numbers at a higher rate, and without structural enforcement of the citation field, compliance becomes uncertain under a new model. Option D solves brevity and R3 compliance simultaneously through structure, eliminating the risk of an undetected citation regression.",
+          "citation": {
+            "title": "Models overview — Claude Haiku 4.5",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Define a structured output schema requiring: (1) a mandatory citation field, (2) a mandatory LOTO-flag boolean, (3) an action field capped at 2 sentences; parse the schema in the orchestration layer to enforce the LOTO gate based on the boolean rather than text scanning.",
+          "correct": true,
+          "explanation": "Structured output separates the concerns cleanly: the citation field guarantees R3 compliance regardless of response length, the LOTO-flag boolean gives the orchestration layer a reliable signal to trigger the R2 gate without depending on fragile text parsing, and the 2-sentence action cap enforces brevity. Because the gate and citation are structural fields rather than text content, they cannot be accidentally omitted by brevity pressure. This matches Anthropic's guidance to use structured formats when downstream parsing must be reliable, and it beats option C by providing a structural guarantee rather than a probabilistic improvement.",
+          "citation": {
+            "title": "Prompt engineering — structured output",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-11",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D6", "D1"],
+      "question": "Six months after global rollout, Veridian signs Meridex Chemical as a new customer. Meridex has not yet executed a data-processing agreement with Anthropic. Meridex technicians begin using the field assistant on day one. Under the current architecture chosen in Q1, what must Veridian enforce before Meridex technicians can use the online (API) path?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Nothing additional; the architecture already strips fault codes from API requests at the proxy layer, so Meridex data never reaches the Anthropic API regardless of DPA status.",
+          "correct": false,
+          "explanation": "The architecture selected earlier in this case does not use a proxy strip layer; it routes only fault codes covered by an executed customer DPA to the API path and directs all other data to the on-device path. There is no proxy stripping Meridex data. Operating as if stripping is in place would silently violate R6 for Meridex from day one—a critical error that directly contradicts the architectural decision made earlier in this case.",
+          "citation": {
+            "title": "Models overview — data handling",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Restrict Meridex technicians to the offline (on-device) path only until Meridex executes a DPA; enforce this restriction at the account/customer-ID layer in the application routing logic.",
+          "correct": true,
+          "explanation": "R6 requires an executed DPA before customer-site operational data may be sent to the Anthropic API. Until Meridex signs, no Meridex fault codes or sensor data may take the online path. Enforcing this at the routing layer—keyed to the Meridex customer ID—ensures that Meridex technicians retain offline capability (satisfying R1 for their shifts) without any R6 violation. This is the direct operational consequence of the architectural decision in Q1: the DPA status is the access gate for the API path, not a post-hoc filter applied after data is already in transit. Option D, the runner-up, is the commercially attractive alternative — it produces a documented consent record, keeps Meridex technicians on the full-capability path from day one, and time-boxes the remediation. It still fails R6, which conditions the online path on an *executed* data-processing agreement, a specific legal instrument covering controller/processor roles, retention, and breach notification under the EU and UAE frameworks; an in-app click-through is not that instrument, so Meridex operational data would cross to the API in violation for up to 90 days. Restricting to the on-device path costs Meridex nothing under R1, which is what makes the wait affordable.",
+          "citation": {
+            "title": "Tool use overview — data handling",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Allow Meridex technicians to use the online path but anonymize their tenant ID before each API call so no customer can be identified in the data stream.",
+          "correct": false,
+          "explanation": "Anonymizing the tenant ID does not anonymize the fault codes, sensor readings, or plant process parameters, which are themselves customer-site operational data under R6. The prohibition covers the data content, not only the customer identifier. A fault code specific to Meridex's process configuration is still that customer's operational data regardless of whether the tenant label is removed.",
+          "citation": {
+            "title": "Tool use overview — data handling",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Ask Meridex's site administrator to complete a brief in-app data-handling acknowledgment before technicians activate the online path; treat this click-through as a provisional DPA equivalent, documenting it in the account record, and replace it with a formal DPA within 90 days.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Documenting a site administrator's acknowledgment and committing to a formal DPA within 90 days is a plausible shortcut that a well-intentioned commercial team might propose, and it does at least create a record. However, it does not meet R6, which requires an executed data-processing agreement before any customer-site operational data reaches the API. A DPA is a specific legal instrument defining data controller/processor responsibilities, retention limits, and breach notification obligations under the EU and UAE frameworks R6 exists to satisfy; a click-through acknowledgment is not that instrument, so Meridex data would take the online path in violation of R6 for up to 90 days.",
+          "citation": {
+            "title": "Tool use overview",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS5-12",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D4", "D6"],
+      "question": "Veridian's CTO proposes a cost-reduction measure: replace the on-device vector store with a nightly Message Batches API job that pre-computes answers for every fault code in the corpus and caches the results on-device. This would eliminate the vector-store infrastructure cost. How should the architect evaluate this proposal against Veridian's requirements?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Accept the proposal; the Message Batches API's 50% cost discount justifies the change, and pre-computed answers served from device cache would be faster than live inference.",
+          "correct": false,
+          "explanation": "Pre-computed answers cover only the fault codes enumerated at batch-job time. Real breakdown scenarios produce fault code combinations, contextual diagnostic chains, and multi-step follow-up questions that cannot be pre-indexed. The assistant would fail R3 (unable to cite the correct section for novel combinations) and R2 (unable to dynamically generate LOTO gates for unusual procedure sequences that differ from the pre-generated script). Cost savings do not justify capability regression that directly threatens safety requirements.",
+          "citation": {
+            "title": "Batch processing — Message Batches API",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Reject the proposal because the Message Batches API's 24-hour result delivery window means fault lookups cannot be answered in real time, breaking R1's offline availability requirement.",
+          "correct": false,
+          "explanation": "This reasoning conflates batch result delivery time with offline availability. Once pre-computed results are downloaded and cached on-device from a completed nightly batch job, they are available offline without any API call—so the 24-hour delivery window is irrelevant to R1. The correct rejection arguments are the inability to handle novel fault combinations and the failure to support dynamic LOTO gate logic, not the batch delivery SLA.",
+          "citation": {
+            "title": "Batch processing — Message Batches API",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Reject the full replacement because novel fault combinations and dynamic LOTO gate logic require live inference; propose instead using the Message Batches API only for nightly re-indexing of vector store embeddings when the corpus updates quarterly, capturing the cost benefit without sacrificing the live diagnostic path.",
+          "correct": true,
+          "explanation": "This response correctly identifies why the full replacement fails (R2 and R3 require live inference for dynamic diagnostic chains and real-time gate logic) while salvaging the CTO's cost objective. Using batch jobs to recompute vector store embeddings on corpus update cycles is a legitimate application of the Message Batches API—it is not time-sensitive, benefits from the 50% discount, and does not touch the live inference path that handles novel fault queries. This is a concrete counter-proposal that communicates value to a non-technical stakeholder (D6) while maintaining technical accuracy on R2 and R3. Option D, the runner-up, is the sharper-looking engineering compromise: an 80/20 split that pre-computes the 500 highest-frequency Helion fault codes and keeps live inference for rare and novel combinations captures more of the CTO's savings than re-indexing alone. It fails R2 on the pre-computed half, because a LOTO gate must fire against the step the technician has actually reached, and a cached answer carries only a static procedure script that cannot track that position. This option takes the batch discount on the one workload where it is safe — quarterly embedding re-indexing — and leaves every gate decision on the live path.",
+          "citation": {
+            "title": "Batch processing — Message Batches API",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Accept the proposal conditionally: run the Message Batches API nightly to pre-compute and cache answers for the 500 most common fault codes identified from the Helion pilot data, capturing 80/20 cost savings on high-frequency lookups, while retaining the live inference and vector-store path exclusively for rare codes and novel fault combinations not in the pre-computed set.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A hybrid approach is architecturally coherent and would capture substantial cost savings on high-frequency queries while preserving live inference for rare cases—this is a genuinely defensible engineering trade-off that a competent practitioner might propose to the CTO. However, it still fails R2: pre-computed answers cannot generate dynamic LOTO confirmation gates for the 500 common fault codes, because the gate must fire in real time based on the specific step the technician has reached, not a pre-generated procedure script. Once any fault code is on the pre-computed path, its LOTO gate behavior becomes static and cannot adapt to the technician's actual progress, violating the architectural guarantee required by R2.",
+          "citation": {
+            "title": "Batch processing — Message Batches API",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    }
+  ]
+}

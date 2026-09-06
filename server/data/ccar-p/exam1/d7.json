@@ -1,0 +1,75 @@
+{
+  "examId": "ccar-p-exam1",
+  "domainId": "D7",
+  "domainName": "Developer Productivity & Operational Enablement",
+  "questions": [
+    {
+      "id": "P1-D7-01",
+      "question": "A platform team of 40 engineers adopts Claude Code, but results vary wildly: each engineer re-explains build commands, branch conventions, and the review workflow every session, and common tasks like 'fix a ticket' are prompted differently by everyone. What is the highest-leverage standardization?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have each engineer maintain the conventions in their personal ~/.claude/CLAUDE.md so instructions load in every session.",
+          "correct": false,
+          "explanation": "User-level CLAUDE.md is scoped to the individual, not the team — 40 private copies drift immediately and new joiners inherit nothing. Project instructions belong in the repository, where Anthropic's docs note they are shared with team members via source control.",
+          "citation": { "title": "Claude Code Memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Publish a wiki page of recommended prompts and ask engineers to paste the relevant sections into each session.",
+          "correct": false,
+          "explanation": "Manual pasting reintroduces the exact per-session friction being solved and guarantees inconsistent application. Claude Code provides purpose-built mechanisms — CLAUDE.md loaded automatically at session start and slash commands invoked by name — so conventions apply without copy-paste discipline.",
+          "citation": { "title": "Claude Code Best Practices", "url": "https://www.anthropic.com/engineering/claude-code-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Commit a concise project CLAUDE.md (build commands, conventions, workflow rules) and shared slash commands under .claude/commands/ so every engineer's sessions load identical context and repeatable workflows from the repo.",
+          "correct": true,
+          "explanation": "This is the documented team pattern: a project CLAUDE.md checked into source control gives every session persistent shared context, and command files in .claude/commands/ are shared with the team through the repo, turning recurring tasks into consistent, reviewable, versioned workflows. Anthropic's best-practices guidance notes the checked-in file compounds in value as the team contributes.",
+          "citation": { "title": "Claude Code Slash Commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+        },
+        {
+          "key": "D",
+          "text": "Write an exhaustive, several-thousand-line CLAUDE.md covering every scenario so no engineer ever needs to add context.",
+          "correct": false,
+          "explanation": "CLAUDE.md consumes context every session, and Anthropic warns that bloated files reduce adherence — important rules get lost in noise. The guidance is to keep it concise and pruned, moving conditionally relevant material to on-demand mechanisms instead of front-loading everything.",
+          "citation": { "title": "Claude Code Best Practices", "url": "https://www.anthropic.com/engineering/claude-code-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "P1-D7-02",
+      "question": "A fintech's DevOps lead wants Claude Code to auto-review every pull request in CI: read the diff, run the linter, and post findings. Security requires the pipeline agent hold no more capability than the task needs. Which invocation pattern is correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run an interactive claude session on the CI runner; the built-in permission prompts provide the security review.",
+          "correct": false,
+          "explanation": "Interactive permission prompts assume a human is present to approve actions — in CI nobody answers, so the job hangs or approvals get blindly scripted away. Automation is what non-interactive mode (claude -p) exists for, with permissions declared up front.",
+          "citation": { "title": "Run Claude Code Programmatically", "url": "https://docs.claude.com/en/docs/claude-code/headless" }
+        },
+        {
+          "key": "B",
+          "text": "Invoke claude -p non-interactively with --allowedTools scoped to the review's needs (e.g., Read and specific Bash(lint-command *) rules), parsing results via --output-format json.",
+          "correct": true,
+          "explanation": "Non-interactive mode (claude -p) is the documented path for CI integration, and --allowedTools uses permission-rule syntax to pre-approve only named tools and command prefixes — least privilege by construction, which Anthropic notes matters when running unattended. JSON output makes results machine-parseable for the pipeline.",
+          "citation": { "title": "Run Claude Code Programmatically", "url": "https://docs.claude.com/en/docs/claude-code/headless" }
+        },
+        {
+          "key": "C",
+          "text": "Run headless with all permission checks disabled, since CI containers are ephemeral and isolation makes tool restrictions redundant.",
+          "correct": false,
+          "explanation": "Ephemeral containers don't neutralize what an over-permissioned agent can reach — repository contents, credentials in the environment, and the network. Anthropic's guidance pairs unattended runs with scoped allowlists precisely because no human is watching; container lifetime is not a permission model.",
+          "citation": { "title": "Claude Code Best Practices", "url": "https://www.anthropic.com/engineering/claude-code-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Grant unrestricted Bash access but add a CLAUDE.md instruction telling Claude to only run the linter.",
+          "correct": false,
+          "explanation": "CLAUDE.md content is guidance, not enforcement — the docs are explicit that instructions shape behavior with no guarantee of strict compliance. Least privilege must be enforced by the permission layer (allowlists, permission rules), with prompts layered on top, not substituted for it.",
+          "citation": { "title": "Claude Code Memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        }
+      ]
+    }
+  ]
+}

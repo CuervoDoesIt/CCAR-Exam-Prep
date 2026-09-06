@@ -1,0 +1,604 @@
+{
+  "examId": "ccar-p-exam3",
+  "caseId": "CS2",
+  "caseTitle": "Argent Peak Capital — investment-research and client-advisory assistant",
+  "caseScenario": "Argent Peak Capital is a $48 billion AUM active-equity and credit asset manager headquartered in Boston, with satellite offices in London and Singapore. The firm employs 85 equity and credit research analysts who generate approximately 3,200 written research notes per quarter. Client-facing portfolio managers also conduct daily written Q&A with high-net-worth and institutional clients through a secure portal. Argent Peak is registered as an investment adviser with the SEC and is a FINRA member broker-dealer for its distribution subsidiary. All written analyst-to-client and analyst-to-PM communications are subject to FINRA Rule 4511 and SEC Rule 17a-4, which require that every such communication be retained in a tamper-evident, indexed, and auditable archive for a minimum of three years and that the firm be able to produce any record within 72 hours of a regulatory request.\n\nThe CTO has been tasked with deploying a Claude-powered research assistant that helps analysts draft summaries of earnings calls, generate first-pass investment theses from SEC filings, and answer portfolio manager queries against the firm's internal research corpus. A compliance mandate forbids the assistant from surfacing or transmitting material non-public information (MNPI) across analyst coverage desks, and all AI-generated text that is delivered to a client portal must be traceable to the specific source documents from which it was derived. The firm's internal security policy classifies any named-client portfolio position or target-price recommendation as PII-equivalent and prohibits that data from appearing in AI-generated responses visible to parties outside the originating desk.\n\nFrom a cost and performance standpoint, Argent Peak's interactive analyst interface must return a first-meaningful response within 3 seconds at the p95 percentile during market hours (6:00 AM to 6:00 PM ET). After-hours batch jobs — nightly digest generation, quarterly risk-factor summaries, and bulk annotation of 10-K filings — are latency-insensitive but must complete within a 6-hour overnight window and stay within a monthly AI spend ceiling of $35,000 across all workloads. The engineering team is a six-person squad with strong Python skills but limited ML operations experience; the chosen architecture must be operable and observable without a dedicated MLOps team.",
+  "caseRequirements": [
+    "R1: p95 interactive response latency under 3 seconds during market hours (6:00 AM–6:00 PM ET).",
+    "R2: Every AI-generated text delivered to an analyst or client must be captured in an immutable, indexed archive within 60 seconds of generation, satisfying FINRA Rule 4511 and SEC Rule 17a-4 three-year retention.",
+    "R3: All client-portal responses must include traceable citations to the specific source documents from which the answer was derived; un-cited assertions are prohibited.",
+    "R4: Total monthly Claude API spend must not exceed $35,000 across interactive and batch workloads combined.",
+    "R5: Named-client positions, price targets, and any MNPI must be isolated per coverage desk and must not appear in responses visible outside that desk.",
+    "R6: The overnight batch pipeline must complete all nightly digests and bulk annotations within a 6-hour window using the same monthly budget envelope defined in R4."
+  ],
+  "questions": [
+    {
+      "id": "P3-CS2-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Argent Peak's architect is choosing which Claude model to assign to the interactive analyst interface (R1: p95 < 3 s) versus the overnight batch pipeline (R6: 6-hour window, R4: $35k/month budget). Which model pairing best satisfies all three constraints simultaneously?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude Opus 5 for interactive queries, Claude Haiku 4.5 for batch; Opus 5 maximizes research-summary quality and meets R1's latency target while Haiku holds batch costs low.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Using Opus 5 for interactive queries does meet R1's latency goal, and pairing it with Haiku 4.5 for batch keeps batch costs low. However, Opus 5 costs $5/MTok input — 2.5× Sonnet 5 — and at Argent Peak's query volume risks breaching R4's $35,000 monthly ceiling. It satisfies R1 and R6 but fails R4.",
+          "citation": {
+            "title": "Models overview — pricing comparison",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Claude Sonnet 5 for interactive queries, Claude Haiku 4.5 for batch; Sonnet 5 meets R1 at 40% of Opus 5's cost, and Haiku holds batch spend inside R4.",
+          "correct": true,
+          "explanation": "Claude Sonnet 5 ($2/MTok input, fast latency) comfortably meets R1's 3-second p95 target and provides high-quality research summaries. Claude Haiku 4.5 ($1/MTok input, fastest throughput) keeps batch costs low, holding combined monthly spend inside R4. Unlike Option A (the runner-up), which uses Opus 5 at $5/MTok and risks the R4 ceiling, Sonnet 5 provides equivalent latency at a fraction of the cost while satisfying R1, R4, and R6 together.",
+          "citation": {
+            "title": "Models overview — choosing a model",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Claude Haiku 4.5 for both interactive and batch workloads to minimize cost and ensure R4 compliance.",
+          "correct": false,
+          "explanation": "Haiku 4.5 is the fastest and cheapest model but is not optimized for complex multi-document research synthesis. Using it for interactive analyst queries risks output quality falling short of the firm's research standards, and the R1 p95 latency target can still be met by more capable models given their comparable speed profile.",
+          "citation": {
+            "title": "Models overview — choosing a model",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Claude Fable 5.1 for interactive queries because its deeper reasoning produces more accurate investment theses, with Sonnet 5 for batch.",
+          "correct": false,
+          "explanation": "Claude Fable 5.1 has always-on adaptive thinking and the slowest comparative latency in the lineup, and it costs $10/MTok input — double Opus 5 — making R1's 3-second p95 target difficult to achieve consistently and compressing the R4 budget envelope severely. It is built for demanding, long-horizon agentic work, not for an interactive sub-3-second lookup path.",
+          "citation": {
+            "title": "Models overview — comparative latency and pricing",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-02",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "Argent Peak's compliance team requires that every AI-generated string delivered to an analyst or client be archived within 60 seconds (R2). The engineering team proposes intercepting responses at the API layer. Which integration pattern satisfies R2 without introducing a synchronous bottleneck that would violate R1?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Write each response synchronously to the archive database before returning it to the analyst UI, using a transaction that blocks the API response until the write commits.",
+          "correct": false,
+          "explanation": "A synchronous blocking write to an archive database before returning the response adds database commit latency directly to the user-facing path, making the p95 target of R1 very difficult to meet during peak market hours. The write must not block the response path.",
+          "citation": {
+            "title": "Streaming messages",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Stream the response to the analyst UI immediately; in parallel, publish it to an internal message queue whose consumer writes to the immutable archive within 60 seconds.",
+          "correct": true,
+          "explanation": "Streaming directly to the UI preserves R1's latency budget while the parallel async write via a message queue satisfies R2's 60-second archive window. The queue also provides a durable buffer so no record is lost if the archive service has a transient outage. This beats Option C (the runner-up), which relies on a periodic export that cannot reliably guarantee the 60-second SLA from R2 when generation bursts occur.",
+          "citation": {
+            "title": "Streaming messages",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Log responses to a local file and run a scheduled export job every 5 minutes; this avoids any synchronous write on the response path and keeps R1 latency intact.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Logging to a local file and exporting on a 5-minute schedule is operationally simple and does not block the response path, keeping R1 intact. However, a 5-minute export interval does not reliably guarantee the 60-second window required by R2 during burst periods or if the export job is delayed, making this approach non-compliant with R2.",
+          "citation": {
+            "title": "Streaming messages",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Store responses only in the browser session cache and archive them when the analyst closes the browser tab.",
+          "correct": false,
+          "explanation": "Relying on browser-side events to trigger archiving is unreliable: network drops, crashes, and forced logouts can prevent the archive write entirely. SEC Rule 17a-4 requires tamper-evident records; browser session storage is neither tamper-evident nor guaranteed to flush. This fails both R2 and the underlying compliance requirement.",
+          "citation": {
+            "title": "Streaming messages",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-03",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D3", "D4"],
+      "question": "Analysts query the assistant with varying context sizes: short ticker questions (~500 tokens) and long 10-K filing summaries (~18,000 tokens). The system prompt — regulatory disclaimers, desk-specific instructions, and the approved tool list — is 4,200 tokens and identical across every request from the same desk. Under R4's $35,000 monthly budget, which prompt-engineering approach most reduces cost without degrading quality?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Place a cache_control breakpoint after the system prompt so the 4,200-token block is written once and read at ~10% of base input cost on subsequent requests from the same desk.",
+          "correct": true,
+          "explanation": "The system prompt is identical across all desk requests, making it an ideal cache prefix. A 5-minute TTL cache_control breakpoint costs 1.25× to write but only 0.1× per read, yielding roughly 90% savings on that prefix for every subsequent request within the window. This directly reduces cost under R4 without quality loss. It beats Option B (the runner-up), which re-sends all disclaimer tokens on every request at full price rather than exploiting the stable prefix.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Remove regulatory disclaimers from the system prompt and insert them into each user message to keep the shared prompt short and avoid the overhead of configuring cache breakpoints.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Inserting disclaimers per user message keeps the system prompt small and avoids caching setup, but this approach sends the disclaimer tokens on every request at full price — the opposite of the saving R4 needs. It also weakens R5's desk isolation: moving desk-specific regulatory framing out of the authoritative system prompt and into user-supplied turns makes it far easier for a malformed or manipulated message to omit or contradict it. This costs more than caching and introduces compliance fragility, failing R4 compared to Option A.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Truncate any filing context that pushes total input above 8,000 tokens to avoid charges on long contexts.",
+          "correct": false,
+          "explanation": "Truncating SEC filing context to a fixed 8,000-token ceiling degrades output quality for the long 10-K summarization task that is a core use case. Prompt caching is the correct cost lever, not context truncation, which directly undermines research accuracy and potentially violates R3 by omitting source material.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Switch to the 1-hour cache TTL on the system prompt to reduce write frequency, accepting the 2× write price, because the system prompt rarely changes.",
+          "correct": false,
+          "explanation": "While the 1-hour TTL lowers write frequency, it costs 2× the base input price per write versus 1.25× for the 5-minute TTL. At Argent Peak's query rate during market hours, the 5-minute TTL is refreshed on each read and stays continuously warm, making the 1-hour variant unnecessarily expensive per write without a meaningful benefit.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-04",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "Argent Peak's research assistant needs access to four internal data sources: (a) a Bloomberg terminal feed, (b) an internal vector database of 6,000 research notes, (c) the SEC EDGAR filing API, and (d) a real-time desk-specific position ledger restricted by R5. The team is designing MCP servers for integration. Which MCP primitive type should expose the desk position ledger to maintain R5 access control without exposing it to the model by default?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expose the ledger as an MCP tool named get_desk_positions so the model calls it on demand, with the tool's description restricted to users on the originating desk.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Exposing positions as a tool allows the model to invoke it when it determines the information is relevant, and restricting the tool's availability per desk is a valid access-control layer. However, tool execution is model-controlled: the model may call the tool in response to a query from a different desk if that desk's session inadvertently includes the tool in its registry, creating an R5 violation pathway. This fails R5 when tool registries are not perfectly isolated per desk session.",
+          "citation": {
+            "title": "MCP server concepts — tools, resources, prompts",
+            "url": "https://modelcontextprotocol.io/docs/2026-07-28/learn/server-concepts"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Store all desk positions in the system prompt for every desk, but rely on prompt instructions telling Claude not to mention another desk's positions.",
+          "correct": false,
+          "explanation": "Including all desks' positions in every system prompt and relying on instruction-based filtering is a prompt-level control, not an architectural one. Anthropic's guidance is explicit that prompt instructions are probabilistic, not deterministic security boundaries. Placing multi-desk position data in a shared context creates the exact MNPI cross-desk exposure that R5 is designed to prevent.",
+          "citation": {
+            "title": "Claude — building safe agentic systems",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Expose the ledger as an MCP prompt template that embeds the desk's positions in a formatted instruction block.",
+          "correct": false,
+          "explanation": "MCP prompts are user-controlled invocation templates, not a data-access control mechanism. Embedding positions inside a prompt template does not provide the per-session authorization check required by R5 and does not prevent a user from invoking the template from another desk's session if it is discoverable in a shared prompt registry.",
+          "citation": {
+            "title": "MCP server concepts — tools, resources, prompts",
+            "url": "https://modelcontextprotocol.io/docs/2026-07-28/learn/server-concepts"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Expose the ledger as an MCP resource; the application layer fetches it and injects it into the context only after verifying the requesting session belongs to the originating desk.",
+          "correct": true,
+          "explanation": "MCP resources are application-controlled, not model-controlled: the application decides when and whether to read a resource and include it in context. This means desk-membership verification happens in the application layer before any data touches the model, satisfying R5. Tools, by contrast, are model-controlled — the model decides when to call them, which requires perfectly isolated tool registries to enforce R5. This beats Option A (the runner-up): while tool-level restriction is a defensible design, resource access gated by application-side authorization is a stronger architectural guarantee against cross-desk MNPI leakage.",
+          "citation": {
+            "title": "MCP server concepts — tools, resources, prompts",
+            "url": "https://modelcontextprotocol.io/docs/2026-07-28/learn/server-concepts"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-05",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D3"],
+      "question": "Argent Peak's QA lead wants to evaluate whether the assistant's earnings-call summaries are accurate and complete relative to the source transcript. Which evaluation strategy provides the most rigorous automated signal given the team's limited ML operations experience?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run a suite of regex-based string-match checks against named entities (company name, EPS figure, revenue guidance) extracted from the transcript.",
+          "correct": false,
+          "explanation": "Regex entity matching is fast and cheap but captures only surface-level recall of named entities. It misses semantic errors — for example, a summary that correctly names the EPS figure but attributes it to the wrong quarter, or omits key management guidance. This provides weak coverage of the accuracy dimension the firm needs.",
+          "citation": {
+            "title": "Test and evaluate — create strong empirical evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Sample 5% of summaries weekly for manual analyst review; each sampled output is annotated and results feed into a rolling accuracy score tracked over time.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Manual analyst review is high-quality signal and directly reflects domain expertise. Sampling 5% weekly creates a meaningful ground-truth dataset over time and is feasible for a small team. However, this provides no automated coverage for the other 95% of outputs and creates a latency gap between when errors occur and detection. It is insufficient as the primary evaluation mechanism for a regulated firm that must stand behind every cited client-portal response under R3.",
+          "citation": {
+            "title": "Test and evaluate — create strong empirical evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Measure BLEU score between the generated summary and an analyst-written reference summary for each earnings call.",
+          "correct": false,
+          "explanation": "BLEU measures n-gram overlap between generated text and a reference, which penalizes valid paraphrases and rewards superficial word matching. It does not assess whether the summary's factual claims are grounded in the source transcript, making it a poor proxy for the accuracy and completeness R3 requires for client-portal responses.",
+          "citation": {
+            "title": "Test and evaluate — create strong empirical evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use an evaluator-optimizer pattern: a second Claude instance scores factual grounding on a 1–5 scale given the source transcript and flags unsupported claims.",
+          "correct": true,
+          "explanation": "The evaluator-optimizer pattern assigns a separate model instance the role of critic. Providing both the source transcript and the generated summary gives the evaluator grounded context to detect fabricated figures, misattributed quotes, and missing key points — dimensions regex and BLEU cannot reach. This suits a small team because it requires no bespoke ML infrastructure, just the same API already in use. It beats Option B (the runner-up), which relies on analyst spot-checks alone and provides no automated, scalable coverage for R3 compliance.",
+          "citation": {
+            "title": "Building effective agents — evaluator-optimizer pattern",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-06",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D4", "D2"],
+      "question": "Analysts frequently ask the assistant to retrieve a company's latest 10-K risk factors and then cross-reference them against Argent Peak's internal research notes on the same issuer. The tool call sequence can involve up to three sequential tool invocations before a response is ready. During a stress test, the team observes that 12% of multi-tool queries return a stop_reason of 'max_tokens' mid-chain, cutting off the final synthesis. What is the correct fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set tool_choice to {\"type\": \"none\"} after the second tool call to prevent further tool invocations and force a text response.",
+          "correct": false,
+          "explanation": "Setting tool_choice to 'none' prevents the model from making any further tool calls, but it does not increase the output token budget available for the synthesis step. If the synthesis itself is being truncated by max_tokens, this change does nothing to fix the truncation and may cause incomplete responses if the third tool call is actually needed.",
+          "citation": {
+            "title": "Tool use — defining tools and tool_choice",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Switch to parallel tool use by setting disable_parallel_tool_use to false, so all three tools are called in a single turn, reducing round trips and leaving max_tokens fully available for synthesis.",
+          "correct": false,
+          "explanation": "Enabling parallel tool use reduces round-trip latency when tools are independent, but the 10-K risk-factor lookup and the internal-notes cross-reference are sequential by nature — the cross-reference step depends on knowing which risk factors were returned. Parallelizing sequential dependencies does not resolve the logic correctly and does not fix the max_tokens truncation.",
+          "citation": {
+            "title": "Tool use — parallel tool use",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Apply cache_control breakpoints to tool result blocks so repeated calls for the same issuer are served from cache, reducing total context size and saving on R4 input costs.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Caching tool results for repeated issuer lookups is a sound optimization that can reduce input context size and cost (R4), and smaller input contexts do leave a larger share of the combined token budget for output. However, stop_reason 'max_tokens' is governed by the output token ceiling — reducing input size alone does not raise that ceiling. The direct fix is to raise max_tokens on the synthesis call. Caching is valuable but does not address the root cause of truncated R3-required synthesis.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Increase max_tokens on the request that contains the final synthesis step; the stop_reason 'max_tokens' means the budget for that specific API call was exhausted before the model finished generating.",
+          "correct": true,
+          "explanation": "A stop_reason of 'max_tokens' indicates the model reached the max_tokens ceiling before completing the response — it is not a tool-chaining logic error. The correct fix is to raise max_tokens on the synthesis-turn request, which is the call made after the final tool_result is returned. This directly addresses the truncation and ensures R3's full-citation requirement can be met. Option C (the runner-up) proposes caching to reduce input size, which can help with R4 cost but does not raise the output token ceiling causing the truncation.",
+          "citation": {
+            "title": "Tool use overview — stop reasons",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-07",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D3", "D1"],
+      "question": "Argent Peak's CCO raises a concern: the MCP server that connects to the internal research-note database also has write access to update research ratings. An analyst reports that a fabricated tool call appeared to attempt to overwrite a rating with data that was never in the conversation. Which MCP security risk does this describe, and what is the correct architectural mitigation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "This is a prompt injection exploiting the confused deputy problem. Mitigate by scoping the MCP server to read-only on ratings and requiring explicit analyst confirmation before any separate write tool executes.",
+          "correct": true,
+          "explanation": "The confused deputy problem arises when a component acting on a user's behalf holds broader permissions than the current interaction requires, so an attacker who can influence its input can borrow those permissions. That is exactly this MCP server: it carries rating-write authority into every read-only research query. A malicious document in the research corpus can inject instructions that the model mistakes for legitimate commands, causing it to invoke write tools it should not. Limiting the research MCP server to read-only and requiring an explicit analyst confirmation step before any rating write directly removes the blast radius. This beats Option B (the runner-up), which proposes identity validation but not architectural scope reduction — prompt-level filtering is probabilistic and cannot reliably block a determined injection attack that bypasses R5.",
+          "citation": {
+            "title": "Building effective agents — security and trust",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "This is a token-passthrough vulnerability. Mitigate by having the MCP server validate that the OAuth token forwarded by the client matches the authenticated analyst's session before executing any write operation.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Token passthrough — where the MCP client forwards an end-user token directly to the MCP server — is a documented MCP security risk, and identity validation at the server is a valid defense layer. However, the scenario describes the model fabricating a tool call not initiated by the analyst; that is the confused deputy pattern, not token passthrough. Fixing identity validation does not prevent an injected instruction from reaching the model and triggering the fabricated write, failing to address the R5 isolation requirement at its root.",
+          "citation": {
+            "title": "MCP architecture overview",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Log all tool invocations in the archive (R2) so that the compliance team can detect unauthorized writes after the fact.",
+          "correct": false,
+          "explanation": "Logging tool invocations is required by R2 and valuable for audit, but it is a detective control, not a preventive one. After-the-fact detection does not undo a fabricated rating overwrite that has already propagated to downstream client reports or portfolio management systems. Preventive scope restriction is the correct architectural response.",
+          "citation": {
+            "title": "Building effective agents — human oversight",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Route all write operations through an orchestrator Claude instance that reviews the write intent and refuses it if it was not explicitly requested in the current conversation.",
+          "correct": false,
+          "explanation": "An LLM orchestrator reviewing write intent adds a layer of scrutiny, but another model instance can itself be confused-deputied by the same injected content. Using a language model as a security boundary for write authorization is a probabilistic control. Anthropic's guidance is to enforce must-hold security boundaries with deterministic architectural controls — minimum scope and human confirmation — rather than additional model checks.",
+          "citation": {
+            "title": "Building effective agents — orchestrator-workers pattern",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-08",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D4", "D7"],
+      "question": "The overnight batch pipeline must annotate approximately 800 SEC filings per night within the 6-hour window (R6). Each annotation involves two sequential tool calls: fetch_filing and extract_risk_factors. The team estimates 95 seconds average per filing through the synchronous API. At that rate, processing 800 filings serially would take approximately 21 hours — three times R6's budget. Which architectural change brings the pipeline inside the 6-hour window at the lowest additional operational burden for the six-person team?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Submit all 800 filings as a single Message Batches API request; the batch API processes requests asynchronously at 50% cost savings and most batches complete within 1 hour.",
+          "correct": true,
+          "explanation": "The Message Batches API is purpose-built for large volumes of independent, latency-insensitive requests. Each of the 800 filing annotation pairs becomes one batch request, processed in parallel with no additional engineering for concurrency management. The 50% price reduction directly benefits R4's $35,000 budget, and most batches complete in less than 1 hour, keeping R6's 6-hour window comfortable. The documented ceiling is 24 hours before a batch expires, not 6, so the pipeline must poll batch status and fall back to the synchronous path if the window is at risk — but that is monitoring, not new infrastructure. It beats Option B (the runner-up), which satisfies R6 but requires the team to build and operate its own worker pool — significant overhead for a six-person team with limited ML ops experience.",
+          "citation": {
+            "title": "Message Batches API — batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Build a worker pool of 20 parallel Python processes, each calling the synchronous Messages API, distributing the 800 filings across workers to achieve approximately 1-hour completion.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Twenty parallel workers would theoretically complete 800 filings in roughly 63 minutes, satisfying R6. However, operating 20 concurrent workers requires the team to manage rate-limit backoff, process supervision, error retry logic, and cost tracking — meaningful operational overhead for a six-person team with limited ML ops experience. The Message Batches API provides equivalent parallelism and the 50% cost discount without any worker infrastructure, making it strictly superior under R4 and the team's operational constraint.",
+          "citation": {
+            "title": "Message Batches API — batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Reduce the filing set to the 200 highest-priority filings per night so processing fits within 6 hours serially.",
+          "correct": false,
+          "explanation": "Reducing coverage to 200 filings per night leaves 600 unannotated. R6 does not ask the pipeline to fit inside 6 hours by doing less work — it requires all nightly digests and bulk annotations to complete in that window. Descoping redefines the requirement rather than meeting it, and leaves material gaps in the corpus that later feed un-sourced client answers.",
+          "citation": {
+            "title": "Message Batches API — batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Switch from Claude Haiku 4.5 to Claude Sonnet 5 for batch, because Sonnet 5 generates more accurate annotations faster, reducing per-filing time enough to fit within 6 hours.",
+          "correct": false,
+          "explanation": "Switching to a more capable but more expensive model does not help when the bottleneck is serial throughput, not per-filing generation time. Even if Sonnet 5 reduced individual annotation time by 30%, the pipeline would still take approximately 14 hours — far outside R6. Additionally, Sonnet 5 costs twice as much per token as Haiku 4.5, directly pressuring R4. The root cause is serialization, which parallel batch execution solves.",
+          "citation": {
+            "title": "Models overview — pricing comparison",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-09",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D3", "D5"],
+      "question": "Three months after launch, the architecture from Question 1 is running well. Argent Peak's London office now requests that client-portal responses be generated in the EU and stored on EU servers to satisfy a new ESMA data-residency opinion. The current pipeline routes all traffic through a single US API endpoint. Which architectural change satisfies the EU data-residency constraint without rebuilding the entire system?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a geographic routing layer that directs EU client sessions to an EU-region Claude deployment on Amazon Bedrock or Google Cloud, while US sessions continue using the direct Anthropic API; both paths write to their respective regional archives.",
+          "correct": true,
+          "explanation": "Amazon Bedrock and Google Cloud are the deployment paths that actually expose Claude through EU regional endpoints, so EU client sessions can be inferenced and archived inside the EU as the ESMA opinion demands, while US desks keep the existing pipeline and its proven R2 archive untouched. The costs are real but bounded and known in advance: Bedrock model IDs carry an `anthropic.` prefix rather than the first-party IDs, EU regional routing carries a modest premium against R4, and the squad maintains a second deployment configuration and a second archive writer. Option C, the runner-up, looks like the cheaper edit but there is no EU region to route to, so it delivers no residency benefit at all. Keeping US traffic on the first-party API also preserves the Message Batches API — unavailable on Bedrock — for the R6 overnight pipeline.",
+          "citation": {
+            "title": "Claude in Amazon Bedrock",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Encrypt all prompts and responses with EU-managed keys before transmitting to the US API so that the plaintext never leaves the EU.",
+          "correct": false,
+          "explanation": "Encrypting at the application layer before sending to the API means the US-based API processes ciphertext that it cannot interpret, making model inference impossible. Client-side encryption is appropriate for data at rest, not for live inference payloads that must be processed by the model. This approach breaks the system entirely.",
+          "citation": {
+            "title": "Anthropic privacy policy",
+            "url": "https://www.anthropic.com/legal/privacy"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Route EU client sessions to an EU regional endpoint on Claude Platform on AWS, which keeps the existing first-party model IDs and application code intact apart from a base-URL change, and mirror those sessions into a separate EU archive; leave the US path untouched.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is the change any architect would prefer if it existed: Claude Platform on AWS keeps the first-party model IDs, supports AWS PrivateLink, and would leave the application code and the R2 archive writer essentially unchanged. But it has no EU region — its workspace geography is US-only and inference_geo accepts only 'us' or 'global' — so there is nothing to route EU sessions to. Choosing it would leave London traffic inferenced in the US while the R2 60-second archive dutifully writes US-processed responses into a bucket labelled EU, which satisfies neither the ESMA opinion nor the accuracy of the audit trail the archive exists to provide.",
+          "citation": {
+            "title": "Claude Platform on AWS",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/claude-platform-on-aws"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Require EU analysts to download and run a local Claude model on firm-managed hardware so no data leaves the EU.",
+          "correct": false,
+          "explanation": "Claude models are not available for local self-hosting — Anthropic provides API access only, not downloadable model weights for on-premises deployment. This option describes a capability Claude does not offer; selecting it would require switching to a different model provider entirely, abandoning the existing architecture.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/models/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-10",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "Six months in, analysts report that the assistant occasionally generates investment thesis bullet points that sound confident but are not grounded in the source documents — a hallucination pattern that could violate R3. The QA lead wants to add a systematic detection mechanism. Which evaluation approach is most aligned with Argent Peak's specific R3 requirement and the team's six-person operational constraint?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Build a custom NLI (natural language inference) classifier trained on financial-domain annotated data to detect unsupported claims in generated theses.",
+          "correct": false,
+          "explanation": "A custom NLI classifier trained on domain-specific data would be highly relevant to financial text, but building and maintaining a fine-tuned classifier requires ML training infrastructure, labeled training data, and ongoing model maintenance — well beyond a six-person team with limited ML ops experience. The operational constraint rules this out as a primary solution.",
+          "citation": {
+            "title": "Test and evaluate — create strong empirical evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Implement automated A/B testing of two prompt variants, measuring which produces fewer ungrounded claims based on analyst rejection rates in the UI.",
+          "correct": false,
+          "explanation": "A/B testing prompt variants on analyst rejection rates produces useful signal for prompt optimization over time, but it is a long-feedback-loop evaluation method that catches grounding failures only after analysts have seen potentially non-compliant outputs. R3 requires that responses be traceable before delivery to the client portal, not after analyst rejection. This does not satisfy the real-time compliance requirement.",
+          "citation": {
+            "title": "Test and evaluate — create strong empirical evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Require all generated theses to include inline citation markers tied to source document paragraph IDs; write a deterministic parser that verifies each cited paragraph ID exists in the retrieval context.",
+          "correct": true,
+          "explanation": "Enforcing structured inline citations via prompt engineering and then programmatically verifying that each citation ID exists in the retrieved context is a deterministic, zero-infrastructure check that directly operationalizes R3. Ungrounded claims either lack a citation (caught by the parser) or cite a non-existent paragraph ID (also caught). Unlike the self-grounding check in Option D (the runner-up), this verification does not rely on the model's judgment — it is a code-level assertion on structured output, immediately deployable by a six-person team.",
+          "citation": {
+            "title": "Build with Claude — citations",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/citations"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add a grounding-check step: after generating each thesis, ask Claude to identify every factual claim in the output and locate its supporting passage in the source document; flag any claim the model cannot ground.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A self-grounding check where the same model verifies its own claims can catch some hallucinations and requires no external infrastructure. However, the model that generated an unsupported claim may confidently attribute it to a plausible-sounding but nonexistent passage — self-evaluation is unreliable in the exact cases where hallucination occurs. For R3 compliance this creates a false sense of assurance, whereas the deterministic citation-ID parser in Option C provides a code-level guarantee rather than a probabilistic one.",
+          "citation": {
+            "title": "Test and evaluate — create strong empirical evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-11",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D3", "D4"],
+      "question": "Argent Peak decides to add a multi-step agentic workflow that autonomously drafts a first-pass investment memo: it retrieves the latest 10-K, calls an internal financial-model tool, and then asks the analyst to approve or revise before submission. During testing, the agent occasionally gets stuck in a loop — calling financial-model, receiving an error tool_result, and retrying the same call indefinitely. Which design change resolves the infinite retry loop?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set tool_choice to {\"type\": \"any\"} so the model is forced to call a different tool after each failed tool_result, breaking the retry loop.",
+          "correct": false,
+          "explanation": "Setting tool_choice to 'any' forces the model to make some tool call, but it does not direct the model away from the failing tool specifically. The model may still choose the same tool repeatedly if its understanding of the situation leads it to believe another attempt is warranted. This does not deterministically resolve the loop.",
+          "citation": {
+            "title": "Tool use — defining tools and forcing tool use",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Replace the financial-model tool with an MCP resource that provides the same financial data passively, so the model reads it rather than calling a tool that can error.",
+          "correct": false,
+          "explanation": "Changing a tool to a resource changes the access pattern but does not fix the underlying issue that the financial-model endpoint sometimes returns errors. If the data source is unreliable, the resource fetch in the application layer will still fail; the loop is simply moved from inside the model's tool calls to inside the application's resource fetching logic. The root cause — no retry bound — remains.",
+          "citation": {
+            "title": "MCP server concepts — tools vs. resources",
+            "url": "https://modelcontextprotocol.io/docs/2026-07-28/learn/server-concepts"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Instruct the model in the system prompt to attempt a tool call at most twice before reporting the error to the analyst and proceeding; the application also enforces a hard maximum turn limit and checks stop_reason at each cycle.",
+          "correct": true,
+          "explanation": "A system-prompt instruction that bounds retry attempts combines a probabilistic model-level guardrail with a deterministic application-level maximum turn limit, creating defense in depth. The application checks stop_reason after each turn and terminates the loop if the turn count is exceeded or if stop_reason is 'end_turn' rather than 'tool_use'. This is simpler to implement than per-tool retry state tracking (Option D, the runner-up) while providing equivalent protection, and follows Anthropic's guidance to define conditions under which an agent should pause and hand off to a human. The R1 latency constraint is also satisfied because a hard turn limit prevents the loop from stalling indefinitely during market hours.",
+          "citation": {
+            "title": "Building effective agents — human oversight and loop termination",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add a retry counter in the application's agentic loop; after three failed tool_result blocks for the same tool, set is_error: true on the next tool_result, include a fallback message, and advance to the analyst approval step with a partial memo.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Counting retries and escalating to the analyst after three failures is a sound defensive pattern that prevents infinite loops and keeps the human in the loop as Anthropic's agentic guidance recommends. Setting is_error: true on the tool_result correctly signals failure to the model. However, three full retry cycles against a failing tool is a lot of wall-clock time to burn before escalating, and the bound is per tool rather than per turn, so a memo touching several flaky tools can still consume the R1 market-hours latency budget several times over. Option C's hard turn limit caps the whole loop rather than each tool, and does so with less per-tool retry state to manage.",
+          "citation": {
+            "title": "Building effective agents — agentic loops and error handling",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS2-12",
+      "primaryDomain": "D7",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "Argent Peak's head of technology wants every engineer on the six-person team to share the same set of research-assistant prompt templates, desk-configuration schemas, and QA runbooks. The team uses a shared Git repository. An engineer reports that after cloning the repo, the templates and runbooks are not available in their local Claude Code session. What is the correct configuration to make these shared assets automatically available to every team member on clone?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask each engineer to paste the templates into their personal ~/.claude/commands/ directory and copy runbooks to their user-scoped CLAUDE.md file.",
+          "correct": false,
+          "explanation": "Personal user-scoped configuration is not version-controlled in the repository and is not propagated on clone. Each engineer must manually replicate the configuration, drifting over time as templates evolve. This recreates the inconsistency problem and does not satisfy the shared-on-clone requirement.",
+          "citation": {
+            "title": "Claude Code — slash commands",
+            "url": "https://docs.claude.com/en/docs/claude-code/slash-commands"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Publish prompt templates and QA runbooks on an internal GitHub wiki and maintain an onboarding checklist directing each engineer to copy the assets into their local Claude Code session during setup.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A well-maintained GitHub wiki is visible, linkable, and searchable — better than tribal knowledge — and a structured onboarding checklist is a reasonable operational process. However, wiki-based distribution still requires each engineer to take manual steps and does not integrate with Claude Code's automatic project-context loading, so the assets are not present in the AI session unless the engineer has followed the checklist. This fails the 'automatically available on clone' requirement and introduces drift when templates are updated in the wiki but not re-copied locally, risking QA inconsistency that could affect R3 compliance checks.",
+          "citation": {
+            "title": "Claude Code — memory (CLAUDE.md)",
+            "url": "https://docs.claude.com/en/docs/claude-code/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Store all templates in environment variables set by a CI/CD pipeline so that the CI environment always has the latest versions, regardless of what engineers have locally.",
+          "correct": false,
+          "explanation": "Environment variables set by CI/CD are available to pipeline jobs but are not injected into individual developers' local Claude Code sessions on clone. This approach provides consistency for automated pipelines but does nothing to equip the six engineers' interactive development sessions with shared templates and runbooks.",
+          "citation": {
+            "title": "Claude Code — settings and configuration",
+            "url": "https://docs.claude.com/en/docs/claude-code/settings"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Commit prompt templates to .claude/commands/ as project slash commands, the desk-configuration MCP servers to .mcp.json at the repository root, and QA runbooks to the project-level CLAUDE.md; all load on clone.",
+          "correct": true,
+          "explanation": "Claude Code reads project-scoped configuration straight out of the working tree: .claude/commands/ supplies project slash commands, .mcp.json at the repository root declares project-scoped MCP servers and is explicitly intended to be checked into version control so the whole team gets the same servers, and CLAUDE.md carries project conventions into every session. All three travel with the clone, which is the canonical pattern for team-wide standardization. It beats Option B (the runner-up), which uses a GitHub wiki requiring manual copy steps and drifting the moment a template is updated — whereas version-controlled project config is always current and requires no action beyond cloning.",
+          "citation": {
+            "title": "Claude Code — project configuration and CLAUDE.md",
+            "url": "https://docs.claude.com/en/docs/claude-code/memory"
+          }
+        }
+      ]
+    }
+  ]
+}

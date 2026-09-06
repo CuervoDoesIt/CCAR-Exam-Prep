@@ -1,0 +1,17 @@
+{
+  "name": "ccar-study-prep",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive CCAR-F and CCAR-P study guide with Learning Mode and Real Mode",
+  "scripts": {
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "dev": "concurrently -n server,client -c cyan,magenta \"npm --prefix server start\" \"npm --prefix client run dev\"",
+    "server": "npm --prefix server start",
+    "client": "npm --prefix client run dev",
+    "validate": "npm --prefix server run validate",
+    "build": "npm --prefix client run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

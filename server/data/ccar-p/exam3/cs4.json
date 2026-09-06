@@ -1,0 +1,603 @@
+{
+  "examId": "ccar-p-exam3",
+  "caseId": "CS4",
+  "caseTitle": "Hartwell Devereaux LLP — Contract Lifecycle & Litigation Discovery Assistant",
+  "caseScenario": "Hartwell Devereaux LLP is a 620-attorney Am Law 100 firm headquartered in Chicago, with offices in New York, London, and Singapore. The firm manages approximately 18,000 active matters annually, spanning M&A transactions, complex commercial litigation, regulatory enforcement defense, and international arbitration. Its document management system (DMS) holds 47 million documents totaling roughly 9 TB; active litigation matters regularly involve review populations of 500,000 to 2 million documents each. The firm's IT infrastructure uses a hybrid model: core DMS and case management run on-premises in the firm's own data center, with burst compute available in a dedicated AWS GovCloud VPC. The firm is subject to Rule 26 and Rule 34 Federal Rules of Civil Procedure obligations, attorney-client privilege and work-product doctrine protections, and ABA Model Rules 1.6 (confidentiality) and 5.3 (supervision of non-lawyers including software tools). The professional responsibility committee has classified any AI system processing client documents as a 'supervised non-lawyer' that requires a licensed attorney to authorize each outbound work product.\n\nThe firm's practice technology group has been tasked with deploying a Claude-powered assistant that handles two primary workflows: (1) contract lifecycle management — extracting key dates, obligations, termination rights, and renewal windows from executed agreements and surfacing alerts to responsible attorneys; and (2) litigation discovery assistance — ranking documents by relevance, flagging likely privilege, grouping near-duplicates, and drafting privilege log entries, all subject to attorney review before any production set is finalized. The assistant must connect to both the DMS (via a secure MCP server wrapping the firm's existing REST API) and the case management platform (Aderant Expert, also MCP-wrapped) to retrieve matter context, billing codes, and custodian lists. The firm's security policy mandates that no client document text, metadata, or AI-generated output may transit or reside on any infrastructure outside the firm's approved perimeter.\n\nThe practice technology group has a budget ceiling of $280,000 per year for AI API spend, which must cover both interactive attorney queries (estimated 900 sessions per day) and nightly batch triage of newly ingested documents (estimated 60,000 documents per night). Latency for interactive sessions is business-critical: partners have stated they will not use the tool if responses exceed six seconds. The firm's records management policy requires a seven-year retention of all AI inference logs, document access records, and human approval events to satisfy potential discovery obligations about the firm's own review process. A senior partner liaison serves as the business owner and must receive a quarterly readout that a non-technical audience can understand.",
+  "caseRequirements": [
+    "R1: No client document text, metadata, or AI-generated output may be stored or retained on any infrastructure outside the firm's on-premises DMS or approved AWS GovCloud VPC; inference must be invoked from inside that perimeter under zero-data-retention terms, and no client data may persist on third-party AI provider infrastructure.",
+    "R2: The privilege wall must be enforced deterministically at the tool layer — documents tagged PRIVILEGED-WALL in the DMS must never appear in any response delivered to a reviewer who lacks the corresponding matter privilege flag.",
+    "R3: Every AI-generated privilege determination, production recommendation, or privilege log draft must receive explicit attorney approval before delivery to opposing counsel or the court; no autonomous outbound action is permitted.",
+    "R4: Interactive attorney query sessions must return responses within 6 seconds end-to-end at the p95 percentile under normal operating load (900 sessions per day).",
+    "R5: A complete audit trail — covering every document retrieved, every model inference invoked, and every human approval or rejection — must be durably retained for 7 years to satisfy potential discovery obligations about the review process itself."
+  ],
+  "questions": [
+    {
+      "id": "P3-CS4-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D5", "D3"],
+      "question": "Hartwell Devereaux's security policy (R1) prohibits client data from leaving the firm's approved perimeter. The practice technology team must choose a deployment topology for the Claude integration. Which architecture best satisfies all stated requirements?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Deploy Claude via the public Anthropic API, storing document excerpts in Anthropic's managed infrastructure, and rely on contractual data-processing terms to satisfy R1.",
+          "correct": false,
+          "explanation": "Contractual assurances do not make third-party infrastructure part of the firm's approved perimeter, directly violating R1. ABA guidance on cloud computing for legal practice requires actual technical controls, not only contractual promises, when handling privileged client communications.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Use a shared multi-tenant SaaS legal AI platform that is SOC 2 Type II certified, routing all document and inference traffic through the platform's shared inference fleet and managed storage tier.",
+          "correct": false,
+          "explanation": "SOC 2 certification establishes audit-control maturity, not data-residency boundaries. A shared multi-tenant inference fleet places client document text on infrastructure outside the firm's approved perimeter, violating R1. Shared platforms also cannot provide the stable, low-latency tool-call path the MCP integration requires for R4.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Run all Claude API calls from servers inside the firm's AWS GovCloud VPC under zero-data-retention terms; store document text and inference outputs only within that VPC or on-premises; deploy MCP servers for DMS and Aderant inside the same perimeter.",
+          "correct": true,
+          "explanation": "Originating every request from inside the GovCloud VPC, retaining all document text and inference output only within that perimeter, and running under zero-data-retention terms so nothing persists on Anthropic infrastructure satisfies R1. MCP servers inside the perimeter mean tool calls never cross the boundary. This beats option D: a fully on-premises-only approach cannot burst capacity for nightly batch peaks, so interactive sessions would queue behind them and miss R4's six-second p95 target, and it does so at higher fixed cost.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Deploy everything in the firm's on-premises data center only, with no cloud burst capacity; self-host an open-source LLM on firm-owned GPUs to eliminate the external API data-residency question entirely and convert ongoing variable token costs into a fixed hardware line item.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Self-hosting eliminates the API data-transit concern, which directly satisfies R1, and is a sound instinct for a firm with strict data-residency requirements. However, it does not meet R4: on-premises GPU capacity cannot sustain p95 sub-6-second latency for 900 concurrent interactive sessions and a 60,000-document nightly batch simultaneously within the $280k budget. Replacing Claude with an unvalidated open-source model also introduces accuracy risk for privilege classification without the Anthropic-specific safety properties the rest of the integration assumes.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-02",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "R2 requires that documents tagged PRIVILEGED-WALL in the DMS never appear in responses delivered to reviewers who lack the corresponding matter privilege flag. Where in the integration stack should this enforcement be implemented?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Inside the MCP server's tool implementation: before returning any document, check the caller's privilege flags against the document's tags and return an empty result or error if the caller is unauthorized.",
+          "correct": true,
+          "explanation": "Enforcing the wall inside the tool implementation guarantees the constraint regardless of prompt wording or model version — privileged document text never enters Claude's context at all. This satisfies R2 deterministically and addresses the MCP confused-deputy risk by placing the authorization decision in the server, not the model. Option B relies on a prompt instruction, which is probabilistic and cannot satisfy R2's explicit 'deterministic' standard.",
+          "citation": {
+            "title": "Model Context Protocol — architecture and security",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add a system prompt instruction directing Claude never to return PRIVILEGED-WALL documents to unauthorized users; rely on Claude's high instruction-following reliability to enforce the wall across all review sessions.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A system prompt instruction is a reasonable first-line defense and Claude generally follows it reliably across normal usage. However, it does not satisfy R2's requirement for deterministic enforcement: prompt-based controls can fail under adversarial document content (prompt injection through a document body is a realistic attack vector in litigation review where documents come from opposing parties). This design is sound for defense-in-depth but does not meet R2 as a standalone control.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Post-filter Claude's responses in a middleware layer after generation, scanning for document IDs or content snippets matching privileged documents, and redacting matches before delivery.",
+          "correct": false,
+          "explanation": "Post-generation redaction cannot catch paraphrased or summarized privileged content — the privileged material has already entered Claude's context and influenced the response even if specific identifiers are redacted. This approach is inherently incomplete and does not satisfy R2.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Store privileged documents in a separate DMS folder with a distinct access control list, and rely on attorneys following a procedure to avoid searching that folder during AI-assisted review.",
+          "correct": false,
+          "explanation": "Manual procedural controls are not integration-layer enforcement. If the MCP tool has any indirect read access to the privileged folder, the wall can be breached regardless of the procedure. R2 requires tool-layer enforcement — a human-followed procedure that the integration stack can bypass does not qualify.",
+          "citation": {
+            "title": "Model Context Protocol — architecture and security",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-03",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "Hartwell Devereaux's $280k annual budget must cover nightly batch triage of ~60,000 documents and interactive attorney sessions. Which model and API strategy best balances cost with R4's latency requirement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use claude-opus-5 for all workloads — both nightly batch triage and interactive sessions — to maximize privilege classification accuracy across the entire corpus.",
+          "correct": false,
+          "explanation": "Claude Opus 5 costs $5/MTok input and $25/MTok output. Processing 60,000 documents nightly at that rate would rapidly exhaust the $280k annual budget before accounting for interactive sessions. R4's latency requirement is also harder to guarantee at scale with the highest-cost model under concurrent load.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Route nightly batch triage through the Message Batches API using claude-haiku-4-5 (50% cost discount, results within 24 hours); route interactive sessions to claude-sonnet-5 for R4's sub-6-second target.",
+          "correct": true,
+          "explanation": "The Batches API provides a 50% cost discount and suits the nightly triage workload, which needs no immediate response. Haiku 4.5 at ~$0.50/MTok input after discount comfortably fits budget for 60,000 nightly documents. Sonnet 5 at $2/MTok delivers the quality and throughput needed for interactive sessions within R4's latency target. This beats option D, which uses Sonnet 5 for batch without the Batches API discount, exhausting the budget ceiling.",
+          "citation": {
+            "title": "Batch processing — Message Batches API",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use claude-haiku-4-5 for all workloads, including interactive sessions, to stay safely within the $280k budget ceiling regardless of volume growth.",
+          "correct": false,
+          "explanation": "Haiku 4.5 has the smallest context window (200K tokens) of current models and may produce less accurate privilege classifications on complex legal documents, increasing false-negative rates that attorney review must catch. Using it for interactive sessions risks degraded reasoning on nuanced privilege questions — a professional responsibility risk the firm cannot accept in litigation matters.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use claude-sonnet-5 for batch triage with streaming enabled to detect early completions and reduce average latency; use claude-opus-5 for interactive sessions where privilege analysis quality is paramount.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Using Sonnet 5 for batch and Opus 5 for interactive is a reasonable quality-tiering instinct — Sonnet is capable for triage, Opus provides the strongest reasoning for nuanced privilege questions. However, it breaks the case's $280,000 annual budget ceiling: streaming does not reduce total token cost, so processing 60,000 nightly documents with Sonnet 5 at $2/MTok without the Batches API 50% discount, combined with Opus 5 at $5/MTok for 900 daily interactive sessions, exceeds the ceiling. It also puts R4 at risk, because Opus 5 is a slower-latency tier than Sonnet 5 on the interactive path. The most significant cost lever — the Batches API discount — is unused, making this configuration worse than option B on both counts.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-04",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "The practice technology team must expose Hartwell Devereaux's DMS and Aderant case management system to Claude via MCP. Which MCP design correctly surfaces the capabilities Claude needs while minimizing the attack surface consistent with R1 and R2?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expose all DMS read operations as a single broad MCP tool named dms_query with a free-text parameter, letting Claude formulate arbitrary search expressions against the full document index.",
+          "correct": false,
+          "explanation": "A single broad tool with a free-text parameter provides no privilege-enforcement boundary and creates a confused-deputy risk: Claude could formulate queries that bypass PRIVILEGED-WALL tag filters if the DMS search engine does not apply them consistently. The attack surface is maximized rather than minimized, contrary to R2's requirement for deterministic enforcement at the tool layer.",
+          "citation": {
+            "title": "Model Context Protocol — architecture and security",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Expose DMS documents as MCP resources (read-only contextual data subscriptions), expose Aderant matter data as MCP resources, and define narrow MCP tools only for write operations such as privilege log creation, matter status updates, and production set submission.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Separating read context (resources) from executable actions (tools) is architecturally clean and aligns with MCP design intent. However, MCP resource subscriptions are not designed to apply per-retrieval caller-identity checks the way tool implementations can. R2 requires that each document retrieval validates the caller's matter privilege flag before returning content — a check that belongs in tool logic with explicit authorization code, not in a passive resource subscription. This design satisfies R1 but does not meet R2's deterministic-enforcement standard.",
+          "citation": {
+            "title": "Model Context Protocol — architecture and security",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use MCP prompts to pre-load all matter documents into Claude's context at session start, reducing the need for repeated tool calls during interactive review.",
+          "correct": false,
+          "explanation": "Pre-loading all matter documents as MCP prompts is architecturally impossible for Hartwell Devereaux's matter sizes (500k–2M documents) — even the 1M-token context window cannot hold more than a handful of full documents. MCP prompts are interaction templates, not a bulk document delivery mechanism, and this design would violate R2 by placing potentially privileged content in context before any authorization check.",
+          "citation": {
+            "title": "Model Context Protocol — architecture and security",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Define narrow, purpose-specific MCP tools (e.g., get_document_by_id, search_documents_by_custodian, get_matter_metadata) that each enforce privilege-wall checks internally before returning results, scoped to the minimum DMS API permissions each tool requires.",
+          "correct": true,
+          "explanation": "Narrow tools with internal privilege enforcement satisfy R2 deterministically and minimize the attack surface per R1. Each tool holds only the DMS permissions it needs, reducing blast radius of any compromise. This beats option B: resources cannot apply the per-retrieval caller-identity check R2 requires — specifically, option B does not meet R2 because resource subscriptions lack the authorization logic that tool implementations can execute before returning each result.",
+          "citation": {
+            "title": "Model Context Protocol — architecture and security",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-05",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D3", "D4"],
+      "question": "For nightly batch triage of 60,000 newly ingested documents, the team must choose an agent architecture that maximizes throughput while producing per-document outputs (relevance score, privilege flag, near-duplicate cluster ID) ready for attorney review. Which design pattern fits best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use an orchestrator-workers pattern: an orchestrator agent reads the nightly ingest queue, assigns batches to parallel worker agents each invoking Haiku 4.5 via the Batches API, and writes structured per-document results to a staging database for attorney review.",
+          "correct": true,
+          "explanation": "The orchestrator-workers pattern is designed for uniform high-volume subtasks requiring parallelization. Workers running Haiku 4.5 via the Batches API capture the 50% cost discount from Q03 while achieving throughput for the nightly window. Results land in a staging database that serves as the R5 artifact chain. Option B (evaluator-optimizer) adds an unnecessary refinement loop — for structured extraction tasks where attorney review is the quality gate, iterative self-refinement doubles cost without a demonstrable improvement over a single well-prompted pass.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Use an evaluator-optimizer pattern: a generator agent triages each document and produces a structured output; a separate evaluator agent critiques and refines the output iteratively until a confidence threshold is met, then commits the result to the staging database.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Evaluator-optimizer works well when iterative refinement demonstrably improves output quality and the evaluation criteria are well-specified — for instance, prose drafting or code generation. For structured extraction (relevance score, privilege flag, cluster ID), a single well-prompted pass is sufficient, and R3's attorney review is the correct quality gate for privilege determinations. The refinement loop doubles or triples per-document API cost across 60,000 nightly documents, which threatens the $280k budget ceiling without a measurable quality gain over the orchestrator-workers approach.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Process all 60,000 documents in a single sequential Claude session by concatenating documents into one large prompt and requesting a JSON array of triage results.",
+          "correct": false,
+          "explanation": "Even with a 1M-token context window, concatenating 60,000 documents is architecturally impossible — at an average of 2,000 tokens per document that requires 120 million tokens. Single-session sequential processing also eliminates the cost savings of the Batches API and provides no parallelism for the nightly window.",
+          "citation": {
+            "title": "Models overview — context windows",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use a prompt chaining pattern where each document passes through a fixed three-step sequence (relevance scoring, then privilege flagging, then near-duplicate detection), processed one document at a time in a single agent.",
+          "correct": false,
+          "explanation": "Prompt chaining is appropriate for breaking a single complex task into sequential reasoning steps. Applied serially to 60,000 documents, it cannot achieve required nightly throughput, and running each document through three sequential API calls triples cost compared to a single structured-output prompt. Parallelization via the orchestrator-workers pattern is the correct choice at this volume.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-06",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D5", "D2"],
+      "question": "Before going live, the team must evaluate the privilege classification component. Which evaluation approach most rigorously tests whether the system satisfies R2 and R3 for the firm's document corpus?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run the system on a random sample of 100 documents and have a paralegal confirm that the AI's privilege flag matches the DMS tag on each document.",
+          "correct": false,
+          "explanation": "A 100-document sample cannot establish statistical confidence on a 47-million-document corpus with varied document types, legal theories, and privilege categories. Paralegals should not serve as the final arbiter of privilege determinations — R3 requires attorney-level review. This sample size also cannot capture rare but high-stakes false-negative cases where privileged documents are cleared for production.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Evaluate only precision — the fraction of AI-flagged-privileged documents that are truly privileged — since incorrectly producing privileged documents to opposing counsel is the greater harm.",
+          "correct": false,
+          "explanation": "Evaluating precision without recall is critically incomplete. Missing privileged documents (false negatives) is the primary failure mode R2 and R3 are designed to prevent: an unprivileged document incorrectly cleared for production reaches opposing counsel and may trigger an inadvertent waiver. The firm must measure recall at least as carefully as precision.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Build a labeled holdout set of at least 2,000 documents spanning all privilege categories and document types in the corpus; measure precision, recall, and F1 against attorney-determined ground truth; set a minimum recall threshold as a hard go/no-go gate.",
+          "correct": true,
+          "explanation": "A statistically sized holdout with attorney ground truth directly measures whether R2's privilege wall is effective. A minimum recall threshold operationalizes R2 as a pass/fail gate. Spanning all privilege categories and document types catches distribution shift. This beats option D because LLM self-evaluation cannot substitute for attorney-determined ground truth when the stakes are inadvertent privilege waiver — the two models share the same systematic biases and circular validation provides no independent signal.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use an LLM-as-judge evaluator — a second Claude model prompted with privilege law principles — to score whether each privilege classification is correct, averaging scores over 500 documents to produce an overall accuracy metric that can be reported to firm leadership.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "LLM-as-judge is a valid evaluation technique for open-ended quality assessments where human labeling is impractical and attorney review of every evaluation document is cost-prohibitive. A second Claude model prompted with privilege law principles could plausibly catch some systematic errors at low cost and scale. However, it does not satisfy R3's standard: a second LLM shares the same systematic biases as the first, cannot substitute for attorney-determined ground truth on privilege questions, and introduces circular validation that courts would not accept as evidence of due diligence — the 'judge' is not a licensed attorney. It also cannot serve as a go/no-go gate for R2, because an averaged accuracy score does not measure recall on the PRIVILEGED-WALL population that the wall exists to protect.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-07",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D4", "D1"],
+      "question": "Each interactive session shares a system prompt containing the firm's privilege analysis guidelines (~12,000 tokens) and the current matter's custodian list and key terms (~4,000 tokens). These blocks rarely change within a session. How should the team minimize cost overhead while satisfying R4's latency requirement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Compress the privilege guidelines to under 2,000 tokens using abbreviations and bullet fragments, accepting some reduction in instruction completeness to lower per-query input cost.",
+          "correct": false,
+          "explanation": "Drastically compressing privilege analysis guidelines risks degrading the accuracy of Claude's privilege classifications, which would increase attorney review burden and undermine R3. Anthropic's prompting guidance recommends clear, complete instructions over compressed shorthand. Cost optimization through prompt truncation trades quality for savings in a domain where errors carry professional responsibility consequences — the wrong trade-off.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Apply cache_control breakpoints to the guidelines block and matter context block; use the 5-minute TTL, refreshed on each user query; place variable query content after the cached blocks.",
+          "correct": true,
+          "explanation": "Prompt caching with 5-minute TTL is precisely designed for large stable prefixes — cache writes cost 1.25x but subsequent reads cost only 0.1x, so the ~16,000-token prefix bills like ~1,600 tokens on every cached query. The TTL refreshes on each use, so active sessions do not incur re-write costs. Positioning variable query content after the cached blocks is the correct cache prefix ordering. This beats option D's 1-hour TTL: at 2x write cost, the extended TTL is only economical when the same prefix is reused heavily across sessions — unlikely when 900 daily sessions span hundreds of different matters.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Store the system prompt in an MCP resource and fetch it fresh on each user query, keeping the MCP server as the single source of truth for guidelines version control.",
+          "correct": false,
+          "explanation": "Fetching a 16,000-token system prompt from an MCP resource on every query adds a network round-trip and re-sends all tokens as uncached input, which is the most expensive approach. The additional tool call and token re-processing also extend per-query latency, working against R4's 6-second p95 target.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use the 1-hour prompt cache TTL for both the firm guidelines and matter context blocks to maximize cross-session cache reuse whenever multiple attorneys query the same matter within the same hour.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The 1-hour TTL can reduce cost when the same matter context is queried many times per hour, and it is a legitimate choice for high-volume same-matter sessions. However, at 2x write cost (versus 1.25x for the 5-minute TTL), the 1-hour cache is only economical when the cached prefix is reused enough times per hour to offset the higher write cost. At 900 sessions spread across hundreds of active matters, most matter-specific caches will not sustain that reuse rate. Additionally, confirming that prompt cache storage occurs within the firm's GovCloud VPC boundary is essential before relying on extended TTL, to avoid a subtle R1 violation.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-08",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D5", "D6"],
+      "question": "R3 prohibits any autonomous outbound action — every AI-generated privilege determination must be approved by a licensed attorney before reaching opposing counsel. How should the agent integration implement this human-in-the-loop gate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a system prompt instruction telling Claude never to invoke the production-submission tool without explicit attorney approval in the conversation turn; treat the instruction as the primary enforcement control.",
+          "correct": false,
+          "explanation": "As established when designing the privilege wall, system prompt instructions are probabilistic controls. A prompt cannot guarantee that Claude will not invoke a production-submission tool call under an unusual input pattern or adversarial document content. This approach satisfies neither R3's 'no autonomous outbound action' requirement nor R5's requirement for a durable audit trail of human approval events.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Omit the production-submission tool from the tools array at the start of each session so Claude cannot call it at all; after the attorney reviews and approves the results in the review UI, re-send the request with that tool definition included so it becomes available only for the final turn.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Withholding the tool definition itself is a legitimate mechanism: a tool that is absent from the tools array cannot be called, so autonomous submission is genuinely prevented. (Setting tool_choice to none would not achieve this — none suppresses all tool use for the request rather than one named tool.) However, this puts the guarantee in client-side state management: the application must rebuild the tools array correctly on every turn, and a bug that re-adds the tool too early reopens the autonomous path R3 forbids. It also does not by itself emit the human-approval event R5 requires before the action, leaving the approval record as a separate concern that can be omitted or written after the fact.",
+          "citation": {
+            "title": "Tool use with Claude",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Allow Claude to complete the full agentic loop including production submission; provide attorneys with a 48-hour window to request a claw-back if they identify privileged material in the produced set.",
+          "correct": false,
+          "explanation": "This directly violates R3 — production to opposing counsel occurs before attorney review, eliminating prevention. Federal Rule of Evidence 502 claw-back procedures exist but cannot always remedy inadvertent privilege waiver after opposing counsel has reviewed the documents. Post-production remediation is not a substitute for the pre-production attorney authorization R3 requires.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Halt the agentic loop on the stop_reason: tool_use turn — when Claude emits the production-submission tool_use block, the orchestrator withholds execution and the tool_result until a named attorney's approval is written to the audit log.",
+          "correct": true,
+          "explanation": "The tool_use stop reason is the deterministic checkpoint in a client-tool loop: Claude can only propose the call, and the orchestrator — never the model — decides whether it executes. Withholding execution and the tool_result until a named attorney's approval is written to the audit log satisfies R3 (no autonomous outbound action) and R5 (the approval event is durably recorded before the action). This beats option B, which prevents submission only for as long as the client rebuilds the tools array correctly on every turn; a state-tracking bug that re-adds the tool early restores the autonomous path, whereas gating at execution time cannot be bypassed because no tool call ever runs unless the orchestrator runs it.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "Three months after deployment, the firm begins ingesting scanned historical correspondence digitized via OCR. Attorneys report unreliable privilege classifications on OCR documents, and p95 latency has risen to 8.2 seconds on queries that include them — violating R4. What is the correct diagnostic and remediation sequence?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Extend the R4 latency SLA to 10 seconds specifically for queries involving OCR-derived documents, documenting the exception in the system's operational runbook.",
+          "correct": false,
+          "explanation": "Relaxing the SLA instead of diagnosing the root cause is contrary to good engineering practice and ignores the operational reality that partners stated they will not use the tool if responses exceed six seconds — a business commitment that applies regardless of document type. Changing the SLA definition does not fix the underlying performance regression.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Switch all queries involving OCR documents to claude-opus-5, which has stronger reasoning capabilities, accepting higher per-token cost to restore accuracy and trusting that the larger model's generation speed will reduce latency.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Upgrading to a more capable model may improve privilege classification accuracy on noisy OCR text, and it is a plausible first hypothesis a competent practitioner might try. However, it does not restore R4: the regression could stem from increased token counts (OCR verbosity), prompt cache misses on an unfamiliar document format, or extra tool-call round trips, and each of those needs a different fix. A larger model is if anything slower per token, so this may push p95 further past six seconds while also spending the firm's cost headroom on an undiagnosed hypothesis.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Measure where latency is consumed (token count, cache hit rate, tool-call round trips); separately run the privilege holdout on a labeled OCR subsample to isolate accuracy degradation; then fix root causes such as an OCR pre-processing step or OCR-specific few-shot examples.",
+          "correct": true,
+          "explanation": "Measurement before remediation is the correct sequence. Latency could be driven by larger token counts from OCR noise, cache misses because the new format breaks cached prefix matching, or extra tool calls — each requiring a different fix. Running the existing evaluation holdout on OCR documents separately isolates the accuracy problem. Adding OCR-specific few-shot examples addresses distribution shift in the prompt without changing the model or budget. This preserves every original requirement — R4's latency budget, R2's privilege-wall recall, and the cost envelope — while adapting to the new document type. Option B skips diagnosis entirely and so cannot be shown to restore R4.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Disable AI-assisted privilege classification for all OCR-derived documents and require fully manual attorney review for that document class until a future model upgrade resolves the issue.",
+          "correct": false,
+          "explanation": "Disabling AI assistance for an entire document class defeats a primary use case of the system and could create a review backlog that jeopardizes court-ordered production deadlines. It avoids solving the problem rather than solving it. The correct engineering response to a new document type causing regression is adaptation through diagnosis and targeted remediation, not exclusion.",
+          "citation": {
+            "title": "Building effective agents — testing and evaluation",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-10",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D3", "D1"],
+      "question": "R5 requires a 7-year audit trail of every document retrieved, every model inference, and every human approval. An external auditor asks the team to demonstrate that the trail cannot be altered after the fact. Which implementation satisfies R5's durability and tamper-evidence requirements?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Log events to a structured JSON file on the application server that runs the MCP tools; retain files for 7 years using the firm's existing backup rotation schedule.",
+          "correct": false,
+          "explanation": "A mutable JSON file on the same server as the application can be altered by any process with write access. Standard backup rotation does not establish tamper evidence — a sophisticated actor could modify both the live file and the backup. R5's retention purpose (surviving discovery about the firm's review process) requires that the trail be trustworthy to a court, not merely retained on the same infrastructure that could have been compromised.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Write audit events to an append-only, write-once storage tier (e.g., AWS S3 Object Lock with Compliance mode) within the firm's GovCloud VPC; include a cryptographic hash of each event chained from the previous entry; retain for 7 years with legal hold tagging.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Append-only storage with chained hashes and legal hold tagging is an excellent architecture for tamper-evident audit trails and satisfies R5's durability and integrity requirements. It also satisfies R1 because storage stays within the GovCloud VPC. This is a sound, defensible design that a competent practitioner would choose. It loses to option C only because it does not specify the event schema — R5 enumerates three distinct event categories (document retrieved, inference invoked, human approval) that must each have explicit fields, and schema omissions might only be discovered during actual discovery proceedings when remediation is impossible.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Write events with explicit fields (document_id, inference_request_id, model_version, approval_attorney_id) to append-only write-once storage in the GovCloud VPC; chain hashes; apply legal hold; validate all three R5 event categories weekly.",
+          "correct": true,
+          "explanation": "This builds on option B's correct storage architecture by adding an explicit schema that captures all three R5 event categories and a weekly completeness check to detect coverage gaps before they become a discovery liability. Explicit fields make the trail court-usable without interpretation of generic log entries. Option B is the runner-up because it lacks the explicit schema and completeness validation — gaps in coverage would only surface during actual proceedings, too late to remediate a 7-year retention obligation.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Retain only the final attorney-approved production sets and privilege logs; infer audit coverage from those artifacts since they represent the authoritative outcome of the review process and are already signed by the responsible attorneys.",
+          "correct": false,
+          "explanation": "R5 explicitly requires the trail to cover every document retrieved and every model inference, not just final approved outputs. An opposing party challenging the review process may need to examine which documents Claude evaluated and did not flag — information absent from production sets. Inferring process coverage from output artifacts does not satisfy an explicit 7-year inference-log retention requirement.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-11",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D3", "D2"],
+      "question": "During production review on the Meridian Chemicals matter, an attorney discovers that five documents tagged PRIVILEGED-WALL appeared in a batch surfaced to non-privileged reviewers — an apparent breach of R2. What is the correct immediate response?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Redact the five documents from the reviewer queue, notify the assigned reviewers verbally that those documents were included in error, and continue the review without pausing to investigate further.",
+          "correct": false,
+          "explanation": "Verbal notification without a documented incident record fails R5's audit trail requirement. More critically, continuing without root-cause investigation leaves the privilege wall breach mechanism in place — the same failure will recur on subsequent batches, potentially producing privileged materials to opposing counsel. Professional responsibility obligations require more than correcting the immediate instance.",
+          "citation": {
+            "title": "Building effective agents — security and trust",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Halt batch review for the Meridian Chemicals matter; sequester and log the five documents as a breach incident; notify matter counsel and the professional responsibility partner; investigate whether tool enforcement (Q02) failed or DMS tags are incorrect; do not resume until root cause is remediated.",
+          "correct": true,
+          "explanation": "Halting review prevents further exposure while the breach is contained, satisfying R2 going forward. Sequestering and logging the incident satisfies R5. Notifying matter counsel and the professional responsibility partner satisfies ABA Model Rule 5.3 supervisory obligations. Investigating both tool enforcement (established in Q02) and DMS tagging covers the two most likely failure paths. This beats option D: resuming with an undiagnosed breach mechanism — even with an added post-generation filter — risks additional exposure because the root cause could allow privileged documents to bypass the new filter as well.",
+          "citation": {
+            "title": "Building effective agents — security and trust",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Switch the privilege classification model from Haiku 4.5 to Opus 5 for the Meridian Chemicals matter to improve classification accuracy across the remaining document population, then resume review.",
+          "correct": false,
+          "explanation": "This misidentifies the failure mode. R2 enforcement was designed to operate at the MCP tool layer, independent of Claude's classification accuracy — PRIVILEGED-WALL documents should never reach Claude's context at all. If five such documents appeared in a reviewer batch, the breach is in the tool-layer enforcement (established in Q02), not in Claude's classification. Switching models without investigating the tool layer is a misdirected fix that leaves the actual breach mechanism in place.",
+          "citation": {
+            "title": "Model Context Protocol — architecture and security",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add a post-generation filter scanning Claude's output for document IDs matching PRIVILEGED-WALL tags before any batch reaches reviewers; implement the filter as an immediate compensating control and resume review the same day while the root cause is investigated in parallel.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Adding a post-generation filter is a reasonable compensating control that reduces risk of future breaches reaching reviewers, and running the root-cause investigation in parallel is a sound operational instinct. However, resuming review immediately means additional batches may be processed before the investigation is complete, potentially exposing more privileged documents if the tool-layer enforcement failure affects documents not yet surfaced. R5 also requires the incident to be formally logged before resumption, and ABA Model Rule 5.3 supervisory obligations require notifying professional responsibility leadership rather than proceeding immediately.",
+          "citation": {
+            "title": "Model Context Protocol — architecture and security",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3-CS4-12",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "The senior partner liaison presents the AI review system to the full partnership. A partner asks: 'If opposing counsel challenges our review process in court, how do we show that a licensed attorney — not the AI — made every privilege determination?' Which talking point most accurately describes the system's governance posture for a non-technical legal audience?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Explain that Claude is a highly accurate AI that autonomously makes privilege determinations, and that attorneys only need to spot-check a 5% random sample to satisfy supervisory obligations under ABA Model Rule 5.3.",
+          "correct": false,
+          "explanation": "This directly contradicts R3 and the system's actual design, where every determination requires attorney authorization before production. Representing to the partnership that the AI acts autonomously with spot-check oversight would expose the firm to Rule 26 sanctions and ABA Rule 5.3 violations if examined in court, and is factually false.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Describe Claude as a document review assistant that ranks and flags documents, and clarify that every privilege determination is authorized by a named licensed attorney whose approval is logged with a timestamp before any document reaches opposing counsel.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is accurate and professionally appropriate: it correctly frames the attorney as the decision-maker and directly addresses the partner's challenge. It satisfies R3's requirement. However, it omits the 7-year append-only audit trail (R5) that would be the firm's actual evidentiary asset in court — a partner asking about litigation risk needs to know the firm can produce a tamper-evident log, not just that approvals were recorded. Option D provides a more complete and court-ready answer to the specific litigation challenge the partner raised.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Tell the partnership that the AI system's privilege classification accuracy has been validated at 99.9% on internal testing, which means attorney review is a precautionary formality that the firm can streamline or reduce over time as confidence in the system grows.",
+          "correct": false,
+          "explanation": "Framing attorney review as a formality to be reduced inverts the governance posture R3 permanently requires. Promising to reduce oversight as accuracy improves conflicts with ABA Model Rule 5.3 and misleads the partnership about the system's design. Quoting 99.9% accuracy without a confidence interval or methodology is also potentially misleading to a non-technical audience.",
+          "citation": {
+            "title": "Anthropic usage policy",
+            "url": "https://www.anthropic.com/legal/aup"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Explain that the AI surfaces documents but makes no autonomous privilege determinations; every privilege call is made by a named attorney whose identity, timestamp, and decision are in an append-only audit log retained for 7 years; that log is the firm's evidence if the review process is ever challenged.",
+          "correct": true,
+          "explanation": "This accurately describes both R3 (attorney-authorized privilege determinations) and R5 (7-year append-only audit trail) in terms a legal audience understands. Mentioning the durable log as a litigation-ready artifact directly answers the partner's challenge scenario. Option B is accurate but incomplete — it describes R3 without R5, omitting the specific evidence the firm would produce to defend its review process in court, which is precisely what the partner asked about.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

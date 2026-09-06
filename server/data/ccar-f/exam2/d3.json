@@ -1,0 +1,381 @@
+{
+  "examId": "ccar-f-exam2",
+  "domainId": "D3",
+  "domainName": "Claude Code Configuration & Workflows",
+  "questions": [
+    {
+      "id": "F2-D3-01",
+      "question": "A manufacturing firm uses Claude Code in a repository that contains PLC configuration files under plc-config/. Safety compliance requires an absolute, deterministic guarantee that Claude can never modify those files during a session. Which mechanism should the team use?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A PreToolUse hook matching Edit and Write that exits with code 2 when the target path is under plc-config/.",
+          "correct": true,
+          "explanation": "PreToolUse hooks run before a tool call executes, and exit code 2 blocks the call outright. Because hooks are shell commands executed by the Claude Code harness, they provide a deterministic guarantee rather than relying on the model to follow an instruction. This is exactly the enforcement layer Anthropic recommends for rules that must always apply.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        },
+        {
+          "key": "B",
+          "text": "A CLAUDE.md rule stating 'Never edit files under plc-config/'.",
+          "correct": false,
+          "explanation": "CLAUDE.md content is loaded as context, not enforced configuration; Claude tries to follow it but compliance is not guaranteed. Anthropic's docs explicitly say that to block an action regardless of what Claude decides, you should use a PreToolUse hook instead of a memory instruction.",
+          "citation": { "title": "Manage Claude's memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        },
+        {
+          "key": "C",
+          "text": "A PostToolUse hook that logs any edits made to plc-config/ files.",
+          "correct": false,
+          "explanation": "PostToolUse hooks run after the tool has already executed, so the file would already be modified by the time the hook fires. Logging supports auditing but cannot prevent the change, which fails the deterministic-prevention requirement.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        },
+        {
+          "key": "D",
+          "text": "Asking developers to include 'do not touch plc-config/' in every prompt they type.",
+          "correct": false,
+          "explanation": "Prompt instructions are advisory: the model usually follows them, but there is no mechanical guarantee, and they depend on every developer remembering to add them. Anthropic's guidance is to enforce hard constraints with hooks or permission deny rules, not per-prompt reminders.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-02",
+      "question": "An ed-tech startup writes a PreToolUse hook script that inspects Bash commands before Claude Code runs them. According to Anthropic's hook documentation, which exit code causes Claude Code to block the tool call, with the hook's stderr used as the blocking feedback?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Exit code 0, because success signals the hook has taken over the decision.",
+          "correct": false,
+          "explanation": "Exit code 0 means success and, absent a JSON decision on stdout, no blocking occurs and the normal permission flow applies. It is the opposite of a blocking signal.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        },
+        {
+          "key": "B",
+          "text": "Exit code 1, the conventional Unix failure code.",
+          "correct": false,
+          "explanation": "Exit code 1 is treated as a non-blocking error in Claude Code hooks. Only exit code 2 blocks on its own; other non-zero codes let the action proceed unless valid JSON output supplies a decision.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        },
+        {
+          "key": "C",
+          "text": "Exit code 2, the only exit code that blocks on its own.",
+          "correct": true,
+          "explanation": "Anthropic documents exit code 2 as the blocking error code: for PreToolUse it blocks the tool call, and the blocking message can come from stderr or a JSON decision reason. This is the deterministic blocking path hooks provide.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        },
+        {
+          "key": "D",
+          "text": "Any non-zero exit code blocks the tool call equally.",
+          "correct": false,
+          "explanation": "This is a common misconception. Non-zero exit codes other than 2 are non-blocking errors: the action proceeds unless the hook's stdout contains valid JSON with a deny decision. Only exit code 2 blocks by itself.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-03",
+      "question": "A non-profit's engineering volunteers configure a PostToolUse hook that runs a linter after every Write and exits with code 2 when linting fails. During a session the linter fails on a newly written file. What actually happens?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude Code automatically rolls back the file write that triggered the hook.",
+          "correct": false,
+          "explanation": "Hooks have no rollback mechanism. PostToolUse fires after the tool has completed, and Claude Code does not undo the tool's effects; it can only surface feedback about them.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        },
+        {
+          "key": "B",
+          "text": "The file was already written; the hook's stderr is shown to Claude so it can fix the lint issues.",
+          "correct": true,
+          "explanation": "For PostToolUse, exit code 2 cannot block a tool that has already run. Instead, the stderr output is fed back to Claude, which lets the model see the lint failure and correct the file in a follow-up action. This is the documented behavior for post-execution hooks.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        },
+        {
+          "key": "C",
+          "text": "Claude Code blocks the Write before it happens, so the file is never created.",
+          "correct": false,
+          "explanation": "Blocking before execution is PreToolUse behavior. PostToolUse runs after the tool call has completed, so prevention is impossible at that point; the write has already landed on disk.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        },
+        {
+          "key": "D",
+          "text": "The hook output is discarded because only PreToolUse hooks can return feedback.",
+          "correct": false,
+          "explanation": "PostToolUse hooks are not silent. On exit code 2 their stderr is explicitly shown to Claude, which is what makes them useful for automated quality feedback loops like linting or test checks.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://docs.claude.com/en/docs/claude-code/hooks" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-04",
+      "question": "A manufacturing conglomerate's IT department deploys managed enterprise settings that deny the WebFetch tool for all Claude Code users. A developer adds an allow rule for WebFetch in both ~/.claude/settings.json and the project's .claude/settings.json. Which configuration wins?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The user settings, because personal preferences always override organizational defaults.",
+          "correct": false,
+          "explanation": "User settings sit at the lowest precedence level. Anthropic's precedence order places managed enterprise settings above project and user settings specifically so individuals cannot override organizational policy.",
+          "citation": { "title": "Claude Code settings", "url": "https://docs.claude.com/en/docs/claude-code/settings" }
+        },
+        {
+          "key": "B",
+          "text": "The project settings, because they are the most specific to the current work.",
+          "correct": false,
+          "explanation": "Project settings override user settings but not managed settings. Specificity to the current project does not outrank the managed policy tier, which is intentionally the highest level.",
+          "citation": { "title": "Claude Code settings", "url": "https://docs.claude.com/en/docs/claude-code/settings" }
+        },
+        {
+          "key": "C",
+          "text": "Whichever settings file was modified most recently.",
+          "correct": false,
+          "explanation": "Precedence is determined by a fixed hierarchy of settings scopes, not file modification timestamps. Managed settings sit at the top regardless of when other files were edited.",
+          "citation": { "title": "Claude Code settings", "url": "https://docs.claude.com/en/docs/claude-code/settings" }
+        },
+        {
+          "key": "D",
+          "text": "The managed enterprise settings; no lower level can override a managed permission rule.",
+          "correct": true,
+          "explanation": "Managed settings deployed by an organization take highest precedence in Claude Code's settings hierarchy: enterprise managed settings override command-line, local, project, and user settings. Anthropic documents that not even CLI arguments can override a managed permission rule.",
+          "citation": { "title": "Claude Code settings", "url": "https://docs.claude.com/en/docs/claude-code/settings" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-05",
+      "question": "At an ed-tech company, a developer sets a configuration key in ~/.claude/settings.json. The team later commits a different value for the same key in the repository's .claude/settings.json. With no managed or local settings involved, which value does Claude Code use in that repository?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The shared project value in .claude/settings.json, because project settings rank above user settings.",
+          "correct": true,
+          "explanation": "In Claude Code's settings precedence, shared project settings (.claude/settings.json) override user settings (~/.claude/settings.json). This lets teams standardize project behavior via version control while individuals keep personal defaults for other projects.",
+          "citation": { "title": "Claude Code settings", "url": "https://docs.claude.com/en/docs/claude-code/settings" }
+        },
+        {
+          "key": "B",
+          "text": "The developer's value in ~/.claude/settings.json, because personal settings are evaluated last.",
+          "correct": false,
+          "explanation": "User settings are the lowest-precedence file scope, applying only where nothing higher sets the same key. Being 'personal' does not give them priority; the hierarchy is designed so shared project configuration wins over individual defaults.",
+          "citation": { "title": "Claude Code settings", "url": "https://docs.claude.com/en/docs/claude-code/settings" }
+        },
+        {
+          "key": "C",
+          "text": "Both values are merged and applied simultaneously.",
+          "correct": false,
+          "explanation": "When the same key is set at multiple levels, the higher-precedence level's value is used; a single key cannot hold two conflicting values at once. Precedence resolution, not merging, decides conflicts for a given key.",
+          "citation": { "title": "Claude Code settings", "url": "https://docs.claude.com/en/docs/claude-code/settings" }
+        },
+        {
+          "key": "D",
+          "text": "Claude Code prompts the developer to pick a value at the start of each session.",
+          "correct": false,
+          "explanation": "Settings conflicts are resolved silently by the documented precedence order; there is no interactive conflict prompt. The developer would need to inspect the settings files or precedence rules to see which value applies.",
+          "citation": { "title": "Claude Code settings", "url": "https://docs.claude.com/en/docs/claude-code/settings" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-06",
+      "question": "A food-bank non-profit's project settings contain a permissions deny rule Bash(curl *) and an allow rule Bash(curl https://api.foodbank.org *). Claude attempts to run a curl command against api.foodbank.org. What happens?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The command runs, because the allow rule is more specific than the deny rule.",
+          "correct": false,
+          "explanation": "Specificity does not create exceptions to deny rules in Claude Code. A broad deny rule blocks every matching call even when a narrower allow rule also matches, so the allow rule cannot carve out an exception here.",
+          "citation": { "title": "Claude Code permissions", "url": "https://docs.claude.com/en/docs/claude-code/permissions" }
+        },
+        {
+          "key": "B",
+          "text": "Claude Code prompts the user to resolve the conflict interactively.",
+          "correct": false,
+          "explanation": "There is no interactive conflict resolution between allow and deny rules; precedence is deterministic. Deny always wins over allow for a matching call, so no prompt is shown.",
+          "citation": { "title": "Claude Code permissions", "url": "https://docs.claude.com/en/docs/claude-code/permissions" }
+        },
+        {
+          "key": "C",
+          "text": "The command is blocked, because deny rules take precedence over allow rules.",
+          "correct": true,
+          "explanation": "Anthropic documents deny-first precedence: a matching deny rule blocks the call even when an allow rule also matches it. To allow the internal API, the team must narrow the deny rule itself rather than rely on an allow exception.",
+          "citation": { "title": "Claude Code permissions", "url": "https://docs.claude.com/en/docs/claude-code/permissions" }
+        },
+        {
+          "key": "D",
+          "text": "Whichever rule appears first in the settings file is applied.",
+          "correct": false,
+          "explanation": "Rule ordering within the file has no effect on the outcome. Permission evaluation is based on rule type precedence (deny over ask over allow), not the order in which rules are written.",
+          "citation": { "title": "Claude Code permissions", "url": "https://docs.claude.com/en/docs/claude-code/permissions" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-07",
+      "question": "An ed-tech team wants their project CLAUDE.md to automatically pull the repository README and docs/style-guide.md into Claude's context at the start of every session, without copying their contents. Which approach does Anthropic support for this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add standard markdown links like [README](README.md) so Claude follows them at launch.",
+          "correct": false,
+          "explanation": "Markdown links in CLAUDE.md are just text; they are not expanded into context at launch. Claude might choose to read a linked file later, but that is not guaranteed and is not the import mechanism.",
+          "citation": { "title": "Manage Claude's memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Reference the files with @README and @docs/style-guide.md import syntax in CLAUDE.md.",
+          "correct": true,
+          "explanation": "CLAUDE.md supports importing additional files with @path/to/import syntax; imported files are expanded and loaded into context at launch, and can recursively import other files. Relative paths resolve relative to the file containing the import.",
+          "citation": { "title": "Manage Claude's memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        },
+        {
+          "key": "C",
+          "text": "List the files under an 'imports' key in .claude/settings.json.",
+          "correct": false,
+          "explanation": "File imports are a feature of CLAUDE.md content, not of settings.json. There is no documented 'imports' settings key; inventing configuration options is exactly what Anthropic's docs help you avoid.",
+          "citation": { "title": "Claude Code settings", "url": "https://docs.claude.com/en/docs/claude-code/settings" }
+        },
+        {
+          "key": "D",
+          "text": "Wrap the paths in backticks, like `@README`, so Claude recognizes them as files.",
+          "correct": false,
+          "explanation": "Backticks do the opposite: import parsing skips code spans and fenced code blocks, so `@README` is treated as literal text and not imported. The @path reference must appear outside backticks to trigger an import.",
+          "citation": { "title": "Manage Claude's memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-08",
+      "question": "A manufacturing software group runs Claude Code from the root of a monorepo that has a root CLAUDE.md plus another CLAUDE.md inside packages/firmware/. When is the firmware subdirectory's CLAUDE.md included in context?",
+      "options": [
+        {
+          "key": "A",
+          "text": "At launch, together with the root CLAUDE.md.",
+          "correct": false,
+          "explanation": "Only CLAUDE.md files in the working directory and the directories above it load at launch. Subdirectory CLAUDE.md files below the working directory are deliberately deferred to keep startup context lean.",
+          "citation": { "title": "Manage Claude's memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Never, unless the root CLAUDE.md imports it with @ syntax.",
+          "correct": false,
+          "explanation": "An import is not required. Claude Code automatically discovers CLAUDE.md files in subdirectories and includes them on demand; @ imports are an additional mechanism, not the only path to loading nested memory files.",
+          "citation": { "title": "Manage Claude's memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        },
+        {
+          "key": "C",
+          "text": "It replaces the root CLAUDE.md whenever Claude works inside packages/firmware/.",
+          "correct": false,
+          "explanation": "CLAUDE.md files are concatenated into context rather than overriding each other. The firmware file supplements the root instructions; it does not replace them, which is why conflicting instructions across files should be reconciled.",
+          "citation": { "title": "Manage Claude's memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        },
+        {
+          "key": "D",
+          "text": "On demand, when Claude reads files inside that subdirectory.",
+          "correct": true,
+          "explanation": "Claude Code loads CLAUDE.md files from the working directory upward at launch, while CLAUDE.md files in subdirectories are included when Claude reads files in those subdirectories. This on-demand behavior keeps monorepo context focused on the areas actually being worked on.",
+          "citation": { "title": "Manage Claude's memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-09",
+      "question": "A non-profit's grant-management repo needs a reusable 'test-runner' helper that runs the test suite, reports only failures, keeps verbose logs out of the main conversation, is restricted to a few tools, and is shared with all contributors via git. What should the team create?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A subagent markdown file in .claude/agents/ with YAML frontmatter defining name, description, and tools.",
+          "correct": true,
+          "explanation": "Project subagents live in .claude/agents/ as markdown files with YAML frontmatter (name, description, optional tools and model) and can be checked into version control for team sharing. Each subagent runs in its own context window, which keeps verbose test output out of the main conversation, and the tools field enforces tool restrictions.",
+          "citation": { "title": "Claude Code subagents", "url": "https://docs.claude.com/en/docs/claude-code/sub-agents" }
+        },
+        {
+          "key": "B",
+          "text": "A CLAUDE.md section describing the test procedure in detail.",
+          "correct": false,
+          "explanation": "CLAUDE.md instructions run in the main conversation, so verbose test logs would still consume the primary context window, and CLAUDE.md cannot enforce tool restrictions. Subagents exist precisely to isolate noisy, self-contained work in a separate context.",
+          "citation": { "title": "Manage Claude's memory (CLAUDE.md)", "url": "https://docs.claude.com/en/docs/claude-code/memory" }
+        },
+        {
+          "key": "C",
+          "text": "A user-level agent in ~/.claude/agents/ on each maintainer's laptop.",
+          "correct": false,
+          "explanation": "User-level agents apply across a person's projects but are not shared through the repository, so every contributor would have to recreate the file manually. Project-level agents in .claude/agents/ are the documented way to distribute a subagent with the codebase, and they take precedence over user-level agents with the same name.",
+          "citation": { "title": "Claude Code subagents", "url": "https://docs.claude.com/en/docs/claude-code/sub-agents" }
+        },
+        {
+          "key": "D",
+          "text": "A second interactive Claude Code session that a volunteer runs manually in another terminal.",
+          "correct": false,
+          "explanation": "A manually managed second session is not reusable, shareable, or automatically delegated to; it relies on human coordination each time. Subagents give the same isolation with automatic delegation based on the description field, versioned alongside the code.",
+          "citation": { "title": "Claude Code subagents", "url": "https://docs.claude.com/en/docs/claude-code/sub-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-10",
+      "question": "An ed-tech instructor creates .claude/commands/grade.md containing: 'Review the student submission in $ARGUMENTS against the rubric and produce feedback.' A teaching assistant then types '/grade assignments/essay-04.md'. What does $ARGUMENTS do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "It makes Claude Code prompt the user interactively for input after the command is invoked.",
+          "correct": false,
+          "explanation": "$ARGUMENTS is a substitution placeholder, not an interactive prompt trigger. The arguments are supplied inline on the same line as the slash command invocation.",
+          "citation": { "title": "Claude Code slash commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+        },
+        {
+          "key": "B",
+          "text": "It reads the value of a shell environment variable named ARGUMENTS.",
+          "correct": false,
+          "explanation": "Despite the shell-like syntax, $ARGUMENTS is resolved by Claude Code's command templating, not by the shell environment. Environment variables are a separate mechanism and are not how slash command arguments are passed.",
+          "citation": { "title": "Claude Code slash commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+        },
+        {
+          "key": "C",
+          "text": "It is replaced with 'assignments/essay-04.md', the text typed after the command name.",
+          "correct": true,
+          "explanation": "Custom slash commands support the $ARGUMENTS placeholder, which expands to everything the user typed after the command name. This lets one command template be parameterized per invocation; positional placeholders are also available for individual arguments.",
+          "citation": { "title": "Claude Code slash commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+        },
+        {
+          "key": "D",
+          "text": "It expands to a list of all files in the current working directory.",
+          "correct": false,
+          "explanation": "$ARGUMENTS carries only the invocation text supplied by the user; it performs no filesystem globbing or directory listing. File contents are referenced through other mechanisms, such as @file references.",
+          "citation": { "title": "Claude Code slash commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+        }
+      ]
+    },
+    {
+      "id": "F2-D3-11",
+      "question": "A manufacturing DevOps team wants their CI pipeline to run Claude Code non-interactively on each pull request, produce machine-readable output, and permit only file reads and git log inspection. Which invocation fits Anthropic's guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run interactive claude and drive it with a terminal-automation script.",
+          "correct": false,
+          "explanation": "Scripting the interactive UI is brittle and unnecessary. Anthropic provides headless mode (claude -p / --print) specifically for CI and programmatic use, where Claude processes the query and exits without an interactive session.",
+          "citation": { "title": "Claude Code CLI reference", "url": "https://docs.claude.com/en/docs/claude-code/cli-reference" }
+        },
+        {
+          "key": "B",
+          "text": "claude -p \"review this PR\" --output-format json --allowedTools \"Read\" \"Bash(git log *)\"",
+          "correct": true,
+          "explanation": "The -p/--print flag runs Claude Code headless for scripts and CI, --output-format json returns structured output for downstream parsing, and --allowedTools lists the allow rules that may execute without a permission prompt, including pattern-scoped Bash rules such as Bash(git log *). Nothing outside those rules is auto-approved, which keeps an unattended CI run at least privilege; --disallowedTools or --tools can strip other tools entirely.",
+          "citation": { "title": "Claude Code CLI reference", "url": "https://docs.claude.com/en/docs/claude-code/cli-reference" }
+        },
+        {
+          "key": "C",
+          "text": "claude --dangerously-skip-permissions with the full default tool set.",
+          "correct": false,
+          "explanation": "Skipping permissions auto-approves everything, granting far more capability than the requirement of reads and git log only, which violates least privilege in an unattended environment. The documented pattern for scoping CI runs is --allowedTools (optionally with --disallowedTools or --tools), not a blanket permission bypass.",
+          "citation": { "title": "Claude Code CLI reference", "url": "https://docs.claude.com/en/docs/claude-code/cli-reference" }
+        },
+        {
+          "key": "D",
+          "text": "Claude Code cannot run in CI; the team must call the Messages API directly instead.",
+          "correct": false,
+          "explanation": "Claude Code explicitly supports non-interactive automation through headless mode with -p, including piped input and JSON output formats for CI pipelines. Using the raw API is an option for other architectures but is not required here.",
+          "citation": { "title": "Claude Code CLI reference", "url": "https://docs.claude.com/en/docs/claude-code/cli-reference" }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,513 @@
+{
+  "examId": "ccar-f-exam1",
+  "domainId": "D3",
+  "domainName": "Claude Code Configuration & Workflows",
+  "questions": [
+    {
+      "id": "F1-D3-01",
+      "question": "A fintech platform team wants every engineer using Claude Code on their payments repo to automatically follow the same build commands, coding standards, and branch conventions. Where should these instructions live?",
+      "options": [
+        {
+          "key": "A",
+          "text": "In each engineer's ~/.claude/CLAUDE.md so the rules apply to all of their projects.",
+          "correct": false,
+          "explanation": "The user-scope ~/.claude/CLAUDE.md holds personal preferences that apply across all of an individual's projects, not team standards. Anthropic's guidance is to put team-shared, project-specific instructions in a project CLAUDE.md distributed via source control.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "In a CLAUDE.md at the repository root, committed to version control so the whole team shares it.",
+          "correct": true,
+          "explanation": "A project-scope CLAUDE.md (./CLAUDE.md or ./.claude/CLAUDE.md) is read at the start of every session and is shared with teammates through version control. Anthropic recommends it for project architecture, coding standards, and common workflows that everyone on the repo should follow.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "In CLAUDE.local.md, since it is designed for instructions local to one repository.",
+          "correct": false,
+          "explanation": "CLAUDE.local.md holds personal, project-specific preferences and Anthropic recommends adding it to .gitignore, so it is never shared with the team. It is the wrong place for standards that must reach every engineer.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "In .claude/settings.json, because settings files are the enforced configuration layer.",
+          "correct": false,
+          "explanation": "settings.json configures permissions, hooks, and other tool behavior; it is not where you write natural-language coding standards for Claude. Behavioral guidance belongs in CLAUDE.md, while settings enforce technical rules like tool permissions.",
+          "citation": {
+            "title": "Claude Code settings",
+            "url": "https://code.claude.com/docs/en/settings"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-02",
+      "question": "An engineer at a healthcare SaaS company has a personal ~/.claude/CLAUDE.md with style preferences and works in a repo that has its own project CLAUDE.md. When she starts a session, how does Claude Code treat the two files?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The project file completely replaces the user file for that repository.",
+          "correct": false,
+          "explanation": "Memory files do not override each other. Anthropic documents that all discovered CLAUDE.md files are concatenated into context, so both the user and project instructions are visible to Claude simultaneously.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The user file wins because personal configuration always takes precedence over project files.",
+          "correct": false,
+          "explanation": "There is no winner-takes-all precedence between memory files; both load. Broader-scope files (user) load before narrower-scope files (project), so project instructions appear later in context, but neither file is discarded.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Only the project file loads at launch; the user file loads on demand when relevant.",
+          "correct": false,
+          "explanation": "Both user-scope and project-scope CLAUDE.md files are loaded at session start. It is CLAUDE.md files in subdirectories below the working directory that load on demand, when Claude reads files in those directories.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Both files load into context, with the broader user scope placed before the project scope.",
+          "correct": true,
+          "explanation": "Claude Code loads memory files from broadest to most specific scope and concatenates them, so user instructions are read first and project instructions after. This ordering lets project-level guidance refine, not erase, personal defaults.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-03",
+      "question": "A B2B SaaS team built a /release-notes workflow prompt for Claude Code and wants every teammate to get it automatically when they clone the repository. Where should the command file be stored?",
+      "options": [
+        {
+          "key": "A",
+          "text": "In the repo .claude/commands/ directory, committed to version control.",
+          "correct": true,
+          "explanation": "Project commands in .claude/commands/ are checked into the repository and shared with the team, so anyone who clones the repo gets the slash command automatically. This is Anthropic's documented mechanism for team-shared commands.",
+          "citation": {
+            "title": "Slash commands",
+            "url": "https://code.claude.com/docs/en/slash-commands"
+          }
+        },
+        {
+          "key": "B",
+          "text": "In each developer's ~/.claude/commands/ directory on their own machine.",
+          "correct": false,
+          "explanation": "~/.claude/commands/ holds personal commands available across all of one user's projects but local to their machine only. Teammates cloning the repo would not receive it, so it fails the sharing requirement.",
+          "citation": {
+            "title": "Slash commands",
+            "url": "https://code.claude.com/docs/en/slash-commands"
+          }
+        },
+        {
+          "key": "C",
+          "text": "In the project's .mcp.json file, which is the shared configuration checked into git.",
+          "correct": false,
+          "explanation": ".mcp.json is for sharing MCP server configuration with a team, not slash commands. Slash commands are Markdown files stored in commands (or skills) directories.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "D",
+          "text": "In CLAUDE.md, since that file is already committed and loaded automatically every session.",
+          "correct": false,
+          "explanation": "CLAUDE.md provides persistent background instructions, not invocable slash commands. Putting an on-demand workflow there wastes context in every session; reusable invocable workflows belong in .claude/commands/ or .claude/skills/.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-04",
+      "question": "A legal-tech team wants everyone working in their contracts repo to have 'npm run test' pre-approved but direct pushes to main blocked, without each engineer configuring it manually. Which file should hold these permission rules?",
+      "options": [
+        {
+          "key": "A",
+          "text": "~/.claude/settings.json, since tool permissions are always a strictly per-user concern.",
+          "correct": false,
+          "explanation": "User settings apply only to that individual across their projects and are not shared. A rule set the whole team must inherit belongs in the project's shared settings file, which is checked into version control.",
+          "citation": {
+            "title": "Claude Code settings",
+            "url": "https://code.claude.com/docs/en/settings"
+          }
+        },
+        {
+          "key": "B",
+          "text": ".claude/settings.local.json, committed to the repository so the whole team inherits it.",
+          "correct": false,
+          "explanation": ".claude/settings.local.json is for personal, per-project settings and is not meant to be committed or shared. Shared project settings go in .claude/settings.json instead.",
+          "citation": {
+            "title": "Claude Code settings",
+            "url": "https://code.claude.com/docs/en/settings"
+          }
+        },
+        {
+          "key": "C",
+          "text": ".claude/settings.json in the repo, holding permissions.allow and permissions.deny rules.",
+          "correct": true,
+          "explanation": "The shared project settings file .claude/settings.json is designed for team-wide configuration, including permission rules such as allow entries like Bash(npm run test:*) and deny rules. Committing it means every engineer inherits the policy on clone.",
+          "citation": {
+            "title": "Configure permissions",
+            "url": "https://code.claude.com/docs/en/permissions"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The project CLAUDE.md, with an instruction telling Claude never to push directly to main.",
+          "correct": false,
+          "explanation": "CLAUDE.md instructions are context Claude tries to follow, not enforced configuration. Anthropic's guidance is that blocking specific commands should be done with permission rules or hooks, which the client enforces regardless of what Claude decides.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-05",
+      "question": "An e-commerce team added 'ALWAYS run prettier after editing a file' to CLAUDE.md, but Claude occasionally skips it during long sessions. They need formatting to happen every single time a file is edited. What is Anthropic's recommended approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the instruction to the top of CLAUDE.md and mark it IMPORTANT so Claude never misses it.",
+          "correct": false,
+          "explanation": "Emphasis improves adherence but CLAUDE.md remains advisory context, not enforcement; there is no guarantee of strict compliance. Anthropic's guidance: when a rule must be guaranteed, enforce it deterministically with a hook rather than trusting a prompt alone.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Configure a PostToolUse hook matching Edit/Write tools that runs prettier as a shell command.",
+          "correct": true,
+          "explanation": "Hooks execute deterministically at fixed lifecycle events regardless of what Claude decides, so a PostToolUse hook on file-editing tools guarantees the formatter runs after every edit. Anthropic explicitly contrasts advisory CLAUDE.md instructions with deterministic hooks for must-happen actions.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Repeat the instruction in every user prompt so it stays fresh in the context window.",
+          "correct": false,
+          "explanation": "Repeating instructions in prompts is manual, error-prone, and still relies on the model choosing to comply. Deterministic requirements should be enforced by the harness via hooks, not by prompt repetition.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Create a subagent whose system prompt requires running prettier, and route all edits through it.",
+          "correct": false,
+          "explanation": "Subagents isolate context for delegated tasks; their system prompts are still prompts, so compliance is not guaranteed. Routing every edit through a subagent adds complexity without providing the deterministic enforcement a PostToolUse hook gives.",
+          "citation": {
+            "title": "Subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-06",
+      "question": "A bank's platform team must ensure Claude Code can never execute a shell command that modifies files in the production deploy directory, even if the model is instructed otherwise. Which hook design achieves this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A PostToolUse hook that detects the command after it runs and warns the user.",
+          "correct": false,
+          "explanation": "PostToolUse fires after the tool has already executed, so the damage would be done. A blocking exit code there only surfaces feedback to Claude; prevention requires intercepting the call before execution.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A SessionStart hook that reminds Claude of the deploy-directory policy at the beginning of each session.",
+          "correct": false,
+          "explanation": "SessionStart hooks can inject context, but injected text is still advisory guidance to the model. It cannot guarantee a command is never executed; only a pre-execution block enforced by the client can.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "An instruction in the managed CLAUDE.md that forbids touching the deploy directory.",
+          "correct": false,
+          "explanation": "Even organization-managed CLAUDE.md content shapes behavior but is not a hard enforcement layer. Anthropic's own comparison table directs blocking tools, commands, or file paths to enforced settings and hooks, not memory files.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A PreToolUse hook matching the Bash tool that inspects the command and exits with code 2.",
+          "correct": true,
+          "explanation": "PreToolUse hooks run before a tool call executes; exiting with code 2 is a blocking error that prevents the call and returns the stderr reason. This is deterministic client-side enforcement that holds regardless of the model's instructions.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-07",
+      "question": "A logistics company wants a reusable 'security-reviewer' assistant in Claude Code with a specialized system prompt and read-only tools, shared with the whole team via the repo. How should they implement it?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Create a Markdown file with YAML frontmatter in the project .claude/agents/ directory.",
+          "correct": true,
+          "explanation": "Custom subagents are defined as Markdown files with YAML frontmatter specifying name, description, and an optional restricted tool list; storing them in .claude/agents/ and checking them into version control shares them with the team. Each subagent runs with its own context window and system prompt.",
+          "citation": {
+            "title": "Subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add a 'security reviewer persona' section to CLAUDE.md that Claude adopts when asked.",
+          "correct": false,
+          "explanation": "CLAUDE.md text cannot restrict tools or isolate context; it just adds instructions to the main conversation. Subagent definitions in .claude/agents/ provide the separate context window and enforced tool restrictions the team wants.",
+          "citation": {
+            "title": "Subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Register the reviewer as an MCP server in .mcp.json so that it appears as a callable tool.",
+          "correct": false,
+          "explanation": "MCP servers expose external tools and data sources to Claude Code; they are not the mechanism for defining specialized AI assistants with their own system prompts. That is what subagents in .claude/agents/ are for.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Write a PreToolUse hook that rewrites prompts to include the reviewer persona.",
+          "correct": false,
+          "explanation": "Hooks run shell commands or handlers at lifecycle events for automation and enforcement; they are not designed to define reusable specialist personas with scoped tools. A subagent file is the purpose-built, shareable mechanism.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-08",
+      "question": "A DevOps engineer wants their CI pipeline to invoke Claude Code non-interactively to summarize failing tests, pre-approving only the Read tool and emitting machine-parseable output. Which invocation fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "claude --continue, so the pipeline reuses the engineer's last interactive session.",
+          "correct": false,
+          "explanation": "--continue resumes a prior conversation; on its own it still starts Claude Code interactively and depends on machine-local session state, which is unsuitable for CI. Non-interactive automation uses the -p (print) flag.",
+          "citation": {
+            "title": "Run Claude Code programmatically",
+            "url": "https://code.claude.com/docs/en/headless"
+          }
+        },
+        {
+          "key": "B",
+          "text": "claude --permission-mode plan, because plan mode never requires human approval.",
+          "correct": false,
+          "explanation": "Plan mode is a read-and-analyze mode for interactive sessions where Claude explores without making changes; it does not make the CLI non-interactive or produce structured output for scripts. CI integration uses claude -p with output-format flags.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "claude -p \"Summarize the failing tests\" --allowedTools \"Read\" --output-format json",
+          "correct": true,
+          "explanation": "The -p (print) flag runs Claude Code non-interactively for scripts and CI, --allowedTools pre-approves specific tools so the run never waits on a permission prompt, and --output-format json returns structured output a pipeline can parse. This is Anthropic's documented pattern for automation.",
+          "citation": {
+            "title": "Run Claude Code programmatically",
+            "url": "https://code.claude.com/docs/en/headless"
+          }
+        },
+        {
+          "key": "D",
+          "text": "claude --permission-mode bypassPermissions in the pipeline, since CI has no user to ask.",
+          "correct": false,
+          "explanation": "Bypassing permissions grants far more capability than the task needs and skips the safety layer entirely. The least-privilege pattern for CI is -p with --allowedTools scoped to exactly the tools required.",
+          "citation": {
+            "title": "Run Claude Code programmatically",
+            "url": "https://code.claude.com/docs/en/headless"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-09",
+      "question": "A data platform team wants every developer on their analytics repo to get the same internal database MCP server in Claude Code automatically, reviewed through normal code review. Which configuration approach should they use?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Each developer runs claude mcp add with the default local scope on their machine.",
+          "correct": false,
+          "explanation": "Local-scope servers are private to the individual developer and stored in their personal configuration, so nothing is shared or code-reviewed. Team-shared servers belong in project scope.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add the server with --scope project, which writes it to a .mcp.json at the repo root.",
+          "correct": true,
+          "explanation": "Project-scoped MCP servers are stored in .mcp.json at the project root, which is designed to be checked into version control so the whole team shares the configuration. Claude Code also prompts for approval before first use of project-scoped servers as a safety measure.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add the server with --scope user so it follows each developer across all repositories.",
+          "correct": false,
+          "explanation": "User scope makes a server available in all of one person's projects but keeps it in their private per-user configuration; it is not committed to the repo or shared through review. The requirement is team distribution, which is project scope.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Document the connection string in CLAUDE.md so Claude can connect when needed.",
+          "correct": false,
+          "explanation": "CLAUDE.md provides instructions, not tool wiring; Claude Code connects to MCP servers through its MCP configuration, not through prose in memory files. It also risks committing credentials as plain text instead of using env-var expansion in .mcp.json.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-10",
+      "question": "An engineer inherits an unfamiliar billing module and wants Claude Code to research the code and propose a refactoring approach for review before any file is modified. Which built-in capability fits best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "acceptEdits mode, which pauses after each proposed change so a human can review it first.",
+          "correct": false,
+          "explanation": "acceptEdits does the opposite: it auto-approves file edits without prompting, reducing review rather than increasing it. The requirement is to prevent modifications during analysis, which is plan mode's purpose.",
+          "citation": {
+            "title": "Run Claude Code programmatically",
+            "url": "https://code.claude.com/docs/en/headless"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A PreCompact hook that snapshots the repo before Claude begins working.",
+          "correct": false,
+          "explanation": "PreCompact hooks fire around context compaction events; snapshotting does not stop changes from being made. Plan mode is the mechanism that lets Claude read and analyze without editing.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Running Claude with --allowedTools \"Edit\" so edits are permitted but visible.",
+          "correct": false,
+          "explanation": "Pre-approving the Edit tool makes modifications easier, not safer, and provides no research-then-approve workflow. The explore-plan-then-implement pattern uses plan mode to separate analysis from execution.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Plan mode (claude --permission-mode plan), where Claude produces a plan without editing.",
+          "correct": true,
+          "explanation": "Plan mode lets Claude read files and answer questions without modifying anything, then present an implementation plan you approve before switching to execution. Anthropic's recommended workflow is explore, plan, implement, commit, using plan mode for the first two phases.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D3-11",
+      "question": "A startup's 900-line CLAUDE.md contains their full architecture guide, API docs, and tutorials, yet Claude keeps ignoring key rules. According to Anthropic's guidance, what is the most likely fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Prune it to short, broadly-applicable rules and move situational content into skills or path-scoped rules.",
+          "correct": true,
+          "explanation": "Anthropic advises keeping CLAUDE.md concise (target under ~200 lines): bloated files consume context and reduce adherence, causing important rules to get lost in noise. Content Claude can derive from the code, or that only matters sometimes, should be cut or moved to skills and path-scoped rules that load on demand.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Duplicate the file into ~/.claude/CLAUDE.md as well, so the rules are loaded twice.",
+          "correct": false,
+          "explanation": "Loading the same content at two scopes doubles the context cost without improving compliance, and conflicting duplicates can make Claude pick between versions arbitrarily. The documented issue with long files is noise, which duplication worsens.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Mark every line IMPORTANT so that no individual rule is ever deprioritized by the model.",
+          "correct": false,
+          "explanation": "Anthropic notes that emphasis helps for a single skipped instruction, but if you emphasize many lines none of them stands out. The root cause of ignored rules in a huge file is length, which pruning addresses.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Split the content into @-imported files, which removes it from the context window.",
+          "correct": false,
+          "explanation": "Imports help organization, but imported files are still expanded and loaded into context at launch, so splitting alone does not reduce token cost or improve adherence. Reducing what loads every session requires trimming or path-scoped rules.",
+          "citation": {
+            "title": "How Claude remembers your project (CLAUDE.md)",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    }
+  ]
+}

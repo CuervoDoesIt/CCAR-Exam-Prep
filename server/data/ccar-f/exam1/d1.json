@@ -1,0 +1,651 @@
+{
+  "examId": "ccar-f-exam1",
+  "domainId": "D1",
+  "domainName": "Agentic Architecture & Orchestration",
+  "questions": [
+    {
+      "id": "F1-D1-01",
+      "question": "A fintech platform team is implementing the agentic loop for a loan-support agent that can look up account balances and payment schedules. After each Messages API call, what should the loop check to decide whether to execute another tool or present the final response to the customer?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Whether the response content contains any text blocks; if so, the agent is finished.",
+          "correct": false,
+          "explanation": "Claude often emits a text block explaining what it is doing alongside a tool_use block in the same response, so the presence of text does not mean the turn is complete. The documented signal for loop control is stop_reason, not the presence or absence of text content.",
+          "citation": {
+            "title": "Handling stop reasons - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The stop_reason field: continue the loop on \"tool_use\", and exit on \"end_turn\".",
+          "correct": true,
+          "explanation": "This is the documented agentic loop pattern: a stop_reason of \"tool_use\" means Claude is requesting a tool execution, so you run the tool, append the result, and call the API again. A stop_reason of \"end_turn\" means Claude finished naturally and the response can be returned to the user.",
+          "citation": {
+            "title": "Handling stop reasons - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Whether the usage.output_tokens count is below the configured max_tokens limit for the request.",
+          "correct": false,
+          "explanation": "Token counts indicate response length, not intent to call a tool. A response can be well under max_tokens and still contain a tool_use request, or hit the limit mid-generation (stop_reason \"max_tokens\"). Anthropic's guidance is to branch on stop_reason, treating \"max_tokens\" as a truncation case to handle separately.",
+          "citation": {
+            "title": "Handling stop reasons - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Whether the API returned HTTP 200; any successful status means the conversation turn is over.",
+          "correct": false,
+          "explanation": "A 200 status only means the API call succeeded; it says nothing about whether Claude wants to invoke a tool. Every response in an agentic loop returns 200 in the normal case, including ones with stop_reason \"tool_use\" that require the loop to continue.",
+          "citation": {
+            "title": "Tool use with Claude - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-02",
+      "question": "A healthcare software vendor is debating how to classify its new prior-authorization assistant. The system's LLM calls and tools are orchestrated through predefined code paths that always run in the same order. According to Anthropic's \"Building Effective Agents\", how should this system be classified?",
+      "options": [
+        {
+          "key": "A",
+          "text": "As an agent, because any system that uses an LLM together with tools qualifies as agentic.",
+          "correct": false,
+          "explanation": "Using an LLM with tools is not the distinguishing factor. Anthropic reserves the term \"agent\" for systems where the LLM dynamically directs its own processes and tool usage; predefined orchestration with tools is still a workflow.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "As an agent, because healthcare use cases require agent-level autonomy for compliance reasons.",
+          "correct": false,
+          "explanation": "Compliance requirements do not change the architectural classification, and regulated domains typically favor more predictable workflows, not more autonomy. The workflow/agent distinction rests on who controls the process: the developer's code or the model itself.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "As a hybrid that must be redesigned, because mixing LLMs with fixed code paths is discouraged.",
+          "correct": false,
+          "explanation": "Anthropic explicitly endorses workflows built from fixed code paths; they offer predictability and consistency for well-defined tasks. Nothing about the design needs redesigning simply because it is a workflow rather than an agent.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "As a workflow, since the LLM and tools are orchestrated through predefined code paths.",
+          "correct": true,
+          "explanation": "Anthropic defines workflows as systems where LLMs and tools are orchestrated through predefined code paths, and agents as systems where the LLM dynamically directs its own processes and tool usage. A fixed, developer-defined sequence is the textbook definition of a workflow.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-03",
+      "question": "An e-commerce company generates product descriptions in English, then needs each description checked against brand guidelines before being translated into five languages. The steps are fixed and each LLM call consumes the previous call's output. Which pattern from \"Building Effective Agents\" fits this design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Prompt chaining: a fixed sequence of LLM calls, each processing the prior step output.",
+          "correct": true,
+          "explanation": "Prompt chaining is exactly this: a task decomposed into sequential steps where each LLM call processes the output of the previous one, optionally with programmatic gates between steps. Anthropic notes it trades latency for higher accuracy on decomposable tasks, and cites generating copy then translating it as a canonical example.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Evaluator-optimizer: a generator model and an evaluator model loop until quality converges.",
+          "correct": false,
+          "explanation": "Evaluator-optimizer involves an iterative feedback loop where one LLM refines output based on another's critique until criteria are met. This scenario is a fixed forward pipeline with no iterative refinement loop, which is prompt chaining.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Autonomous agent: let the model decide dynamically which of the three steps to run and in what order.",
+          "correct": false,
+          "explanation": "The steps here are known in advance and always run in the same order, so there is no benefit to model-directed control. Anthropic's guidance is to use workflows for predictable, well-defined tasks and reserve agents for open-ended problems where the number and order of steps cannot be predicted.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Routing: classify each description and dispatch it to a specialized downstream prompt.",
+          "correct": false,
+          "explanation": "Routing applies when inputs fall into distinct categories that are best handled by different specialized paths. Here every description goes through the same fixed sequence of steps, so there is no classification or dispatch decision, only sequential chaining.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-04",
+      "question": "A B2B SaaS support team receives a mix of billing questions, technical bugs, and refund requests. Each category needs a differently tuned prompt, and easy questions could go to a smaller, cheaper model. Which workflow pattern does Anthropic recommend for this situation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Parallelization: send every ticket to all three specialized prompts at once and merge the answers.",
+          "correct": false,
+          "explanation": "Parallelization runs independent subtasks simultaneously or votes across repeated attempts; running all three specialist prompts on every ticket wastes tokens and produces conflicting answers to reconcile. Categorically distinct inputs call for classification and dispatch, which is routing.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Orchestrator-workers: a central LLM dynamically decomposes each ticket into subtasks for worker LLMs.",
+          "correct": false,
+          "explanation": "Orchestrator-workers suits tasks where the needed subtasks cannot be predicted in advance, such as multi-file code changes. Support tickets here fall into known categories with known handlers, so a simple classification step is sufficient and cheaper.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Routing: classify each ticket first, then dispatch it to a specialized prompt or smaller model.",
+          "correct": true,
+          "explanation": "Routing classifies an input and directs it to a specialized follow-up task, allowing separation of concerns and prompts optimized per category. Anthropic explicitly cites directing customer service query types to different downstream processes and sending easy questions to smaller models as routing examples.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Prompt chaining: run the billing, technical, and refund prompts one after another on each ticket.",
+          "correct": false,
+          "explanation": "Prompt chaining sequences steps of a single decomposable task, where each call builds on the previous output. Running unrelated specialist prompts back-to-back on the same ticket adds latency without benefit; the ticket only needs one of the specialized paths.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-05",
+      "question": "A legal-tech startup wants its contract assistant to answer user questions while a separate model instance simultaneously screens the same input for prohibited advice. The two calls are independent and their outputs are combined programmatically. Which pattern is this, per \"Building Effective Agents\"?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Evaluator-optimizer, because one model is judging the safety of the other's output.",
+          "correct": false,
+          "explanation": "In evaluator-optimizer the evaluator critiques the generator's output and the generator revises it in a loop. Here the guardrail screens the input in parallel with response generation and there is no iterative refinement, which matches parallelization instead.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Parallelization (sectioning): independent subtasks running simultaneously on one input.",
+          "correct": true,
+          "explanation": "Anthropic's parallelization pattern covers sectioning, where independent subtasks run simultaneously and outputs are aggregated in code. The article's own example is one model instance processing user queries while another screens them for inappropriate content, which is precisely this design.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Routing, because the guardrail model decides which downstream path the query takes.",
+          "correct": false,
+          "explanation": "Routing classifies an input and dispatches it to one of several specialized handlers. In this scenario both calls always run on every input at the same time; nothing is being classified into alternative paths, so it is parallelization rather than routing.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Orchestrator-workers, because two workers are operating on the same task at once.",
+          "correct": false,
+          "explanation": "Orchestrator-workers requires a central LLM that dynamically decomposes the task and delegates subtasks it determines at runtime. Here the two subtasks are fixed in code and always the same, so there is no dynamic orchestration, just parallel execution of predefined subtasks.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-06",
+      "question": "A developer-tools company is building a feature that makes coordinated changes across many source files. The number and nature of edits cannot be predicted until the request arrives, so a lead model must decide the subtasks at runtime, delegate them, and synthesize the results. Which pattern is this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Parallelization, because file edits will run at the same time across workers.",
+          "correct": false,
+          "explanation": "Parallelization runs subtasks that are predefined in code, either by sectioning or voting. The defining trait here is that a central LLM determines the subtasks dynamically at runtime, which is what distinguishes orchestrator-workers from simple parallelization.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Prompt chaining, because each file edit feeds naturally into the next one.",
+          "correct": false,
+          "explanation": "Prompt chaining requires a task that decomposes cleanly into a fixed sequence known ahead of time. Complex multi-file changes cannot be laid out as a predetermined chain because the required edits depend on the specific request and codebase.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Routing, because the lead model routes each file to the correct worker category.",
+          "correct": false,
+          "explanation": "Routing classifies an input into one of several known categories with dedicated handlers. Here the lead model is not picking among fixed categories; it is inventing a task breakdown on the fly, delegating pieces, and synthesizing results, which is orchestration, not classification.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Orchestrator-workers: a central LLM decomposes the task and delegates to worker LLMs.",
+          "correct": true,
+          "explanation": "Anthropic describes orchestrator-workers as a central LLM that dynamically decomposes tasks, delegates them to workers, and synthesizes results. The article specifically calls out coding products making complex changes to multiple files as a well-suited use case, because the subtasks cannot be predicted in advance.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-07",
+      "question": "A localization vendor wants higher-quality literary translations. It plans one model to produce a draft and a second model call to critique it against clear quality criteria, feeding the critique back for revision until the criteria pass. Which pattern is this, and when does Anthropic say it works well?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Evaluator-optimizer; it works well when there are clear evaluation criteria to iterate against.",
+          "correct": true,
+          "explanation": "This generate-critique-revise loop is Anthropic's evaluator-optimizer workflow, which mirrors a human writer's editing process. Anthropic says it fits when clear evaluation criteria exist and iteration measurably improves results, with literary translation given as an example where the evaluator can surface nuances the first draft missed.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Prompt chaining; it works well because each translation step feeds the next in a fixed order.",
+          "correct": false,
+          "explanation": "Prompt chaining is a one-way sequence with no feedback loop. The defining feature here is the cycle in which the evaluator's critique drives another generation pass, which chaining does not capture.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Parallelization (voting); it works well because several drafts are compared and the best one wins.",
+          "correct": false,
+          "explanation": "Voting generates multiple independent attempts and aggregates them, but there is no critique-and-revise cycle. The scenario improves a single draft iteratively using explicit feedback, which is evaluator-optimizer, not voting.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Orchestrator-workers; it works well because the evaluator delegates translation subtasks to workers.",
+          "correct": false,
+          "explanation": "In orchestrator-workers the central model decomposes a task into subtasks and delegates them. The evaluator here does not decompose or delegate anything; it critiques a complete draft so the generator can revise it, which is the evaluator-optimizer feedback loop.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-08",
+      "question": "An insurance company's innovation team proposes a fully autonomous claims agent as the first version of a new FAQ answering feature. Historical data shows most questions are answerable from a knowledge base. What does Anthropic's guidance say the team should do first?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Build the autonomous agent now, since agent frameworks make the added complexity essentially free.",
+          "correct": false,
+          "explanation": "Anthropic cautions that frameworks add layers of abstraction that can obscure prompts and responses, making debugging harder, and can tempt teams into unnecessary complexity. Agentic systems also trade latency and cost for capability, so the complexity is never free.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Skip LLMs entirely and hand-write rules, because agents are unsafe for insurance workloads.",
+          "correct": false,
+          "explanation": "Anthropic does not advise avoiding LLMs; it advises starting with the simplest LLM solution that works. A single well-prompted model call with retrieval is a legitimate, low-complexity starting point, and agentic patterns can be added later if they measurably help.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Start with one optimized LLM call using retrieval and examples, adding complexity only if it helps.",
+          "correct": true,
+          "explanation": "Anthropic's core recommendation is to find the simplest solution possible and only increase complexity when needed, noting that optimizing single LLM calls with retrieval and in-context examples is usually enough for many applications. Agents make sense only when the simpler approach demonstrably falls short.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Begin with a multi-agent system so the architecture can scale to future use cases without rework.",
+          "correct": false,
+          "explanation": "Building for hypothetical future scale inverts Anthropic's guidance to start simple. Multi-agent systems also consume roughly 15x more tokens than chat interactions, an unjustifiable cost for a FAQ task a single retrieval-augmented call can handle.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-09",
+      "question": "A market-intelligence firm must choose between a single research agent and a multi-agent system with a lead agent plus parallel subagents for its competitive-analysis product. Based on Anthropic's multi-agent research system findings, which consideration should drive the decision?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Multi-agent systems excel at breadth-first research but cost roughly 15x more tokens than chat.",
+          "correct": true,
+          "explanation": "Anthropic found multi-agent research outperformed a single agent by 90.2% on breadth-first queries because subagents explore in parallel with separate context windows. But agents use about 4x more tokens than chat and multi-agent systems about 15x more, so they only make economic sense for tasks valuable enough to pay for that.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Multi-agent systems are always preferable because more agents linearly increase output quality on any task.",
+          "correct": false,
+          "explanation": "Anthropic reports the opposite: multi-agent systems struggle on tasks requiring tight coordination or shared context, and small changes to the lead agent can unpredictably change subagent behavior. The gains appear mainly on parallelizable, breadth-first workloads, not universally.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Single agents should be avoided for research because one context window cannot hold any research task.",
+          "correct": false,
+          "explanation": "Many research tasks fit comfortably in a single agent's context, and Anthropic's guidance is to start simple. Multi-agent architectures earn their cost only when the information involved genuinely exceeds a single context window or benefits from heavy parallel exploration.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Token costs are identical either way, so the decision should rest purely on developer preference.",
+          "correct": false,
+          "explanation": "Token economics differ sharply: Anthropic measured agents at roughly 4x chat token usage and multi-agent systems at roughly 15x. Cost is one of the primary published tradeoffs, so it cannot be dismissed as neutral.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-10",
+      "question": "A platform team using Claude Code delegates a security review to a custom subagent. The main conversation has already read several key files and discussed the threat model, but the subagent's review misses all of that background. What explains this behavior?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The subagent shares the main context window, so the files must have been evicted by compaction.",
+          "correct": false,
+          "explanation": "Subagents do not share the main context window; each one operates in its own isolated context. The missing background is by design, not a compaction side effect, so the fix is to pass needed context explicitly in the delegation prompt.",
+          "citation": {
+            "title": "Subagents - Claude Code Docs",
+            "url": "https://docs.claude.com/en/docs/claude-code/sub-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Subagents receive the full conversation automatically but are instructed to ignore prior file reads.",
+          "correct": false,
+          "explanation": "A standard subagent never receives the conversation history at all; it starts fresh with its own system prompt and the task message written for it. There is no instruction to ignore context, because that context simply is not present in the subagent's window.",
+          "citation": {
+            "title": "Subagents - Claude Code Docs",
+            "url": "https://docs.claude.com/en/docs/claude-code/sub-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "The subagent's model is too small to retain the threat-model discussion across the handoff.",
+          "correct": false,
+          "explanation": "Model capacity is irrelevant here; no model can use context it was never given. The handoff omits main-conversation history by design, so even the largest model would show the same gap unless the delegation prompt supplies the background.",
+          "citation": {
+            "title": "Subagents - Claude Code Docs",
+            "url": "https://docs.claude.com/en/docs/claude-code/sub-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "This is expected: each subagent starts with a fresh, isolated context window excluding prior history.",
+          "correct": true,
+          "explanation": "Claude Code subagents start with fresh, isolated context windows containing their own system prompt and the delegated task message, not the main conversation's history, prior file reads, or invoked skills. That isolation keeps the main context clean, but it means required background must be stated explicitly when delegating.",
+          "citation": {
+            "title": "Subagents - Claude Code Docs",
+            "url": "https://docs.claude.com/en/docs/claude-code/sub-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-11",
+      "question": "An e-commerce operations team is deploying an autonomous agent that can issue customer refunds. Leadership is comfortable with autonomy for small amounts but not for large ones. Following Anthropic's agent guidance, how should the team handle high-impact actions?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Remove the refund tool entirely; autonomous agents should never perform actions with financial impact.",
+          "correct": false,
+          "explanation": "Anthropic does not prohibit agents from consequential actions; its Claude-powered coding agents resolve real tasks autonomously. The guidance is to manage risk through guardrails, sandboxed testing, and checkpoints proportionate to the action's impact, not to strip capability wholesale.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Design the agent to pause at defined checkpoints, such as refunds above a threshold, for human approval.",
+          "correct": true,
+          "explanation": "Anthropic's agent guidance says agents can pause for human feedback at checkpoints or when encountering blockers, and that autonomy should be paired with appropriate guardrails because mistakes can compound. Gating high-impact actions like large refunds behind human approval applies this human-in-the-loop principle directly.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Grant full autonomy for all refund sizes, since interrupting the agent breaks the agentic loop contract.",
+          "correct": false,
+          "explanation": "Pausing for human input does not break the agentic loop; Anthropic explicitly describes agents gaining ground truth from humans at checkpoints. Unlimited autonomy over unbounded financial actions ignores the guidance that agents' higher autonomy comes with higher costs and compounding-error risk.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Log all refunds for weekly review; after-the-fact auditing is Anthropic's recommended control for risky actions.",
+          "correct": false,
+          "explanation": "Auditing is useful but reactive: a wrong large refund has already left the building by the weekly review. For actions whose errors are costly and hard to reverse, the guidance favors preventive human checkpoints during execution, with logging as a complement rather than the sole control.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-12",
+      "question": "A logistics company's shipment-tracking agent includes a maximum-iteration limit of 25 loop cycles. During review, an engineer claims the cap is how the agent is supposed to finish its work. How should the architect correct this understanding?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The engineer is right: well-designed agents should always run until the iteration cap fires, guaranteeing consistent latency.",
+          "correct": false,
+          "explanation": "An agent that routinely exhausts its cap is either stuck or over-iterating, and results at cutoff are arbitrary and incomplete. Normal completion happens when the model stops requesting tools and returns end_turn; the cap should almost never be the thing that ends a healthy run.",
+          "citation": {
+            "title": "Handling stop reasons - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The cap should be removed, because Anthropic recommends letting agents run without any bounds once tested.",
+          "correct": false,
+          "explanation": "Anthropic explicitly recommends stopping conditions such as maximum iterations to maintain control over autonomous agents. Removing the backstop leaves nothing to contain runaway loops caused by bad tool results or misunderstood tasks; the correction is about the cap's role, not its existence.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "The cap is a safety net against runaway loops; the primary stop signal is stop_reason \"end_turn\".",
+          "correct": true,
+          "explanation": "Anthropic advises including stopping conditions like maximum iterations to maintain control, but these are guardrails, not the completion mechanism. In a healthy agentic loop the agent finishes because Claude stops requesting tools and ends its turn; the cap exists to bound cost and behavior when something goes wrong.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Iteration caps only apply to workflows; agents rely exclusively on human operators to stop them.",
+          "correct": false,
+          "explanation": "It is agents, with their open-ended loops, that most need iteration limits; fixed workflows terminate by construction. Anthropic's agent guidance names stopping conditions such as maximum iterations precisely for autonomous operation, alongside optional human checkpoints.",
+          "citation": {
+            "title": "Building Effective Agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-13",
+      "question": "A biotech firm's lab-automation agent runs multi-hour protocols involving hundreds of tool calls, and important early decisions keep falling out of the context window. Per Anthropic's context engineering guidance, what is the recommended way to manage this agent's long-horizon state?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep structured notes persisted outside the context window, combined with compaction of older history.",
+          "correct": true,
+          "explanation": "Anthropic's context engineering guidance treats context as a finite resource and recommends structured note-taking, where the agent writes persistent memory outside the context window and pulls it back in later, plus compaction that summarizes and compresses history near the limit. Together these preserve key decisions across very long tasks.",
+          "citation": {
+            "title": "Effective context engineering for AI agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Re-send the entire raw transcript of every prior tool call on each API request so nothing is ever lost.",
+          "correct": false,
+          "explanation": "This is exactly what fails at hundreds of tool calls: the transcript outgrows the context window, and stale tool outputs crowd out what matters. Anthropic's guidance is to curate context as a precious resource, compacting or externalizing information rather than accumulating everything.",
+          "citation": {
+            "title": "Effective context engineering for AI agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Raise max_tokens on each request, which expands the context window enough to retain the full history.",
+          "correct": false,
+          "explanation": "max_tokens caps the length of a single generated response; it does not enlarge the model's context window or preserve earlier conversation state. Long-horizon retention requires context management techniques like compaction and external memory, not sampling parameters.",
+          "citation": {
+            "title": "Handling stop reasons - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Restart the agent from scratch whenever context fills, since fresh runs behave more predictably than managed ones.",
+          "correct": false,
+          "explanation": "A blank restart discards the decisions and progress the team needs to keep, forcing rework of hours of protocol steps. Anthropic's techniques, compaction, note-taking, and sub-agent architectures, exist precisely so long-running work can continue past the context limit without losing critical state.",
+          "citation": {
+            "title": "Effective context engineering for AI agents - Anthropic Engineering",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D1-14",
+      "question": "A travel-booking startup's agent just received a response with stop_reason \"tool_use\" containing a search_flights call. To keep the agentic loop's state correct, what must the application send in the next API request?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Only the tool's output as a plain user text message; the earlier tool_use block should be dropped to save tokens.",
+          "correct": false,
+          "explanation": "Dropping the assistant's tool_use block breaks the conversation contract: each tool_result must immediately follow the tool_use it answers, matched by tool_use_id. The result must also be a tool_result block, not plain text, so Claude can associate it with its request.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A new conversation containing just the original user question, since the API stores tool state server-side.",
+          "correct": false,
+          "explanation": "The Messages API is stateless between requests; the application owns conversation state and must resend the full message history each call. Starting a new conversation would erase the pending tool_use, and Claude would simply re-request the search from scratch.",
+          "citation": {
+            "title": "Tool use with Claude - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "The prior messages, the assistant tool_use block, then a user message whose tool_result cites the tool_use_id.",
+          "correct": true,
+          "explanation": "The documented loop appends the assistant message containing the tool_use block, then a user message with a tool_result block whose tool_use_id matches the request, and re-invokes the API with the accumulated history. Because the API is stateless, this client-maintained message list is the agent's state.",
+          "citation": {
+            "title": "Tool use with Claude - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "An assistant-role message containing the tool_result block, since the tool ran on the assistant's behalf.",
+          "correct": false,
+          "explanation": "tool_result blocks belong in user-role messages; assistant messages carry the model's own content, including tool_use blocks. Sending results under the wrong role violates the documented message structure in which user messages hold client content and tool results.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        }
+      ]
+    }
+  ]
+}

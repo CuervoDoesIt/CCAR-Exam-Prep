@@ -1,0 +1,604 @@
+{
+  "examId": "ccar-p-exam4",
+  "caseId": "CS4",
+  "caseTitle": "Cascadia Open University — Learning-Support and Assessment Assistant",
+  "caseScenario": "Cascadia Open University (COU) is a fully accredited online university headquartered in Phoenix, Arizona, with 240,000 actively enrolled students across 8,500 courses in undergraduate, graduate, and professional-certificate programmes. COU's student body spans 58 countries; roughly 31% of enrolled students self-identify as having a documented disability, and COU is obligated under Section 504 of the Rehabilitation Act and the Americans with Disabilities Act to provide equivalent academic access to all students. Course content and assessments are managed in COU's proprietary Learning Management System (LMS), which exposes a REST API; student identity and enrolment records live in a separate Student Information System (SIS) accessible only to credentialed staff.\n\nCOU's provost has approved a Claude-powered learning-support assistant, named Cascadia Assist, that will help students understand course material through guided explanation and Socratic questioning, help instructors draft rubrics and formative assessments, and flag at-risk students to academic advisors. A strict academic-integrity policy governs the assistant: Cascadia Assist must never produce a complete answer to a graded assignment or examination question — it may explain concepts, ask counter-questions, and point to relevant course resources, but if it detects that a student is presenting a graded problem verbatim, it must redirect rather than solve. Every interaction with a student is subject to FERPA: personally identifiable student information may not be disclosed to any party other than the student themselves or authorised COU staff, and inference logs containing student queries must not be stored on infrastructure outside COU's contracted data boundary.\n\nThe engineering team has a compute budget of $180,000 per year for AI inference, covering an estimated 420,000 student sessions per month at peak (exam periods) and a lighter 95,000 sessions per month off-peak, as well as nightly batch jobs that pre-score student engagement signals for the academic-advising dashboard. Interactive sessions must return a substantive first token within 3 seconds at the p95 percentile to meet the accessibility standard for students with attention-related disabilities. The vice-provost for student success serves as the executive sponsor and requires a plain-language monthly readout on assistant adoption, academic-integrity incidents, and accessibility-compliance metrics. A tenured faculty senate committee has reserved the right to audit any AI-generated assessment item before it is made available to students.",
+  "caseRequirements": [
+    "R1: Cascadia Assist must never produce a complete solution to a graded assignment or examination question; when a graded problem is detected, the assistant must redirect the student to guided reasoning rather than supplying the answer.",
+    "R2: All student interaction logs and inference outputs containing personally identifiable information must be stored and retained exclusively within COU's contracted data boundary, under COU's own technical controls; no student record may be persisted, or disclosed for any secondary use, on non-COU infrastructure, and PII may not be disclosed to any party other than the student or authorised COU staff, as required under FERPA.",
+    "R3: Interactive student sessions must return a substantive first token within 3 seconds at the p95 percentile, including during peak exam-period load of 420,000 sessions per month, to satisfy the accessibility standard for students with attention-related disabilities.",
+    "R4: Every AI-generated assessment item (quiz question, rubric criterion, or exam prompt) must be reviewed and approved by a credentialed faculty member before it is published to students; no automated publishing is permitted.",
+    "R5: The assistant must provide functionally equivalent support to students with documented disabilities, including compatibility with screen readers and avoidance of responses that assume visual rendering of markdown tables or images.",
+    "R6: A complete audit log — recording each student session identifier, every academic-integrity redirect event, and each faculty approval or rejection of AI-generated assessment items — must be retained for 5 years to satisfy accreditation and Title IV compliance obligations."
+  ],
+  "questions": [
+    {
+      "id": "P4-CS4-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D5", "D2"],
+      "question": "COU's engineering team must choose a deployment topology for Cascadia Assist. R2 (FERPA) prohibits student PII from leaving COU's contracted data boundary, and R3 requires p95 first-token latency under 3 seconds during peak exam-period load. Which architecture best satisfies all stated requirements?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use the public Anthropic API with a contractual data-processing addendum, routing all student queries through Anthropic's shared inference fleet and relying on the DPA to establish FERPA compliance.",
+          "correct": false,
+          "explanation": "A data-processing addendum does not place student records inside COU's contracted data boundary. With no COU-controlled application tier, the session logs and inference outputs that carry enrolment identifiers are retained outside that boundary, backed only by a contractual assurance rather than by COU's own technical controls — which is precisely what R2 prohibits. FERPA's school-official arrangement requires COU to keep direct control of the education record, not merely a promise about how it is handled.",
+          "citation": {
+            "title": "Data residency",
+            "url": "https://platform.claude.com/docs/en/manage-claude/data-residency"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Deploy a FERPA-certified multi-tenant SaaS EdTech AI platform, co-locating COU's student data in the platform's shared tenant store and relying on the platform's certification to satisfy the data-boundary obligation.",
+          "correct": false,
+          "explanation": "Platform-level FERPA certification does not automatically satisfy COU's contracted data-boundary requirement. Storing student interaction logs in a shared tenant store on third-party infrastructure moves PII outside COU's control perimeter, violating R2. Shared multi-tenant infrastructure also makes R3's 3-second p95 latency hard to guarantee during COU's peak exam periods.",
+          "citation": {
+            "title": "Data residency",
+            "url": "https://platform.claude.com/docs/en/manage-claude/data-residency"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Route all Claude API calls through application servers hosted in COU's private cloud or contracted data-centre; store session logs and inference outputs within that perimeter; front interactive sessions with a regional load balancer sized for the 420,000-session peak-month volume to distribute traffic and meet R3's latency target.",
+          "correct": true,
+          "explanation": "Hosting the API-call layer, session logs, and inference outputs within COU's contracted infrastructure satisfies R2's data-boundary rule with technical controls rather than contractual assurances alone. The regional load balancer distributes peak exam-period load across enough capacity to meet R3's 3-second p95 first-token target. This beats option D: a fully on-premises-only deployment cannot elastically scale for the 4.4× peak-to-off-peak session spike without capital expenditure that exceeds the $180k compute budget, making R3 effectively unachievable at peak without permanent over-provisioning.",
+          "citation": {
+            "title": "Data residency",
+            "url": "https://platform.claude.com/docs/en/manage-claude/data-residency"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Deploy all components on COU's on-premises data-centre hardware; self-host an open-source LLM fine-tuned on pedagogical datasets to eliminate the external API data-residency concern; reduce per-session token cost to near zero; and retain full physical control over all student PII and inference logs within COU's own facility under FERPA.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Self-hosting eliminates external data-transit risk entirely and satisfies R2. The near-zero marginal token cost is appealing against the $180k budget. However, on-premises hardware cannot elastically absorb the 4.4× spike to 420,000 monthly sessions while maintaining R3's 3-second p95 latency without capital expenditure far beyond the compute budget. Replacing Claude with an unvalidated open-source model also removes the safety training that underpins R1 academic-integrity redirection, requiring a full re-validation. This design fails R3 in practice.",
+          "citation": {
+            "title": "Data residency",
+            "url": "https://platform.claude.com/docs/en/manage-claude/data-residency"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-02",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "Cascadia Assist must connect to COU's LMS (course content, assignment metadata) and SIS (student enrolment records) via MCP servers. R1 requires reliable detection of graded-assignment queries, and R2 requires that SIS data never be exposed to unauthenticated callers. Which MCP design most correctly satisfies both requirements?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expose a single broad MCP tool named lms_query with a free-text parameter that lets Claude search all course content and assignment metadata in one call; rely on system prompt instructions to prevent Claude from surfacing graded problems.",
+          "correct": false,
+          "explanation": "A broad free-text tool with no structured enforcement boundary creates a confused-deputy risk: Claude could formulate queries that bypass the graded-assignment filter if course content and assignment texts share the same index. System prompt instructions are probabilistic and cannot satisfy R1 deterministically. Merging LMS and SIS access in one broad tool also maximises the attack surface, contrary to R2.",
+          "citation": {
+            "title": "MCP — Security Best Practices",
+            "url": "https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Define narrow purpose-specific MCP tools — get_course_material, get_assignment_metadata (returning is_graded flag and rubric_visible boolean), and get_student_enrolment — each enforcing caller-identity authentication internally before returning data, scoped to the minimum LMS or SIS API permissions each tool requires.",
+          "correct": true,
+          "explanation": "Narrow tools with internal authentication and a structured is_graded flag give the pre-generation classifier established later in the design the factual signal it needs to enforce R1, while keeping each tool scoped to the minimum permissions required by R2. Explicit per-tool authentication prevents unauthenticated access to SIS data. This beats option D: MCP resource subscriptions push data into Claude's context without per-retrieval caller-identity checks, so a resource-only design cannot enforce R2's authentication requirement on each individual student-enrolment lookup.",
+          "citation": {
+            "title": "MCP — Tools",
+            "url": "https://modelcontextprotocol.io/docs/concepts/tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use MCP prompts to pre-load the full course syllabus and all assignment texts into Claude's context at session start, eliminating repeated tool calls and reducing per-turn latency.",
+          "correct": false,
+          "explanation": "Pre-loading all assignment texts at session start is architecturally impractical across 8,500 courses and would place graded exam papers directly in Claude's context unconditionally, creating the exact academic-integrity risk R1 prohibits. MCP prompts are reusable interaction templates, not a bulk document delivery mechanism. Loading graded content without an is_graded gate also violates minimum-necessary-disclosure principles.",
+          "citation": {
+            "title": "MCP — Architecture overview",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Expose LMS course documents and SIS enrolment records as MCP resources (read-only subscriptions) behind an OAuth scope, use resource subscriptions to push updated syllabus and enrolment content to Claude whenever the LMS or SIS changes, and rely on OAuth scope enforcement to restrict which resources each caller can access.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Exposing LMS and SIS data as authenticated MCP resources is a reasonable design that prevents unauthenticated callers from accessing SIS records, partially satisfying R2. However, resource subscriptions push data into Claude's context without per-retrieval caller-identity checks; each individual student session cannot be restricted to only that student's own enrolment data. Resource subscriptions also do not expose the structured is_graded flag that R1 enforcement requires at the tool layer, making deterministic redirect logic impossible. This design does not meet R1.",
+          "citation": {
+            "title": "MCP — Architecture overview",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-03",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The team must choose a model strategy for Cascadia Assist. The $180,000 annual budget must cover 420,000 peak-month interactive sessions and a nightly batch engagement-signal scoring job for 240,000 students. Which model and API configuration best balances cost, R1 reasoning quality, and R3's latency requirement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use claude-opus-5 for all workloads — both interactive sessions and nightly batch scoring — to maximise pedagogical reasoning quality and ensure R1 redirect logic is robust on complex obfuscated student queries.",
+          "correct": false,
+          "explanation": "Claude Opus 5 is priced at $5/MTok input and $25/MTok output. At 420,000 monthly peak sessions with even modest per-session token usage, this tier exhausts the $180k annual budget before accounting for nightly batch scoring. Using the highest-cost model for all workloads without the Batches API discount is the most expensive possible configuration and violates the budget constraint implied by the scenario.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Use claude-haiku-4-5 for all workloads to stay well within the $180k budget ceiling, accepting reduced reasoning depth as a worthwhile trade-off for cost predictability and the fastest possible first-token latency.",
+          "correct": false,
+          "explanation": "Claude Haiku 4.5 has a 200K-token context window and the fastest latency, which helps R3. However, its shallower reasoning makes it less reliable at detecting obfuscated graded-problem presentations where students embed assignments in conversational context — the primary failure mode R1 guards against. Using the same model tier for batch and interactive also foregoes the 50% Batches API discount available for the nightly job, which is the most important cost lever for asynchronous workloads.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Route interactive sessions to claude-haiku-4-5 for low cost and fast first-token latency; submit nightly batch engagement-signal scoring through the Message Batches API using claude-sonnet-5, capturing the 50% discount on the higher-reasoning model.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Using Haiku 4.5 for interactive sessions controls per-session cost and supports R3's 3-second p95 latency. Submitting batch jobs via the Batches API with Sonnet 5 captures the 50% discount and provides stronger reasoning for advising-score generation. This strategy satisfies the budget constraint. However, it does not meet R1 as well as option D: Haiku 4.5's reduced reasoning depth makes it less reliable at detecting obfuscated graded-problem presentations in real student queries. R1 is the assistant's primary safety behaviour, and routing interactive sessions to the weaker reasoning model undermines it.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Route interactive student sessions to claude-sonnet-5 ($2/MTok input) for the reasoning quality needed to detect obfuscated graded problems per R1 and the speed needed for R3's 3-second p95 target; submit nightly batch engagement-signal scoring through the Message Batches API using claude-haiku-4-5 at the 50% discount (~$0.50/MTok input after discount), keeping total annual spend within the $180k ceiling.",
+          "correct": true,
+          "explanation": "Sonnet 5's reasoning quality reliably handles conversationally embedded graded-problem queries per R1, and its generation speed meets R3's 3-second first-token target. Haiku 4.5 via the Batches API at roughly $0.50/MTok input handles the nightly 240,000-student scoring job cheaply; batch results are available within 24 hours, which is acceptable for a morning advising dashboard refresh. This tiering keeps total annual spend comfortably within $180k while satisfying R1 and R3 simultaneously — advantages that option C's Haiku-for-interactive approach cannot match given R1's reasoning demands.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-04",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "Before launch, the team must validate that Cascadia Assist's R1 academic-integrity redirect fires reliably across the full range of student query styles COU expects, including adversarial obfuscation. Which evaluation approach most rigorously establishes pre-launch confidence?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have five instructors each submit ten graded-problem queries and confirm the assistant redirected correctly, reporting the resulting pass rate to the provost as the go-live threshold.",
+          "correct": false,
+          "explanation": "A 50-query convenience sample drawn by instructors does not reflect the distribution of adversarial student query styles, such as paraphrased or conversationally embedded graded problems. Instructor-selected queries are not representative of the tail cases most likely to be missed. A pass rate on 50 queries has no statistical power to bound the false-negative rate across 420,000 monthly sessions.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Deploy to 500 volunteer students in a controlled beta over four weeks; count R1 redirect events; use the observed incident rate as the go-live confidence metric and report findings to the faculty senate committee.",
+          "correct": false,
+          "explanation": "A live beta with real students risks actual academic-integrity violations during the measurement period. The self-selected volunteer pool is unlikely to represent adversarial query styles. R6 also requires redirect events to be logged from day one, so a beta evaluation creates 5-year audit obligations before controls are validated. Real students' academic standing should not be put at risk in a pre-validation exercise.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Build a labelled evaluation set of at least 500 queries spanning direct, paraphrased, split-turn, and conversationally embedded graded-problem presentations; measure redirect precision and recall against human-labelled ground truth; set a minimum recall threshold as a hard go/no-go gate before launch.",
+          "correct": true,
+          "explanation": "A stratified, human-labelled holdout spanning the full distribution of presentation styles — including adversarial cases — directly measures whether R1's redirect is effective at the tail cases most likely to produce violations. A minimum recall threshold operationalises R1 as a binary pass/fail gate. This beats option D: an LLM-as-judge evaluator shares the same training distribution and systematic biases as Cascadia Assist, so errors the judge misses are likely the same errors the assistant makes. Circular validation provides no independent safety guarantee before a policy-violating response could harm a student's academic record.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use a second claude-haiku-4-5 instance prompted with COU's complete academic-integrity policy as an LLM-as-judge to score whether each candidate response complies with R1; run the judge over 1,000 synthetically generated student queries spanning multiple course topics and report the resulting average compliance score to the provost and faculty senate as the go-live readiness signal.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "LLM-as-judge is a valid scalable evaluation technique for high-volume open-ended output quality assessment and can complement human review when per-query human labelling is impractical at scale. A second Claude model prompted with COU's academic-integrity policy could plausibly catch many R1 violations cost-effectively. However, as a pre-launch go/no-go gate it does not meet R1's standard: the judge model shares Cascadia Assist's training biases, synthetic queries do not reproduce real student obfuscation strategies, and the resulting compliance score cannot bound the false-negative rate on live student traffic. This design fails R1's reliability standard as a standalone gate.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-05",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "The nightly batch job must score engagement signals (quiz attempt count, session duration, help-request frequency) for all 240,000 students and write per-student risk flags to the advising dashboard. The Q03 model decision is in place. Which agent architecture pattern fits this workload while satisfying R2's data-boundary requirement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use a parallelization pattern with sectioning: an orchestration layer partitions the 240,000-student corpus into shards, submits each shard as a batch request through the Message Batches API using claude-haiku-4-5, and merges per-student risk scores into the advising database — all within COU's contracted infrastructure perimeter.",
+          "correct": true,
+          "explanation": "Sectioned parallelization is the natural fit for a high-volume uniform classification task with no inter-student dependencies. Workers running Haiku 4.5 via the Batches API capture the 50% cost discount from Q03 and complete results within 24 hours, meeting the morning dashboard window. Explicitly keeping the orchestration layer and the risk-score output store inside COU's contracted perimeter satisfies R2. This beats option B: an evaluator-optimizer loop doubles per-student API cost for iterative refinement that adds no quality benefit when the inputs are fully structured numeric signals — a single well-prompted pass produces the same risk flag — and option B never establishes where its generator and evaluator run, so it does not affirmatively satisfy R2.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Use an evaluator-optimizer pattern: a generator agent scores each student's engagement signals (quiz attempt count, session duration, help-request frequency) and produces a structured risk flag; a separate evaluator agent critiques each flag against COU's at-risk criteria and requests a revised score if confidence falls below a defined threshold, iterating until the threshold is met before writing to the dashboard.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The evaluator-optimizer pattern works well when iterative refinement demonstrably improves output quality and evaluation criteria are expressible to a language model — for example, open-ended advising narrative notes. For structured risk classification on numeric engagement signals (quiz attempt count, session duration, help-request frequency), a single well-prompted pass produces the same output as a refinement loop. The additional evaluator call at least doubles per-student cost across 240,000 nightly students, which threatens the $180k annual compute budget without a measurable quality gain over option A. It also does not meet R2: unlike option A it says nothing about where the generator, the evaluator, and the resulting risk flags are hosted, so the design as written does not establish that student-linked data stays inside COU's contracted perimeter.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use a prompt-chaining pattern where each student's engagement data passes sequentially through three Claude calls — signal normalisation, risk classification, and plain-English advisor note generation — before writing results to the dashboard.",
+          "correct": false,
+          "explanation": "Prompt chaining is suited to breaking a single complex task into sequential reasoning stages where each stage depends on the previous output. Applied to 240,000 students with three sequential calls each, it triples per-student API cost compared to a single structured-output prompt and extends total processing time well beyond the nightly window needed to populate the dashboard before morning advising appointments.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use a routing pattern: a lightweight rules engine first tags each student as high-risk or low-risk; high-risk students are routed to claude-sonnet-5 for detailed advising notes; low-risk students are skipped entirely to conserve budget.",
+          "correct": false,
+          "explanation": "Routing can reduce cost by reserving capable models for harder cases, but skipping low-risk students entirely means the advising dashboard shows no engagement signal for the majority of the student body. Faculty advisors cannot distinguish students with genuinely low engagement from students who were simply not scored. The rules-engine classifier must also be separately validated, adding maintenance overhead not captured in the $180k compute budget.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-06",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D3", "D1"],
+      "question": "R1 prohibits Cascadia Assist from producing complete solutions to graded problems. The engineering team must choose where in the integration stack this control is enforced. Which implementation approach satisfies R1 most reliably?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a deterministic pre-generation classifier: before each Claude API call, run a fast text-similarity check between the student query and the catalogue of published graded-problem texts fetched from the LMS MCP server; if similarity exceeds a tuned threshold, return a redirect response without invoking Claude at all.",
+          "correct": true,
+          "explanation": "A deterministic pre-generation check enforces R1 before any model call executes, eliminating the possibility that Claude generates a full solution for a matched query. Because no solution is ever produced, the redirect event is the only thing written to the session record, which keeps the R6 audit trail clean and unambiguous. This beats option C, which post-filters Claude's output: by the time the judge runs, the complete solution already exists in the model's output and in session logs, meaning the R1 violation has technically occurred even if the student sees only the redirect response.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add a post-generation filter that scans Claude's completed response text for matches against stored graded-problem answer keys; redact matching passages before delivering the response to the student.",
+          "correct": false,
+          "explanation": "Post-generation redaction cannot catch paraphrased or partially synthesised solutions that do not literally match stored answer keys. Worse, the graded problem and a full solution have already entered Claude's context window and the complete generation is written to session logs before redaction occurs, so the R6 audit trail records a full graded-problem solution as having been produced — an R1 violation on the record even if the student never sees the redacted content.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use a second claude-haiku-4-5 call as a post-generation judge: after each student response is produced by the main Sonnet 5 model, send the full response text to Haiku 4.5 prompted with COU's R1 academic-integrity criteria; if the judge flags a violation, discard the response and return a canned redirect message to the student instead.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A second-model judge can catch R1 violations that keyword matching misses and is more resistant to paraphrase than a similarity filter. The Haiku 4.5 cost is relatively low. This is a plausible defence-in-depth layer. However, it does not satisfy R1 as a primary enforcement mechanism: the main Claude call has already generated and logged a full solution before the judge runs, so the violation has occurred even if the student sees a redirect. The added Haiku call per interactive session also risks pushing p95 latency past R3's 3-second budget when chained with the main Sonnet 5 call.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add a system prompt instruction directing Claude never to answer graded problems, providing detailed pattern examples and few-shot demonstrations of graded-problem redirection, and rely on Claude's high instruction-following reliability as the primary enforcement control.",
+          "correct": false,
+          "explanation": "System prompt instructions are probabilistic. Students who paraphrase graded questions, split them across multiple turns, or embed them in conversational context may circumvent prompt-based detection. Prompt injection through course-material text retrieved via MCP tools is also a realistic attack vector. R1 requires reliable enforcement; a prompt-only approach cannot provide the deterministic guarantee needed for an academic-integrity policy.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-07",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D5", "D3"],
+      "question": "Each interactive student session includes a system prompt with COU's pedagogical guidelines and academic-integrity policy (~9,000 tokens) and a per-course context block with the course syllabus and learning objectives (~5,000 tokens). These blocks are stable within a session. Which prompt-engineering strategy minimises cost while satisfying R2, R3 and R5?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Apply cache_control breakpoints to both the policy block and the per-course context block with the 5-minute TTL; confirm that the cached prefix carries only COU's pedagogical policy and course-level material and no student PII, so nothing subject to R2 is held in the cache; place variable student query content after the cached blocks.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Caching both the 9,000-token policy block and the 5,000-token course context block with 5-minute TTL is correct prompt-caching practice: cache reads cost 0.1x base input price, saving roughly 12,600 tokens of re-processing per query after the first write within a session. Confirming that the cached prefix holds no student PII addresses R2, and moving the variable student query after the cached blocks preserves the prefix so R3's latency target is met. This is a sound and defensible architecture. However, it does not meet R5: the per-course context block is cached exactly as authored, so any markdown table of learning objectives that a screen reader cannot parse is frozen into the cached prefix and re-served to every student drawing on that course for the life of the cache entry. R5 requires functionally equivalent support for students with documented disabilities, and this option performs no accessibility check before caching.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Re-send the full 14,000-token system prompt and course context on every API call without caching, ensuring each call is fully independent and simplifying the architecture at the cost of higher per-turn token spend.",
+          "correct": false,
+          "explanation": "Re-sending 14,000 uncached input tokens per turn at Sonnet 5's $2/MTok rate adds approximately $0.028 per session. Across 420,000 peak-month sessions this amounts to roughly $11,760 in avoidable input cost in a peak month, and with six peak months and six off-peak months at 95,000 sessions the annual total is roughly $86k — close to half the $180k compute budget spent on preventable token re-processing. The architectural simplicity does not justify this cost at COU's session volume.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Verify that the per-course context block contains no markdown tables or image references that would fail R5's screen-reader compatibility requirement; reformat non-compliant content to plain prose; then apply cache_control breakpoints to both blocks with the 5-minute TTL, keeping every student-identifying token after the cached prefix.",
+          "correct": true,
+          "explanation": "This approach correctly sequences R5 accessibility compliance before caching: formatting the course-context block for screen-reader compatibility ensures the cached version is already R5-compliant for every session that draws on it. The 5-minute TTL cache then saves approximately 12,600 input tokens per turn at 0.1x cost, meeting R3's latency target by reducing per-turn processing. Because only policy and course-level material sits in the cached prefix and every student-identifying token follows it, no record subject to R2 is retained outside COU's boundary. Option A is the runner-up: it applies the same caching mechanics correctly but omits the pre-cache accessibility audit, meaning R5-violating markdown tables could be cached and repeatedly served to screen-reader users across many sessions before the issue is detected.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use the 1-hour TTL for both blocks to maximise cache reuse across sessions: when multiple students access the same course within an hour they will share the cached context, reducing per-session input cost further than the 5-minute TTL can achieve.",
+          "correct": false,
+          "explanation": "The 1-hour TTL writes cost 2x base input price versus 1.25x for the 5-minute TTL; the extended TTL is only economical when the same prefix is reused heavily enough within the hour to offset the higher write cost. Across 8,500 courses with peak load spread over exam periods, most course-context prefixes will not sustain sufficient reuse rates per hour. The higher write cost on a cache miss also adds latency variance that could push some sessions past R3's 3-second p95 target.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-08",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D4", "D6"],
+      "question": "R4 requires every AI-generated assessment item to be reviewed and approved by a credentialed faculty member before publication. The faculty senate also requires that high-stakes items (final exam questions) be routed to a senate sub-committee for secondary review. How should the integration implement this human-in-the-loop gate for both review tiers?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Allow Claude to draft assessment items and publish them immediately, then notify the instructor by email to review and optionally retract within 48 hours; route high-stakes items to the senate sub-committee in the same post-publish notification.",
+          "correct": false,
+          "explanation": "Publishing before any faculty review directly violates R4. Students may be exposed to unreviewed assessment items during the 48-hour window, and retracting a published exam question after students have seen it creates fairness and academic-integrity complications that cannot be remedied. Notification after publication is not a pre-publication approval gate.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Omit the publish_assessment_item tool from the tools array at session start so Claude has no publish capability at all; display the drafted item to the instructor in the review UI; re-include the publish tool in the tools array only on the API call that immediately follows the instructor clicking Approve in the review UI; and route high-stakes items to the senate sub-committee by sending a simultaneous notification from that same review UI when the item is flagged as a final-exam question.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Controlling which tools appear in the tools array is a legitimate way to limit an agent's footprint, and withholding publish_assessment_item until approval genuinely does prevent autonomous publication on the normal path, satisfying R4's no-automated-publishing rule. However, the gate lives entirely in client-side state management: nothing on the server side checks for an approval record, so an implementation bug that re-includes the publish tool one turn early violates R4 silently and undetectably. It also does not natively route high-stakes items to the senate sub-committee for secondary review as required, nor does it generate the faculty-approval audit event R6 requires before the publish call.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Store drafted assessment items in the LMS review queue; a background job polls the queue every hour and publishes items automatically after 24 hours if no instructor rejection is received, treating silence as approval.",
+          "correct": false,
+          "explanation": "Treating silence as approval directly violates R4's requirement for explicit faculty approval. An instructor who is travelling, ill, or did not notice the queue notification would inadvertently approve items they never reviewed. Passive consent mechanisms do not satisfy an explicit pre-publication human review obligation and would not withstand challenge from the faculty senate audit committee.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Halt the agent loop at an orchestration-layer checkpoint after Claude drafts each item: surface the draft to the responsible instructor (and route high-stakes items simultaneously to the senate sub-committee queue); implement publish_assessment_item so it refuses any call not accompanied by a stored approval record for that item; record approver identity, decision, and timestamp to the audit log per R6 before publication proceeds.",
+          "correct": true,
+          "explanation": "Enforcing the approval record inside the publish tool's own implementation makes the R4 gate deterministic and independent of the client: even if the model emits a publish call it is refused without a stored approval, so no coding error in the calling application can produce an unreviewed publication. Recording approver identity and timestamp to the audit log before publication satisfies R6, and routing high-stakes items to the senate sub-committee in the same step handles the two-tier review requirement. This beats option B, which only withholds the tool from the tools array: option B's gate is pure client-side state, so it fails R4 the moment a bug re-includes the publish tool early, and it neither routes high-stakes items to secondary reviewers nor produces the R6 audit event before the tool call occurs.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Six months after launch, the R1 redirect rate for Introduction to Statistics drops from 94% to 71% over four weeks. The academic-integrity officer believes the new semester's assignment texts were not ingested into the LMS graded-problem catalogue used by the pre-generation classifier from Q06. What is the correct diagnostic and remediation sequence?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Examine LMS sync logs to confirm whether new-semester assignment texts were ingested into the graded-problem catalogue; re-ingest any missing items; re-run the holdout evaluation from Q04 on a Statistics-specific subsample to verify the classifier is restored; document the incident and remediation in the R6 audit log before re-enabling full service.",
+          "correct": true,
+          "explanation": "Checking LMS sync logs is the fastest, lowest-cost diagnostic step for the specific hypothesis the integrity officer raised. Re-ingesting missing items and re-validating against the Q04 holdout confirms the fix before the classifier is fully restored, satisfying R1's reliability standard. Documenting the incident and remediation in the audit log satisfies R6's completeness requirement. This beats option C: disabling the deterministic pre-generation classifier and relying solely on prompt-based fallback substitutes a probabilistic control for the deterministic one, explicitly violating R1 for the duration of the investigation and creating an audit gap that R6 does not permit.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Upgrade the Statistics interactive path from claude-sonnet-5 to claude-opus-5 to improve graded-problem detection reasoning, trusting that the more capable model will compensate for any catalogue gaps while the root cause is investigated.",
+          "correct": false,
+          "explanation": "The pre-generation classifier from Q06 operates before any Claude call; if new assignment texts are absent from the catalogue, the classifier misses them regardless of which model is downstream. Upgrading to Opus 5 without fixing the catalogue does not address the root cause, adds significant per-session cost against the $180k budget, and may push p95 latency toward R3's boundary on a model that is slower per token than Sonnet 5.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Temporarily disable the pre-generation classifier for the Introduction to Statistics course only and fall back to the system prompt academic-integrity instructions as an interim control, keeping the assistant available to Statistics students while the LMS ingestion pipeline bug is diagnosed and fixed over the coming days without disrupting other courses.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Relying on the system prompt as an interim control while the catalogue gap is investigated is a plausible continuity-of-service argument: it keeps the assistant available to students during debugging rather than suspending a course entirely. However, it explicitly removes the deterministic enforcement mechanism established in Q06 and substitutes a probabilistic prompt-based control, violating R1 for the duration of the investigation. The period of weakened enforcement must be documented as an R6 audit event, and the substitute control has already been assessed as insufficient as a primary mechanism.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Lower the pre-generation classifier's cosine-similarity threshold from 0.80 to 0.60 to widen the net and catch paraphrased variants of new assignment texts until the ingestion issue is resolved.",
+          "correct": false,
+          "explanation": "Lowering the similarity threshold increases recall at the cost of precision: students asking legitimate conceptual questions about statistical topics that share vocabulary with assignment texts will be incorrectly redirected, degrading the learning experience and potentially failing R5's equivalent-access obligation for students with disabilities who rely on Cascadia Assist for concept explanation. Adjusting the threshold without confirming the root cause also risks masking an ingestion bug that will recur each semester.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-10",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D5", "D2"],
+      "question": "R6 requires a 5-year audit log of session identifiers, R1 redirect events, and R4 faculty approval or rejection events. An accreditation auditor asks the team to demonstrate that the log cannot be altered after the fact. Which storage and MCP design satisfies R6's durability and tamper-evidence requirements while also satisfying R2?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Write audit events to a structured JSON file on the same application server that hosts the MCP tools; retain the files for 5 years using COU's standard backup rotation schedule.",
+          "correct": false,
+          "explanation": "A mutable file on the same server as the application can be altered by any process with write access. Standard backup rotation does not establish tamper evidence — both the live file and backups could be modified. An accreditation auditor asking whether the log can be altered needs a technical control that prevents modification, not a backup schedule that can be retroactively manipulated.",
+          "citation": {
+            "title": "API and data retention",
+            "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Write audit events with explicit typed fields — session_id, event_type, student_id_hash, faculty_approver_id, timestamp — to an append-only write-once storage tier within COU's contracted perimeter; chain each event's SHA-256 hash from the previous entry; retain for 5 years under a legal hold tag.",
+          "correct": true,
+          "explanation": "Append-only write-once storage with chained hashes satisfies R6's tamper-evidence requirement: any modification breaks the hash chain, which is detectable. Explicit typed fields for each of R6's three event categories make the log directly usable by accreditation and Title IV auditors. Storage within COU's contracted perimeter satisfies R2 simultaneously. This beats option C: aggregated monthly counts satisfy the retention duration but cannot demonstrate that specific faculty approvals occurred before specific items were published — the per-event detail accreditation and Title IV auditors require to assess individual compliance decisions.",
+          "citation": {
+            "title": "API and data retention",
+            "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Store monthly aggregated counts of R1 redirect events and R4 faculty approval or rejection decisions in COU's existing data warehouse, broken down by course and instructor; retain the aggregates for 5 years to satisfy R6's duration requirement while avoiding the accumulation of per-session student PII beyond what FERPA's minimum-necessity principle permits.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Monthly aggregates avoid storing per-session PII beyond the minimum necessary, which is a sound privacy instinct under FERPA. The 5-year retention period satisfies R6's duration requirement. However, aggregated counts cannot satisfy R6's requirement for a complete per-event audit trail: accreditation and Title IV reviewers need to verify that specific sessions triggered redirects on specific dates and that specific faculty members approved specific items before publication. Monthly totals provide no individual-event traceability and would fail an accreditation audit that requires per-decision evidence.",
+          "citation": {
+            "title": "API and data retention",
+            "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Route all COU audit events to a third-party SIEM platform offering immutable log storage and SOC 2 Type II certification, using the platform's ingestion API for long-term retention and tamper-proof guarantees.",
+          "correct": false,
+          "explanation": "Routing session identifiers and student-linked audit events to a third-party SIEM means those records are retained for five years on infrastructure outside COU's contracted data boundary, directly violating R2. SOC 2 Type II certification addresses the SIEM provider's operational controls, not COU's FERPA data-boundary obligations. The audit log must remain within COU's own perimeter to satisfy R2 and R6 simultaneously.",
+          "citation": {
+            "title": "API and data retention",
+            "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-11",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D6", "D3"],
+      "question": "During mid-term exam week, the academic-integrity officer confirms that Cascadia Assist provided complete worked solutions to a graded Econometrics problem to at least 14 students. The pre-generation classifier did not fire because the Econometrics assignment texts had not been ingested into the LMS catalogue. What is the correct immediate response?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Suspend Cascadia Assist for all Econometrics courses; log the incident with timestamps and affected session IDs per R6; notify the Dean of Students and the faculty senate audit committee; ingest the missing Econometrics assignment texts and re-validate the pre-generation classifier before restoring service.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Suspending service, logging the incident per R6, notifying academic leadership, and remediating the root cause before restoring service is a thorough and professionally responsible response. This satisfies the governance and technical obligations. However, it does not fully discharge R1. R1 exists so that no student receives a complete solution to a graded problem, and 14 students already have; restoring the control for future sessions leaves the breach unremediated where it actually landed, in graded work that may now contain AI-generated solutions. COU's academic-integrity policy requires a case-by-case review of those 14 submissions, and option C adds exactly that step, which is what makes it the complete response under COU's Title IV obligations.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Immediately switch the Econometrics interactive path from claude-sonnet-5 to claude-opus-5 to improve graded-problem detection, bypass the pre-generation classifier for this course, and resume service the same day.",
+          "correct": false,
+          "explanation": "The breach occurred because the pre-generation classifier lacked Econometrics entries — not because Claude's reasoning failed. Upgrading the model without fixing the catalogue leaves the same enforcement gap in place. Resuming service immediately means additional students may receive complete solutions on graded Econometrics problems before the catalogue is repaired, compounding the R1 violation.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Suspend Cascadia Assist for all Econometrics courses; log the incident per R6; notify the Dean of Students, the faculty senate audit committee, and the affected students' instructors; initiate a case-by-case review of the 14 affected student submissions for academic-integrity implications under COU's policy; ingest the missing assignment texts and re-validate the pre-generation classifier before restoring service.",
+          "correct": true,
+          "explanation": "This response covers all dimensions of the incident: suspension prevents further exposure; R6 logging satisfies the 5-year audit requirement; notifying the Dean of Students, faculty senate, and instructors fulfils institutional governance obligations; the per-student submission review is the step option A omits but COU's academic-integrity policy requires when a tool is implicated in potentially compromised graded work — it is the only action that protects affected students and the institution's Title IV standing. Re-validating the classifier before restoration prevents recurrence. Option A is the runner-up: it handles the technical and governance response correctly but omits the student-submission review that transforms an operational incident response into a complete academic-integrity incident response.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Deploy a post-generation filter scanning Claude's output for Econometrics assignment answer-key phrases and redacting matches before delivery; resume service the same day while the LMS ingestion issue is fixed in parallel, minimising disruption to students during exam week.",
+          "correct": false,
+          "explanation": "A post-generation filter reduces the risk of literal answer-key matches reaching students but cannot catch paraphrased or restructured solutions. Resuming service before the pre-generation classifier is repaired means the same catalogue gap remains active, and students who submit queries that do not trigger the keyword filter may still receive complete solutions. Minimising disruption during exam week is not a valid justification for maintaining a known R1 breach mechanism.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS4-12",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D5", "D4"],
+      "question": "The vice-provost presents Cascadia Assist's first-semester results to the university board. A board member asks: 'How do we know the AI is not doing students' homework for them, and what happens to student data shared with the system?' Which set of talking points most accurately and completely represents the system's governance posture for a non-technical board audience?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Explain that Cascadia Assist uses a validated classifier to block graded-problem responses; state that student data is protected by Anthropic's privacy policy; and note that instructors spot-check a 5% sample of student interactions to verify compliance.",
+          "correct": false,
+          "explanation": "Describing protection as Anthropic's privacy policy misstates the actual architecture, in which student records are retained inside COU's own contracted infrastructure under COU's technical controls per R2 rather than resting on a vendor policy the board does not control. Representing spot-check oversight as the compliance mechanism misrepresents R4's mandatory pre-publication faculty approval gate and R6's automated audit log. Both claims would create governance liability if examined by an accreditor.",
+          "citation": {
+            "title": "Privacy Policy",
+            "url": "https://www.anthropic.com/legal/privacy"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Describe the pre-generation classifier that checks every query against the catalogue of graded assignment texts before Claude responds; explain that a match triggers a redirect, never a solution; and note that all session data stays on COU's own servers under FERPA.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This accurately describes R1's pre-generation classifier and R2's FERPA data-boundary protection in plain language accessible to a board audience. It directly answers both of the board member's questions. However, it omits R4's faculty approval gate for AI-generated assessment items and R6's 5-year tamper-evident audit log — two governance assets that are the board's most important assurances against accreditation and Title IV challenge. Option D provides the complete governance picture by adding the audit trail as the evidence COU would produce if practices were challenged externally.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Tell the board that the AI's redirect accuracy has been validated above 90% on internal testing, satisfying COU's obligations; add that student data privacy is managed through a data-processing agreement with Anthropic; and note that accuracy will improve over time as the model learns.",
+          "correct": false,
+          "explanation": "Quoting 90% accuracy without context on false-negative consequences understates the risk: each miss is a student potentially receiving a complete solution to a graded problem. Describing privacy protection as a DPA with Anthropic contradicts R2's actual architecture. Promising that the model learns over time is inaccurate — Claude does not update its weights from interactions. All three claims would expose COU to scrutiny if examined by an accreditor.",
+          "citation": {
+            "title": "Privacy Policy",
+            "url": "https://www.anthropic.com/legal/privacy"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Explain that every student query is checked against a catalogue of graded problem texts before the AI responds, and any match triggers a redirect rather than a solution; that every AI-generated quiz and exam question must be approved by a named faculty member before students see it; that every session record and transcript is retained on COU's own servers under FERPA, with no student record stored outside COU's contracted boundary and none of it used to train models; and that a tamper-evident 5-year audit log recording every redirect event and every faculty approval is the evidence COU would present to an accreditor or Title IV reviewer.",
+          "correct": true,
+          "explanation": "This response accurately describes R1 (pre-generation redirect), R4 (faculty approval gate), R2 (FERPA data boundary on COU's own servers), and R6 (5-year tamper-evident audit log) in terms accessible to a non-technical board. Mentioning the audit log as accreditation-ready evidence directly answers the governance risk implicit in the board member's question. Option B is the runner-up: it covers R1 and R2 accurately but omits R4's faculty approval gate and R6's audit trail — precisely the evidence that distinguishes a board-level governance assurance from a technical feature description, which is what the board member's challenge required.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

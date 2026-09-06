@@ -1,0 +1,604 @@
+{
+  "examId": "ccar-p-exam4",
+  "caseId": "CS1",
+  "caseTitle": "Thornfield Benefits Administration — citizen-facing eligibility and casework assistant",
+  "caseScenario": "Thornfield Benefits Administration (TBA) is the state agency responsible for administering four public-assistance programs — Supplemental Nutrition Assistance (SNAP), Medicaid, Emergency Housing Assistance (EHA), and Emergency Cash Aid (ECA) — for approximately 2.4 million active cases across the state. TBA operates two distinct user surfaces: an internal caseworker portal used by 1,800 licensed eligibility specialists, and a public-facing citizen self-service portal where claimants can check status, submit documents, and receive preliminary eligibility guidance. At peak processing windows (the first week of each month when renewals are due), the caseworker portal handles approximately 85,000 interactions per day. The engineering team consists of four senior engineers and one ML lead and has an annual AI operations budget of $680,000.\n\nThe agency is building a Claude-powered assistant that will answer eligibility questions, draft case notes, and generate determination summaries. Three constraints are non-negotiable. First, all case data — including income records, medical codes, address history, and household composition — is classified as Protected Personally Identifiable Information (P-PII) under state law §8-11 and federal regulations; it must remain within TBA's FedRAMP High–authorized government cloud boundary at all times, including during model inference and tool execution. Second, state accessibility statute §14-22 requires that all citizen-facing outputs be available in English, Spanish, and Somali — TBA's three mandated languages — at a reading level at or below Grade 8 on the Flesch-Kincaid scale. Third, under state administrative code §22-07, any determination that denies or reduces benefits carries a mandatory 90-day administrative appeals window; TBA's legal counsel has ruled that no AI system may issue a final denial notice autonomously — a licensed caseworker must review and explicitly approve every denial before the notice is transmitted to the claimant.\n\nThe program's regulatory rulebook — covering income thresholds, asset limits, categorical eligibility rules, and cross-program interaction rules for all four programs — runs to approximately 18,000 tokens and is updated at most once per quarter when the legislature amends program rules. The team has selected Claude Sonnet 5 as the primary model for eligibility analysis and case-note drafting, and Claude Haiku 4.5 for lightweight classification, language detection, and routing tasks. Because every eligibility determination presented to a caseworker or citizen must cite the specific regulation section that supports it (so that a claimant can reference that rule in an administrative appeal), the system must produce traceable, rule-anchored outputs — not summary judgments.",
+  "caseRequirements": [
+    "R1: p95 end-to-end latency must be under 3 seconds for caseworker portal interactions and under 5 seconds for citizen self-service portal interactions, measured from submission to first streamed token.",
+    "R2: All case data classified as P-PII under state law §8-11 must remain within TBA's FedRAMP High–authorized government cloud boundary at all times; no P-PII may be transmitted to any system or endpoint outside that boundary.",
+    "R3: Every eligibility determination or denial summary surfaced to a caseworker or citizen must cite the specific program rule (statute section or regulation paragraph) the determination relied on, so it can be referenced during an administrative appeal.",
+    "R4: Every interaction involving an eligibility determination must be logged immutably with case ID, Claude model version, input token count, output token count, and caseworker agent ID; logs must be retained for a minimum of 7 years per state records retention law §31-04.",
+    "R5: All citizen-facing outputs must be available in English, Spanish, and Somali and must meet a Flesch-Kincaid reading level at or below Grade 8, per state accessibility statute §14-22.",
+    "R6: No denial or benefit-reduction determination may be transmitted to a claimant without explicit written approval from a licensed caseworker; the system must enforce this gate programmatically and never bypass it autonomously."
+  ],
+  "questions": [
+    {
+      "id": "P4-CS1-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "TBA's caseworker portal requires p95 latency under 3 seconds (R1) while the citizen self-service portal tolerates up to 5 seconds (R1). Both surfaces access the same Claude Sonnet 5 backend, but caseworker queries are structurally simpler (single-program lookups) while citizen queries often involve multi-program eligibility checks. Which deployment topology best satisfies both R1 targets and R2 simultaneously?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Deploy a single shared Claude Sonnet 5 endpoint inside TBA's FedRAMP boundary. Use Haiku 4.5 as a fast router to classify each inbound request by surface and complexity, then stream caseworker responses with priority queuing while citizen multi-program queries use a parallel tool-fetch pattern to stay within the 5-second budget.",
+          "correct": true,
+          "explanation": "A single Sonnet 5 endpoint inside the FedRAMP boundary satisfies R2 by keeping all P-PII within the authorized perimeter. Haiku 4.5 routing adds minimal latency and matches Anthropic's routing pattern from 'Building Effective Agents.' Priority queuing for caseworker traffic preserves the tighter 3-second R1 target. Parallel tool fetching for citizen multi-program queries exploits available wall-clock time without exceeding the 5-second budget. Option C's dual-cluster approach satisfies both R1 targets but doubles infrastructure cost and creates two boundary enforcement surfaces, increasing R2 audit complexity unnecessarily.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Route all citizen portal traffic to the Message Batches API for asynchronous processing, eliminating the 5-second latency constraint, while keeping caseworker traffic on the synchronous Messages API with a 3-second timeout.",
+          "correct": false,
+          "explanation": "The Message Batches API returns results asynchronously, typically within hours, not seconds. Redirecting citizen self-service queries to batch processing removes the real-time response capability that makes the portal useful for claimants checking status or submitting documents. R1 specifies a 5-second ceiling for citizens, not permission to defer responses indefinitely. Batch processing is appropriate for offline evaluations, not interactive self-service sessions.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Provision two separate Claude Sonnet 5 clusters inside the FedRAMP boundary — one dedicated to caseworker traffic with reserved throughput headroom, one for citizen traffic — so each cluster is independently auto-scaled to its latency SLA, capacity-isolated from the other surface, and tuned with different priority configurations without risk of cross-surface contention.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Two dedicated clusters cleanly separate capacity and do satisfy both R1 SLAs and R2. However, this approach does not meet the $680,000 annual budget without evidence that single-cluster priority queuing is insufficient — provisioning two fully independent Sonnet 5 clusters roughly doubles compute cost. It also doubles the number of FedRAMP boundary enforcement surfaces that R4 audit logging must cover. Priority queuing on a single cluster is the correct first design; dual-cluster is a valid scale-out response only after evidence of contention. It also weakens R4: a single immutable per-interaction record covering case ID, model version, token counts, and agent ID now has to be stitched together across two independently scaled log streams, and a gap in either one breaks the 7-year evidentiary chain.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Deploy Claude Sonnet 5 outside the FedRAMP boundary but encrypt all P-PII fields with a TBA-managed key before transmitting them, so that Anthropic's infrastructure never sees plaintext case data and R2 is satisfied by encryption rather than by network perimeter.",
+          "correct": false,
+          "explanation": "Encryption at rest or in transit is a data-confidentiality control, not a data-residency control. R2 requires P-PII to remain within TBA's FedRAMP High–authorized boundary at all times. Transmitting encrypted P-PII outside that boundary still constitutes a perimeter crossing under state law §8-11, regardless of whether Anthropic's infrastructure can decrypt it. The key management overhead also introduces risk if the managed key is ever compromised or if request metadata retained outside the boundary reveals case IDs.",
+          "citation": {
+            "title": "API and data retention",
+            "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-02",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "The team is designing 'lookup_program_rule', a tool that retrieves the specific statute or regulation section supporting an eligibility determination so Claude can produce R3-compliant citations. Which tool definition and execution pattern best satisfies R2 and R3 simultaneously?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Define the tool to accept a free-text description of the eligibility question and perform a semantic vector search over the full 18,000-token regulatory corpus hosted inside the FedRAMP boundary, returning the top-K highest-scoring regulation chunks ranked by cosine similarity. Claude synthesizes citations from these chunks at generation time, without any structured rule_id or statute_section identifier in the tool result.",
+          "correct": false,
+          "explanation": "A semantic search over free-text chunks can surface relevant passages but cannot guarantee that the returned text maps to a unique, citable statute section. Without a structured rule_id and section_ref field, Claude cannot produce the specific rule citation that R3 requires for an administrative appeal. A claimant needs to reference a precise statute section, not a paraphrased excerpt whose provenance is ambiguous.",
+          "citation": {
+            "title": "Tool use with Claude",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Define the tool to accept a natural-language eligibility question. The VPC application layer queries an external third-party legal database over HTTPS and returns the relevant statutory text, reducing the need to maintain TBA's own regulatory corpus inside the FedRAMP boundary.",
+          "correct": false,
+          "explanation": "Querying an external third-party legal database requires the application layer to transmit case context — the eligibility question often contains household income, program type, and case ID — outside the FedRAMP boundary, violating R2. Even if the third-party database itself is public law data, the outbound request payload constitutes P-PII exposure. TBA must host the regulatory corpus inside its authorized boundary and execute all tool calls there.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Define the tool to accept program_code (enum: SNAP, Medicaid, EHA, ECA) and rule_category (enum: income_threshold, asset_limit, categorical_eligibility, cross_program). The FedRAMP-boundary application layer queries TBA's internal regulatory database and returns rule_id, statute_section, regulation_paragraph, and the rule text. Claude constructs the R3 citation from these structured fields.",
+          "correct": true,
+          "explanation": "R2 is satisfied: the tool executes inside the FedRAMP boundary against TBA's own regulatory database; no P-PII leaves the perimeter. R3 is satisfied: rule_id, statute_section, and regulation_paragraph give Claude the exact fields needed to construct a citable determination like 'SNAP income threshold: State Code §42-17(b)(3), 130% FPL gross income limit.' Option A's free-text search cannot guarantee a unique statute reference; Option B routes the request outside the boundary. Option D, the runner-up, is the strongest rival: the rulebook is stable at quarterly cadence, a cached prefix makes it cheap, it stays wholly inside the FedRAMP boundary so R2 is untouched, and dropping the tool round-trip helps R1. It loses on R3 because a corpus pasted into the prompt is a frozen snapshot with no binding to the canonical rule_id in TBA's authoritative database — after a legislative amendment the prefix can lag the source of record, and a citation to a renumbered or superseded section is precisely the defect that would collapse in an administrative appeal. A live query against the authoritative database keeps citations current by construction.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Embed the entire 18,000-token regulatory corpus into the system prompt — cached with a 1-hour TTL — so Claude can answer rule-citation questions directly without tool calls, eliminating tool-call latency, simplifying the application layer, and removing the need for a separate rule-lookup service inside the FedRAMP boundary.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Embedding the full 18,000-token corpus in every system prompt is defensible because the rulebook is stable (quarterly updates) and prompt caching would reduce per-request cost. However, it does not fully meet R3: the corpus is a static text block and Claude cannot guarantee that its cited section identifier maps to the canonical rule_id in TBA's authoritative regulatory database. If a quarterly update adds, renumbers, or amends a section, the system prompt corpus may lag the authoritative source by up to 90 days, and R3 citations produced during that lag could reference a superseded section number — invalidating an administrative appeal. A live tool call against the authoritative database is required to satisfy R3 reliably.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-03",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "R5 requires all citizen-facing outputs in English, Spanish, and Somali at Grade 8 reading level or below. TBA's ML lead estimates that post-hoc machine translation of Claude's English output will not reliably hit Grade 8 in Somali, which has limited training data in commercial translation APIs. Which architecture satisfies R5 while remaining within R1's 5-second citizen portal latency budget?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Generate the English response with Claude Sonnet 5, then call a commercial cloud-based translation API for Spanish and Somali in parallel, caching translated outputs by query hash. Accept that Somali translation quality may fall short of Grade 8 and monitor readability scores quarterly.",
+          "correct": false,
+          "explanation": "Accepting that Somali translation may fail Grade 8 is not a compliant answer — R5 is a legal requirement under state accessibility statute §14-22, not a performance goal. Monitoring quarterly does not prevent individual citizens from receiving non-compliant outputs in the interim. Commercial cloud translation APIs also route case context outside the FedRAMP boundary, violating R2 if the query contains any P-PII such as case type or household context.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Instruct Claude Sonnet 5 to generate citizen-facing outputs simultaneously in all three languages within a single response, using a system-prompt instruction that specifies Grade 8 vocabulary constraints for each language. Run a Haiku 4.5 readability classifier on the Somali segment before delivery, and regenerate only the Somali segment if it fails.",
+          "correct": true,
+          "explanation": "Claude Sonnet 5 supports multilingual generation natively, keeping all content inside the FedRAMP boundary (R2). A single-pass three-language response avoids sequential translation latency. The Haiku 4.5 readability check adds minimal overhead — Haiku 4.5 is the fastest model in the current lineup — and the conditional Somali regeneration only fires when needed, preserving R1's 5-second budget for citizen traffic in the expected case. Option D's post-hoc translation with a boundary-external service violates R2. Option A accepts non-compliance with R5. This option beats Option C because three sequential generation calls would likely exceed R1's 5-second ceiling.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Generate English, Spanish, and Somali outputs with three sequential Claude Sonnet 5 calls — one per language — each with a language-specific Grade 8 system prompt. Cache each translation by content hash so repeat queries for common eligibility questions are served from cache without additional model calls.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Three sequential Sonnet 5 calls are the most reliable way to satisfy R5's Grade 8 requirement in each language and they keep all processing inside the FedRAMP boundary (R2). However, three sequential generation calls — each potentially taking 2–3 seconds — almost certainly violate R1's 5-second ceiling for citizen portal responses. Even with caching, first-generation requests for novel queries would exceed the budget. Cache hits help for repeated common questions but cannot rescue novel multi-program eligibility queries that are unique to each case. This design does not meet R1.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Generate the English response with Claude Sonnet 5 inside the FedRAMP boundary, then call an FedRAMP-authorized translation microservice that wraps an open-source multilingual model deployed inside the boundary, applying a Grade 8 post-processing filter to all three outputs before delivery.",
+          "correct": false,
+          "explanation": "An FedRAMP-authorized translation microservice inside the boundary does satisfy R2, and Grade 8 post-processing is a sound control for R5. However, 'post-processing filter' is not a defined, reliable operation — it is unclear what mechanism enforces Grade 8 readability by altering already-generated text, and simplification filters can introduce meaning-distorting paraphrases that corrupt R3 citations. Every current Claude model supports multilingual generation natively, so using Sonnet 5 directly eliminates the need for a separate translation service and its associated accuracy and meaning-preservation risks.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-04",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "TBA's regulatory rulebook is approximately 18,000 tokens and changes at most once per quarter. The team needs to include it in every eligibility request to support R3 citations. Which prompt caching strategy minimizes cost within the $680,000 annual AI budget while preserving R1 latency?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Place a cache_control breakpoint at the end of each user message so that the entire conversation history, including the rulebook, is cached at the message level and invalidates only on case-specific data changes.",
+          "correct": false,
+          "explanation": "Prompt caching follows a fixed prefix hierarchy: tools → system → messages. Placing a breakpoint inside user messages puts the cached prefix downstream of volatile per-case data, which changes on every request. The cache prefix will almost never match across different citizens' queries, producing near-zero cache hits. The rulebook must be placed in the system prompt to sit above the volatile message layer in the hierarchy.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Split the rulebook into four program-specific segments (SNAP, Medicaid, EHA, ECA) and cache each segment separately with a 5-minute TTL, loading only the segments relevant to the current query to minimize input tokens and cache write cost.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Per-segment caching reduces unnecessary input tokens for single-program queries and is architecturally sound. However, a 5-minute TTL is poorly matched to TBA's usage pattern: overnight and weekend lulls between monthly renewal peaks repeatedly expire all four segment caches, forcing cold-start writes at 1.25x base input cost on each of them, and over a quarterly cycle with irregular volume those cumulative cold-start costs eat into the $680,000 annual AI operations budget faster than segment isolation saves. More seriously, it does not meet R1: after every lull the first caseworker request re-processes its full rule segment uncached, pushing time-to-first-token past the 3-second p95 ceiling exactly when renewal-week traffic resumes. The 1-hour TTL in option D is the correct choice for quarterly-stable content because it survives those gaps.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use the Message Batches API for all regulatory-lookup requests since the 50% discount eliminates the need for prompt caching entirely, and asynchronous processing is acceptable for non-urgent eligibility lookups.",
+          "correct": false,
+          "explanation": "The Message Batches API's 50% discount applies to asynchronous requests with results available typically within hours, not within 3–5 seconds. R1 requires interactive-path latency under 3 seconds for caseworkers and under 5 seconds for citizens. Batch processing cannot satisfy R1 for the interactive path. Batching and prompt caching solve different problems; the team needs both prompt caching for the interactive path and potentially batching for offline evaluation workflows.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Place a cache_control breakpoint at the end of the tools block and at the end of the system prompt, using the 1-hour TTL for both. The stable 18,000-token rulebook sits in the system prompt, and the tools block is similarly stable. During peak renewal week the cache stays warm; the 1-hour TTL prevents costly cold-start writes during overnight lulls.",
+          "correct": true,
+          "explanation": "The documented breakpoint hierarchy is tools → system → messages. Placing breakpoints at the end of the tools block and the end of the system prompt correctly follows this hierarchy and enables two independently cached prefixes. The 1-hour TTL (2x write cost, ~0.1x read cost) is appropriate for a quarterly-stable 18,000-token rulebook: during peak renewal week, reads vastly outnumber writes; overnight lulls lasting less than an hour preserve the cache. Option B's per-segment 5-minute TTL approach is structurally sound but accumulates higher cold-start write costs across irregular overnight gaps than the 1-hour approach, eroding the $680,000 annual budget. This option also protects R1: a warm cached prefix reduces time-to-first-token by eliminating redundant processing of the 18,000-token rulebook on every request, which option B forfeits on the first request after each lull.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-05",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The team must connect Claude to TBA's case management database (CMD) to retrieve household income, asset, and program-enrollment records during eligibility checks. They are debating whether to expose CMD access via an MCP server or via bespoke tool definitions in each API request. Which architecture best serves R2 and R4?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Deploy a private MCP server using the stdio transport inside TBA's FedRAMP boundary. Expose CMD record queries as tool primitives, data schemas as resource primitives, and reusable determination templates as prompt primitives. Co-locate the R4 audit log writer in the same application tier so every tool invocation is logged atomically with the interaction.",
+          "correct": true,
+          "explanation": "Stdio-transport MCP servers communicate over standard I/O between processes on the same host, never creating an external network path — all P-PII stays inside the FedRAMP boundary, satisfying R2. MCP's three primitive types provide clean separation: tools execute CMD queries, resources expose read-only schemas, and prompts encapsulate determination templates. Co-locating the audit log writer in the same tier means every CMD access is logged atomically with case ID and model metadata, satisfying R4 without an external log-shipping dependency. Option B's remote MCP server requires CMD data to traverse a network endpoint outside the boundary, violating R2 regardless of TLS.",
+          "citation": {
+            "title": "MCP concepts — architecture",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Build a remote MCP server hosted on an HTTPS endpoint inside a TBA-managed DMZ but outside the FedRAMP High boundary, secured with mutual TLS client certificates and IP allowlisting. This separates the MCP layer from the application tier, improving serviceability and enabling independent scaling, while mTLS ensures P-PII is strongly encrypted in transit between the application and the CMD query layer.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A DMZ endpoint secured with mTLS does provide strong transport-layer confidentiality, and placing the MCP server in TBA's own DMZ is closer to compliant than a fully external service. However, the FedRAMP High boundary is a legal and regulatory perimeter, not merely a network segment: P-PII traversing a network path outside the authorized boundary violates R2 under state law §8-11, regardless of encryption strength. TLS secures data in transit but does not substitute for data remaining within the authorized boundary. The stdio transport eliminates the network crossing entirely and is the correct choice for this residency requirement.",
+          "citation": {
+            "title": "MCP concepts — architecture",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Embed all CMD query operations as bespoke tool definitions in each Claude API request JSON, versioned alongside application code. Use a middleware interceptor to write audit log entries from the tool_use and tool_result blocks before forwarding them to Claude, satisfying R4 through log interception.",
+          "correct": false,
+          "explanation": "Bespoke tool definitions work technically but scale poorly as CMD query types grow and do not provide the primitive-type separation (tools vs. resources vs. prompts) that makes the integration auditable. More critically, a middleware interceptor that intercepts tool_use and tool_result blocks to write audit entries is fragile: if the interceptor fails or is bypassed, R4 compliance is silently broken. Co-locating the audit writer atomically with the tool execution in an MCP server is a more reliable architecture for a 7-year mandatory retention requirement.",
+          "citation": {
+            "title": "Tool use with Claude",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use MCP elicitation to request missing case details from the caseworker interactively during the determination turn rather than pre-fetching from CMD, reducing unnecessary CMD queries for cases where the caseworker can provide data verbally.",
+          "correct": false,
+          "explanation": "MCP elicitation lets servers request additional user input during an interaction, but using it to defer CMD lookups means the determination cannot be completed without a caseworker manually supplying structured data that is already available in the authoritative CMD system. Elicitation is appropriate for genuinely missing data; using it as a substitute for CMD lookups bypasses the authoritative data source, undermines R3 citations (which must reference CMD records), and adds a synchronous round trip that risks violating R1.",
+          "citation": {
+            "title": "MCP concepts — architecture",
+            "url": "https://modelcontextprotocol.io/docs/concepts/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-06",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "The ML lead wants an automated evaluation harness to verify R5 compliance — specifically that Somali-language citizen outputs meet Grade 8 reading level. Manual review is impractical at 85,000 interactions per peak day. Which evaluation approach is most appropriate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Compute the Flesch-Kincaid formula directly on the Somali output using syllable-counting rules derived from English phonetics, accepting that the formula is an approximation for Somali but is better than no automated check.",
+          "correct": false,
+          "explanation": "The Flesch-Kincaid formula is calibrated for English syllable and word-length distributions. Applying English syllable-counting rules to Somali — an agglutinative language with a different morphological structure — produces invalid readability scores that bear no reliable relationship to actual comprehension difficulty. An automated check that produces invalid scores is worse than no check because it creates false assurance of R5 compliance without actually measuring it.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have a native Somali speaker on TBA's accessibility team manually review a random sample of 200 citizen outputs per week and report readability scores, using the findings to calibrate prompt adjustments to the Grade 8 system-prompt instruction.",
+          "correct": false,
+          "explanation": "Manual review by a native speaker is the gold standard for readability calibration but is not a scalable automated harness for ongoing compliance at 85,000 daily interactions. R5 is a statutory obligation, not a best-effort target — spot-checking 200 outputs per week (less than 0.1% of peak-day volume) provides insufficient statistical confidence that each citizen's output meets Grade 8 during high-volume renewal periods.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use Claude Haiku 4.5 as a readability classifier: provide each Somali output with a rubric asking whether a person with an eighth-grade education in Somalia could understand it, and return a binary pass/fail verdict. Run it on a statistically sampled daily batch using the Message Batches API for cost efficiency, and alert the accessibility team if the pass rate drops below a threshold.",
+          "correct": true,
+          "explanation": "An LLM-based binary readability classifier is the correct tool for evaluating readability in a low-resource language like Somali, where formula-based metrics are invalid and embedding similarity cannot capture comprehension difficulty. Haiku 4.5 is fast and inexpensive — appropriate for a daily evaluation batch — and the Message Batches API's 50% discount keeps the harness within the $680,000 budget. Statistical sampling with alert thresholds provides actionable signal without requiring 100% coverage. Option A's formula approach is technically invalid for Somali; Option B cannot scale. This option beats Option D because the LLM classifier can capture pragmatic comprehension difficulty that rule-based metrics miss entirely.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Build a rule-based Somali readability scorer by defining word-frequency thresholds against a curated Somali vocabulary list — accepting outputs that use only words from the top 5,000 most frequent Somali words as Grade 8 compliant — and augment it with average sentence-length heuristics. Run this scorer entirely in-process on every citizen output, without a model call, to minimize per-interaction cost and eliminate evaluation latency.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A frequency-based vocabulary filter is computationally cheap and keeps evaluation in-process — a sound cost and latency choice. However, it does not meet R5 reliably because readability depends on sentence structure, syntax, and conceptual density, not just word frequency. A Somali text using only common words can still be grammatically complex and incomprehensible at Grade 8. Frequency thresholds measure vocabulary familiarity, not reading difficulty, and cannot satisfy a Flesch-Kincaid-equivalent standard in a language the formula was not designed for. An LLM-based classifier evaluates holistic comprehensibility and is necessary for a defensible R5 compliance audit.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-07",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "TBA's case management database returns HTTP 503 errors during peak renewal week when concurrent CMD queries exceed its rate limit. Claude receives these as tool errors via is_error: true tool_result blocks. How should the application layer handle CMD 503s to satisfy both R1 (3s caseworker, 5s citizen) and R3 (citation must be present in any delivered determination)?",
+      "options": [
+        {
+          "key": "A",
+          "text": "On a CMD 503, immediately return is_error: true with an empty content field. Claude will infer the data is unavailable and inform the caseworker, then the caseworker can manually supply the missing data.",
+          "correct": false,
+          "explanation": "An empty error tool_result gives Claude no information about what failed or what to do next. Anthropic's guidance states that error messages should describe the failure and direct Claude on how to proceed. An empty error may cause Claude to produce a determination that appears complete but is missing a required CMD data point, making R3 citations for that data point unverifiable. Caseworkers cannot reliably supply CMD data from memory for complex multi-program cases.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "On a CMD 503, retry the query up to three times with exponential backoff (0.5s, 1.0s, and 2.0s delays) at the application layer, so that transient rate-limit bursts on the case management database are absorbed silently and never surface to the caseworker at all. If all three retries are exhausted, return is_error: true with a message naming the missing data field and instructing Claude to flag the gap explicitly and withhold the determination pending caseworker review, and record a counter on every exhausted chain so the platform team can track 503 frequency against the case management system's published rate limits.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Retrying with growing delays is the standard resilience pattern for a rate-limited dependency, and the instructive error message on exhaustion correctly preserves R3 (no citation is emitted for data that was never retrieved) and R6 (the caseworker must resolve the gap before a notice is issued). However, it does not meet R1: the backoff delays alone total 3.5 seconds, which exceeds the caseworker portal's entire 3-second p95 ceiling before Claude has emitted a single token, and leaves under 1.5 seconds of the citizen portal's 5-second ceiling for inference and streaming. The option also specifies no wall-clock cap, so the retry chain is unbounded relative to the SLA rather than subordinate to it. Option D trades a small share of recoverable 503s for a retry budget that provably fits inside both R1 targets.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "C",
+          "text": "On a CMD 503, return synthetic placeholder values for the missing fields (e.g., household income = last known value from cache) so Claude always has a complete data set and can produce an R3-cited determination without flagging a data gap.",
+          "correct": false,
+          "explanation": "Returning synthetic or cached-stale data as if it were current authoritative CMD data creates a legal liability: an eligibility determination based on outdated income data may grant or deny benefits incorrectly. Under R6, a denial based on synthetic data that is later corrected on appeal would expose TBA to administrative reversal and potential civil liability. R3 citations to synthetic data are not citations to the authoritative regulatory record — they are citations to fabricated inputs. This pattern must never be used in a benefits determination context.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "On a CMD 503, attempt one retry after a fixed 200ms delay. If that retry also fails, immediately return is_error: true with a content string that names the specific CMD record field that could not be retrieved, the program it belongs to, and an explicit instruction for Claude to flag the missing data prominently in the determination summary and direct the caseworker to resolve the gap before any notice is issued. Cap the entire retry cycle at a hard wall-clock limit of 400ms.",
+          "correct": true,
+          "explanation": "A single 200ms retry behind a hard 400ms wall-clock cap is the only option here whose retry budget provably fits inside R1 on both surfaces: it consumes at most 400ms of the caseworker portal's 3-second ceiling and a negligible share of the citizen portal's 5-second ceiling, leaving the remainder for inference and streaming. The error content follows Anthropic's handle-tool-calls guidance to write instructive rather than generic errors — it names the specific CMD field, the program it belongs to, and what Claude should do next — so R3 is preserved because no citation is emitted for data that was never retrieved, and R6 is preserved because the caseworker must resolve the gap before any notice is transmitted. Option B (the runner-up) recovers somewhat more transient 503s, but its backoff chain spends up to 3.5 seconds on delays alone, exhausting the entire 3-second caseworker budget. Recovering the maximum number of 503s is not a stated requirement of this case; R1 is.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-08",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D3"],
+      "question": "TBA's caseload spans simple single-program renewals (a SNAP household with unchanged income) and complex multi-program determinations (a new applicant potentially eligible for SNAP, Medicaid, EHA, and ECA with cross-program interaction rules). Both go to the same Claude Sonnet 5 pipeline. Which context strategy best serves R1 latency across this range while keeping cost within the annual budget?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Always send the full 18,000-token rulebook plus all four program tool schemas in every request, regardless of query complexity, so Claude has complete context for any case and no routing decision is needed upstream of the generation call.",
+          "correct": false,
+          "explanation": "Sending all 18,000 tokens of regulatory context and four program tool schemas for a simple single-program SNAP renewal inflates input token count unnecessarily. TTFT grows with context length, and R1's 3-second caseworker ceiling leaves little margin. The incremental cost of unnecessary context also strains the $680,000 annual budget over 85,000 peak-day interactions. Anthropic's guidance recommends providing only the context necessary for the task.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Use the evaluator-optimizer pattern: Claude Sonnet 5 generates an initial determination, a second Sonnet 5 call evaluates its rule-citation completeness against R3, and the loop iterates until all citations are verified — capped at two rounds for latency safety.",
+          "correct": false,
+          "explanation": "The evaluator-optimizer loop is appropriate for asynchronous quality improvement where latency is not a primary constraint. Two sequential Sonnet 5 calls — a generation pass followed by an evaluation pass — would almost certainly exceed R1's 3-second caseworker ceiling even at optimistic p50 latencies, making it mathematically infeasible for interactive determinations. This pattern belongs in offline batch quality evaluation, not the real-time determination path.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use Haiku 4.5 as a fast complexity router: classify each request as single-program or multi-program. For single-program cases, dispatch to Sonnet 5 with only the relevant program's rule subset (approximately 4,500 tokens) and scoped tool schemas. For multi-program cases, dispatch with the full rulebook and all four program tool schemas. Apply the 1-hour cached prompt prefix from Q04 in both paths.",
+          "correct": true,
+          "explanation": "This routing pattern maps directly to Anthropic's recommended orchestrator-workers design from 'Building Effective Agents.' Haiku 4.5 classifies cheaply and quickly; single-program workers load a compact, independently cached rule subset that reduces TTFT and per-request cost; multi-program workers receive the full context only when it is actually needed. The 1-hour cached prefix from the architecture established in Q04 applies in both paths, multiplying cost savings. This design satisfies R1 by keeping context tight for the majority of simple renewals and satisfies the budget by avoiding full-context overhead on cases that don't require it. Option A's universal context approach foregoes these savings; Option B's sequential loop violates R1. Option D, the runner-up, is the subtler mistake: fanning out four program workers concurrently does hold wall-clock time to roughly a single model call and guarantees coverage for any case type, which reads like a latency win. It breaks on the $680,000 annual budget, since generating and discarding up to three unused outputs multiplies per-request tokens by about 4x across 85,000 peak-day interactions, and it degrades the R1 tail because the turn cannot close until the slowest of the four workers returns. Routing pays a small Haiku classification cost once and then keeps both context size and worker count minimal for the simple renewals that dominate the caseworker portal.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Implement a parallel sectioning pattern: send all four program-specific Sonnet 5 workers simultaneously for every request and select the output matching the applicable programs, discarding the rest. Parallel execution keeps wall-clock time to a single model call while ensuring full-context coverage for any case type.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Parallel sectioning is a valid pattern when diverse outputs are all needed simultaneously — for example, generating multiple independent summaries. Running all four program-specific workers in parallel does keep wall-clock time at a single model-call duration, which is a genuine R1 latency advantage. However, generating and discarding up to three unused program outputs multiplies input and output token cost by roughly 4x per request. At 85,000 peak-day interactions, this pushes annual spend well above the $680,000 ceiling the agency has set for AI operations. Anthropic's guidance recommends parallelization when all the outputs are actually needed; selecting one predetermined output from four concurrent runs is pure waste. It also fails R1 in the tail, because the turn cannot complete until the slowest of four concurrent Sonnet 5 workers finishes — worse than a single scoped call for the simple single-program renewals that dominate caseworker traffic under the 3-second ceiling.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D6"],
+      "question": "The legislature amends EHA income-threshold rules mid-quarter, requiring TBA to update the regulatory corpus in the system prompt within 48 hours. The ML lead must verify that Claude's R3 citations for EHA determinations remain accurate after the update without redeploying the model. Which evaluation approach is most appropriate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Re-run the full production caseload from the past 30 days against the updated system prompt and compare output token-level diff statistics to the prior version, flagging any determination where output length changes by more than 15% as a potential citation regression.",
+          "correct": false,
+          "explanation": "Output length change is not a reliable indicator of citation accuracy. A determination can change length due to formatting differences, verbosity shifts, or language variation while its cited statute section remains correct — or vice versa. Token-level diff statistics are a code-diffing heuristic, not a citation accuracy metric. R3 requires verifiable statute citations; a length-change threshold provides no evidence that the specific rule identifiers in the new outputs are correct.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Manually review 50 EHA determinations generated after the system prompt update, having a licensed eligibility specialist verify that each cited statute section maps to the correct rule in the amended regulatory text, and escalate if any mis-citation is found.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Manual expert review by a licensed eligibility specialist is the most accurate method for verifying R3 citation correctness, and 50 samples is a reasonable spot-check for a legislative rule change. However, 50 samples does not provide statistical confidence across TBA's full EHA caseload variation — edge cases, cross-program interactions, and household types not represented in the sample may contain citation errors that go undetected. The R3 requirement applies to every determination, not just a 50-case sample. A structured automated test suite covering the EHA amendment's boundary conditions — combined with expert review of flagged cases — provides better coverage with fewer specialist hours.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Build a structured test suite of EHA-specific golden-case prompts covering the new income thresholds, edge cases at the amendment boundary, and cross-program interactions. Run each golden case against the updated system prompt, use a Haiku 4.5 citation verifier to check that each returned rule_id and statute_section matches the amended regulatory text, and require 100% pass rate before enabling the updated prompt in production.",
+          "correct": false,
+          "explanation": "A golden-case test suite with automated citation verification is the correct architectural approach for regression testing a regulatory update. However, requiring 100% pass rate before production enablement is impractical under a 48-hour deadline if any golden case reveals an unexpected model behavior that requires prompt iteration — a single failing edge case blocks deployment. The correct gate is a pass threshold (e.g., 95%+) with flagged failures escalated for expert review, allowing deployment with known exceptions tracked rather than blocked indefinitely.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Build a structured golden-case test suite covering the amended EHA income thresholds, boundary conditions, and cross-program interactions. Run each case through the updated system prompt, use Haiku 4.5 as a citation verifier comparing returned rule_id and statute_section fields against the authoritative amended regulatory text, and require a pass rate of 95% or higher with any failing cases reviewed by a licensed specialist before production enablement.",
+          "correct": true,
+          "explanation": "A structured golden-case suite with automated citation verification by Haiku 4.5 addresses R3 at scale: it tests boundary conditions and cross-program interactions that a manual 50-case sample (Option B) would likely miss, and it verifies the structured citation fields that R3 requires rather than proxies like output length (Option A). A 95% pass gate with specialist review of failures is practical within a 48-hour deployment window — it does not block deployment on a single edge case while still ensuring that the overwhelming majority of EHA determinations cite the correct amended rule. This option beats Option B because it covers more of the amendment's boundary space automatically, and beats Option C's 100% gate by remaining deployable on the legislative timeline while handling residual failures through expert review.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-10",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D3", "D4"],
+      "question": "R6 requires that no denial or benefit-reduction determination be transmitted to a claimant without explicit caseworker approval, and that this gate must be enforced programmatically. During red-team testing, the team discovers that Claude occasionally generates a 'send_denial_notice' tool call in agentic flows without waiting for caseworker review. Which mitigation most reliably enforces R6 without violating R1?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Configure a PreToolUse hook in the Agent SDK that intercepts any 'send_denial_notice' tool call, checks whether a caseworker_approval_token is present and valid in the call's input parameters, and deterministically blocks the tool call (returning an error) if the token is absent or expired — logging the blocked attempt to the R4 audit store.",
+          "correct": true,
+          "explanation": "PreToolUse hooks run before a tool executes and can deterministically block the call, with no possibility of the model bypassing the check — this is the mechanism that provides a deterministic gate rather than a probabilistic one. A caseworker_approval_token check inside the hook ensures the tool can only fire after an authorized human has explicitly approved the determination. Logging blocked attempts to the R4 audit store creates a tamper-evident record of every R6 enforcement event. Option C's system-prompt instruction reduces autonomous tool-calling frequency but provides no deterministic guarantee — Claude may still call 'send_denial_notice' if it misinterprets context, and a successful call cannot be distinguished from an intended one in the audit log.",
+          "citation": {
+            "title": "Automate actions with hooks",
+            "url": "https://code.claude.com/docs/en/hooks-guide"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Remove 'send_denial_notice' from Claude's tool definitions entirely. Caseworkers issue denial notices manually through a separate legacy portal after reviewing Claude's determination summary, so the tool is not needed in Claude's context.",
+          "correct": false,
+          "explanation": "Removing the tool from Claude's context ensures Claude cannot autonomously call it — a valid R6 control — but it also prevents the future integration path where denial notices are generated within the AI-assisted workflow. More practically, it does not create an audit record of R6 enforcement events as R4 requires; it simply removes the capability rather than governing it. A PreToolUse hook enforces the same prohibition while keeping the tool available for the intended human-approved path and generating an audit trail.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add a system-prompt instruction explicitly telling Claude that it must never call 'send_denial_notice' without first observing a caseworker_approval_confirmed message in the conversation history, and include a worked example showing the correct multi-turn approval sequence so Claude understands the expected protocol, relying on Claude's robust instruction-following training as the primary R6 enforcement gate.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A system-prompt instruction significantly reduces the probability of autonomous denial notice calls and is a sound defense-in-depth layer. However, Anthropic's guidance explicitly states that prompt-level instructions alone are insufficient as the sole enforcement mechanism for high-stakes actions — Claude may misread conversation context, and a determined prompt injection through a tool result could convince it that approval has been given. R6 is a legal requirement with civil liability for violations; it must be enforced by a deterministic programmatic gate, not a probabilistic instruction-following mechanism. This option does not satisfy R6 as a sole control, though it is a valid supplementary layer alongside a PreToolUse hook.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Set tool_choice to {type: 'none'} during the eligibility determination turn so Claude cannot call any tools, then re-enable tools in a subsequent turn after the caseworker has reviewed the determination summary and clicks an approval button.",
+          "correct": false,
+          "explanation": "Setting tool_choice to 'none' disables all tool calls for that turn, not just 'send_denial_notice' — this would also block 'lookup_program_rule' and CMD queries that are needed to produce the R3-cited determination in the first place. The multi-turn approach of disabling tools, getting a summary, re-enabling tools, and then calling 'send_denial_notice' is architecturally convoluted and introduces state management complexity that could itself create gaps in R4 audit coverage if the turn boundary is not captured correctly.",
+          "citation": {
+            "title": "Tool use with Claude",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-11",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D4", "D6"],
+      "question": "Eight months after launch, TBA's legislature passes an emergency budget resolution that eliminates 30% of the AI operations budget, reducing it from $680,000 to $476,000 annually. The ML lead calculates that current usage at Claude Sonnet 5 base pricing will exceed the new ceiling by $180,000 per year. The team must adapt without degrading R3 citation accuracy below the baseline established by the Q09 evaluation harness. What is the best response?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Switch all caseworker and citizen traffic immediately to Claude Haiku 4.5 to exploit the lower per-token price. Inform the agency director that R3 citation accuracy may temporarily degrade and commit to monitoring via the Q09 harness.",
+          "correct": false,
+          "explanation": "Switching production traffic to Haiku 4.5 without first running comparative evals against the Q09 citation-accuracy harness is a patient-safety-equivalent risk in a benefits context: if citation accuracy degrades, citizens may receive incorrectly cited determinations they cannot effectively appeal. The team does not know whether Haiku 4.5 meets the R3 citation baseline. Anthropic's model-selection guidance recommends running evals before committing to a model change, not monitoring after the fact.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run the Q09 citation-accuracy harness on Haiku 4.5 for the two highest-volume and structurally simplest determination types — SNAP single-program renewals and Medicaid category confirmations. If Haiku 4.5 meets the R3 baseline for those types, route them to Haiku 4.5 via the Q08 routing layer and project whether blended cost falls within $476,000.",
+          "correct": true,
+          "explanation": "This evidence-based approach uses the existing Q09 evaluation harness to verify citation accuracy before changing production routing — no R3 regression is accepted without data. SNAP renewals and Medicaid confirmations are the highest-volume, structurally simplest cases, making Haiku 4.5 the most plausible downgrade target. The Q08 routing layer already supports per-type model assignment, so no architectural change is needed. If evals pass, blended cost may fall within $476,000 without degrading complex multi-program cases that still route to Sonnet 5. Option A skips the eval step; Option D skips the technical options entirely. This option uses existing infrastructure — Q09 harness, Q08 routing — to make a data-driven decision before any production change.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Migrate all determination traffic to the Message Batches API to capture the 50% discount, shifting the citizen self-service portal from real-time responses to a 'check back in a few hours' asynchronous model that eliminates R1's interactive latency constraint.",
+          "correct": false,
+          "explanation": "Migrating to the Message Batches API eliminates the citizen self-service portal's interactive capability — the core value proposition for citizens who need same-day benefit confirmation during a crisis. R1 exists because claimants need real-time answers; removing that capability is a service-level removal, not a cost optimization. Additionally, caseworkers cannot function on an hours-delayed response model during renewal-week case processing. The Batches API is appropriate for the offline evaluation harness, not the interactive determination path.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Immediately prepare a formal budget impact statement and request emergency supplemental appropriation from the legislature to restore the full $680,000 budget, documenting in detail that reducing AI operations funding mid-deployment for a citizen-facing public-assistance system risks violating state accessibility statute §14-22 (R5), jeopardizing the administrative due-process protections mandated by §22-07 (R6), and disrupting benefit delivery to 2.4 million active cases.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A budget restoration request is a legitimate governance lever and the legal argument about accessibility (R5) and due process (R6) compliance is well-grounded. A competent practitioner might reasonably escalate the budget issue before accepting service degradation. However, escalating to the legislature as the first response ignores lower-risk technical optimizations that may close the $180,000 gap without requiring political action — the Q09 harness and Q08 routing infrastructure already exist to test and deploy a Haiku 4.5 routing solution that could reduce spend without touching R3. Pursuing technical options first is the correct sequence; supplemental appropriation is the fallback if technical options prove insufficient.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4-CS1-12",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "Three months after the Q11 budget resolution, the agency director receives a legislative audit committee inquiry asking for evidence that the AI assistant's eligibility determinations are legally defensible under administrative code §22-07 — specifically, that every denial in the past quarter cited the correct rule and was approved by a licensed caseworker. The director asks the ML lead for a written briefing. What should it contain?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Provide a narrative statement affirming that the system was designed in compliance with §22-07, include the system architecture diagram showing the PreToolUse hook and caseworker approval flow, and note that no citizen complaints about incorrect citations have been received.",
+          "correct": false,
+          "explanation": "A narrative statement and architecture diagram demonstrate design intent, not operational compliance. The audit committee needs evidence of actual system behavior, not documentation of how the system was designed to behave. The absence of citizen complaints is not evidence of correct citations — many claimants do not exercise their appeal rights even when denials are incorrectly reasoned. The R4 immutable audit log contains the actual evidence the auditors need.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Present summary statistics from the R4 immutable audit log covering the past quarter: total denials issued, percentage with a logged caseworker_approval_token, and percentage whose logged rule_id matches a current regulatory rule. Include a histogram of PreToolUse hook trigger events showing how many autonomous denial attempts were blocked, note that the Q09 citation-accuracy harness ran weekly throughout the quarter with pass rates consistently above threshold, and attach the three most recent harness reports as corroborating evidence. Commit to making the full granular audit log available to the committee within five business days on request.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This briefing draws on the right evidence source — the R4 immutable audit log — and attaches corroborating harness reports, so it is a genuinely strong response a competent practitioner would write. Where it falls short is framing: it never declares compliance with administrative code §22-07, and it reports its numbers as raw operational statistics rather than mapping them onto the two things the statute actually asks about — the R3 rule-citation rate and the R6 caseworker-approval rate. A legislative audit committee asking whether determinations are legally defensible needs a formal compliance declaration tied to the statute and to those two named metrics, not a dashboard it must interpret on TBA's behalf. Option D presents the same underlying R4 evidence as a legal declaration, which is what the inquiry requires.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Commission an independent third-party audit of the past quarter's denial records, selecting a random sample of 500 cases for expert legal review of citation accuracy, and defer any response to the committee until the audit is complete.",
+          "correct": false,
+          "explanation": "Commissioning a third-party audit is an appropriate quality assurance measure but is not a timely response to a legislative inquiry. Deferring the committee response until an external audit completes — which may take weeks or months — signals that TBA does not have its own compliance evidence in hand, which itself constitutes a governance failure under R4. The R4 audit log was specifically designed to produce exactly the evidence the committee needs without requiring a separate external audit.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Present quarterly summary statistics from the R4 immutable audit log: total denials issued, percentage with a valid caseworker_approval_token (R6 compliance rate), and percentage whose logged rule_id maps to a current §22-07-covered statute section (R3 compliance rate). Explicitly declare compliance with administrative code §22-07 for the quarter based on these metrics, cite the Q09 harness pass rate as corroborating evidence, and commit to providing the committee's requested case-level records within five business days under the R4 7-year retention guarantee.",
+          "correct": true,
+          "explanation": "This briefing satisfies all elements a legislative audit committee requires: R4 audit log data provides the primary operational evidence (not design-intent diagrams), the R6 caseworker approval rate directly answers the §22-07 autonomy question, the R3 rule_id compliance rate directly answers the citation accuracy question, the Q09 harness pass rate provides corroborating independent evaluation evidence, and the explicit §22-07 compliance declaration with a case-level disclosure commitment gives the committee a definitive and actionable response. Option B (runner-up) provides the statistical foundation but lacks the formal §22-07 compliance declaration and the specific R3 and R6 metric framing the statute requires. This option uses the same audit infrastructure but frames it as a legal compliance declaration rather than an operational dashboard.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    }
+  ]
+}

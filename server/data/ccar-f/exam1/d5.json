@@ -1,0 +1,467 @@
+{
+  "examId": "ccar-f-exam1",
+  "domainId": "D5",
+  "domainName": "Context Management & Reliability",
+  "questions": [
+    {
+      "id": "F1-D5-01",
+      "question": "A customer-support bot sends the same 40K-token knowledge base, tool definitions, and a per-request timestamp with every call. To benefit from prompt caching, how should the prompt be organized?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Place the timestamp first so the freshest information is processed before the cached content.",
+          "correct": false,
+          "explanation": "Caching matches on the prompt prefix; content that changes every request at the front means no prefix is ever identical, so nothing is reused. Anthropic's guidance is the opposite: stable content first, varying content after the cache breakpoint.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Put the static tools, system text, and knowledge base first, with a breakpoint on the last static block.",
+          "correct": true,
+          "explanation": "Cache prefixes follow the order tools, then system, then messages, and Anthropic recommends placing stable, reusable content at the beginning with the breakpoint on the last block that stays identical across requests. Varying content like timestamps goes after the breakpoint.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add cache_control to every content block, including the timestamp, to maximize coverage.",
+          "correct": false,
+          "explanation": "Requests support a limited number of explicit breakpoints (up to 4), and putting one on a block that changes each request creates a new prefix hash every time, so the cache is never hit. Breakpoints belong on blocks whose prefix is identical across requests.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Caching is automatic for any repeated text anywhere in the prompt, so ordering does not matter.",
+          "correct": false,
+          "explanation": "Prompt caching reuses matching prefixes, not repeated text found anywhere in the request. If the identical content is not a common prefix ahead of the varying content, it cannot be served from cache, so ordering is central to the feature.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D5-02",
+      "question": "A trading-analytics team enjoys high cache hit rates until a developer edits the description of one tool in the tools array. Cache reads immediately drop to zero for all requests. Why?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Tool definitions are never cached, so the change exposed a pre-existing misconfiguration.",
+          "correct": false,
+          "explanation": "Tool definitions are cacheable and sit at the very front of the cache hierarchy. The hit rate was real; the edit changed the prefix, which is exactly why the cache stopped matching.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The cache server needs a manual flush command after any tool change before it resumes serving hits.",
+          "correct": false,
+          "explanation": "There is no manual flush; caching is content-addressed on the prompt prefix. New entries are simply written for the new prefix on the next requests, and old entries expire on their TTL.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Editing a tool only invalidates the messages-level cache, so system-prompt hits should have continued.",
+          "correct": false,
+          "explanation": "Invalidation cascades downward from the changed level: tools sit above system and messages in the prefix hierarchy, so a tool change invalidates the tools, system, and messages caches together, not just messages.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The cache prefix runs tools-system-messages, so editing a tool invalidated that level and everything after.",
+          "correct": true,
+          "explanation": "Cache prefixes are constructed in strict order (tools, then system, then messages), and changing content at any level invalidates that level and all subsequent levels. A one-character tool edit therefore breaks the entire cached prefix until new cache entries are written.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D5-03",
+      "question": "A B2B analytics dashboard uses default (ephemeral) prompt caching. Users interact steadily during business hours, but requests that arrive after a 20-minute lull always pay full cache-write costs again. What explains this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The default TTL is 5 minutes, refreshed on each use, so a 20-minute gap expires the entry.",
+          "correct": true,
+          "explanation": "Ephemeral cache entries have a 5-minute lifetime that is refreshed free of charge every time the prefix is read, so steady traffic keeps the cache warm indefinitely. A gap longer than the TTL lets the entry expire, and the next request pays the write premium again. A 1-hour TTL option exists for burstier traffic.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Cache entries persist for 24 hours, so the team must be changing their prompt prefix between sessions.",
+          "correct": false,
+          "explanation": "The default ephemeral TTL is 5 minutes, not 24 hours. Expiry after an idle gap fully explains the observed cache misses without any prefix change.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Each cache read consumes the entry, so a cache only ever serves one hit before being rewritten.",
+          "correct": false,
+          "explanation": "Cache reads do not consume the entry; they refresh its TTL for free, which is why continuous traffic sustains high hit rates. Reads are billed at a small fraction (0.1x) of base input price.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Caching is disabled outside of continuous streaming connections, so idle HTTP clients lose their cache.",
+          "correct": false,
+          "explanation": "Prompt caching is independent of streaming or connection state; it is keyed on prompt prefixes with a time-to-live. The 5-minute TTL, not connection handling, governs expiry.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D5-04",
+      "question": "A legal assistant app concatenates entire case histories into each request. One day a request's input alone exceeds the model's context window. What does the API do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "It silently truncates the oldest messages in the conversation and processes the remainder.",
+          "correct": false,
+          "explanation": "The Messages API does not silently drop your input; managing what fits in the window is the caller's responsibility. Oversized input is rejected with a validation error rather than trimmed.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "B",
+          "text": "It automatically summarizes the older case history server-side before answering the question.",
+          "correct": false,
+          "explanation": "No automatic summarization is applied to an over-limit request; it fails validation. Server-side compaction exists as a separately configured beta feature for managing long conversations, not a fallback for oversized input.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "C",
+          "text": "It returns a 400 invalid_request_error (\"prompt is too long\"); the app must manage context itself.",
+          "correct": true,
+          "explanation": "When the input alone already exceeds the model's context window, the API returns a 400 invalid_request_error on every model. Anthropic recommends estimating size with the token counting API and managing growth with compaction and context-editing strategies.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "D",
+          "text": "It returns a 429 error, and the request then succeeds after the retry-after interval passes.",
+          "correct": false,
+          "explanation": "429 indicates rate limiting, a transient capacity condition that retrying can resolve. An over-window prompt is structurally invalid: retrying the identical request will fail every time until the input is reduced.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D5-05",
+      "question": "An agent for insurance claims accumulates 150K tokens of tool results and chat history per session. Engineers notice it increasingly misses instructions given mid-conversation, though short sessions behave well. Which principle explains this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Long contexts are billed at a discount, and the cheaper tokens receive proportionally less compute.",
+          "correct": false,
+          "explanation": "Billing does not change how attention is allocated; there is no tiered compute per token price. The documented cause is context rot: recall degrades as token count grows, independent of pricing.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "B",
+          "text": "As context grows, accuracy and recall degrade (\"context rot\"), so context must be curated.",
+          "correct": true,
+          "explanation": "Anthropic documents that as token count grows, accuracy and recall degrade, a phenomenon called context rot, because models have a finite attention budget. This is why curating the smallest set of high-signal tokens matters as much as raw window size.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "The API drops middle messages once a conversation passes 100K tokens, deleting those instructions.",
+          "correct": false,
+          "explanation": "The API preserves all turns you send within the window; nothing is dropped at an arbitrary threshold. The instructions are still present, but retrieval quality over a bloated context degrades, which is a model-attention effect, not deletion.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Mid-conversation instructions are only honored when they were included in the system prompt.",
+          "correct": false,
+          "explanation": "Claude follows instructions from user turns throughout a conversation; there is no rule restricting compliance to the system prompt. The degradation correlates with context length, which points to context rot rather than message role.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D5-06",
+      "question": "A procurement agent summarizes older conversation turns as its context fills. After several summarization rounds, it starts quoting wrong contract amounts and expired PO numbers. What design change does Anthropic's context-engineering guidance suggest?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Maintain structured notes outside the summarized history holding exact amounts, dates, and IDs.",
+          "correct": true,
+          "explanation": "Progressive summarization is lossy: precise values degrade with each compression round. Anthropic's guidance is structured note-taking, persisting key information outside the summarized context so exact facts survive; compaction should preserve critical details rather than repeatedly re-paraphrase them.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Summarize more aggressively so summaries are short enough for the model to memorize precisely.",
+          "correct": false,
+          "explanation": "Heavier compression amplifies the loss: each summarization pass discards more detail, and identifiers and figures are the first casualties. Precision is preserved by extracting facts into durable structure, not by compressing harder.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Stop summarizing entirely and let the conversation grow until the window is exhausted.",
+          "correct": false,
+          "explanation": "Unbounded growth trades summarization loss for context rot and eventual overflow errors. The documented approach is compaction plus persistent memory for critical facts, keeping both context size and precision under control.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Raise the temperature so that the model reconstructs the missing figures more creatively.",
+          "correct": false,
+          "explanation": "Encouraging the model to invent figures it no longer has is precisely the hallucination failure mode to avoid, especially for amounts and IDs. Missing facts must be preserved or retrieved, never regenerated.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D5-07",
+      "question": "A developer's all-day Claude Code session mixes a database migration, a CSS fix, and log analysis. Suggestions have become noticeably worse. Following Anthropic's context-management guidance, what should the developer do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the session running, since accumulated history always improves the model's understanding.",
+          "correct": false,
+          "explanation": "Unrelated accumulated context is documented as a cause of degraded performance, not a benefit; the 'kitchen sink session' is a named failure pattern. Context helps when relevant and hurts when it is noise.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Disable compaction entirely so that no earlier content is ever summarized away mid-session.",
+          "correct": false,
+          "explanation": "Compaction is a mitigation that frees space while preserving what matters; disabling it accelerates window exhaustion. The issue here is irrelevant context, best solved by clearing between tasks.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Paste the full session transcript back in so nothing is forgotten before continuing.",
+          "correct": false,
+          "explanation": "Re-injecting the transcript doubles the noise that caused the degradation. The context window is a finite resource; the fix is reducing irrelevant tokens, not duplicating them.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Run /clear between unrelated tasks, and /compact with focus instructions on long related work.",
+          "correct": true,
+          "explanation": "Anthropic advises clearing context between unrelated tasks because irrelevant history reduces performance, and using compaction, optionally directed with instructions like '/compact Focus on the API changes', to condense long related sessions while preserving key decisions.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D5-08",
+      "question": "During a nightly batch job, an e-commerce enrichment service starts receiving HTTP 429 rate_limit_error responses. The current code retries instantly in a tight loop. What is the correct handling?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Treat 429 as fatal and drop the affected records, since rate-limited requests cannot succeed later.",
+          "correct": false,
+          "explanation": "429 is transient: the token-bucket capacity replenishes continuously, so the same request succeeds once capacity returns. Dropping records turns a temporary throttle into data loss.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Keep the instant retry loop but add more worker threads so some requests get through.",
+          "correct": false,
+          "explanation": "Hammering the API with parallel instant retries burns the replenishing token bucket faster and prolongs throttling; the docs note earlier retries than retry-after will fail. Backing off, not scaling up pressure, is correct.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Honor the retry-after header, back off between attempts, and pace requests under the limits.",
+          "correct": true,
+          "explanation": "The API returns a retry-after header on 429s indicating how long to wait, and retries before that interval fail. Because limits use a continuously replenishing token bucket and short bursts can trip enforcement, pacing requests and waiting the indicated time is the documented remedy.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Switch the API key on each 429, since limits are tracked per key rather than per organization.",
+          "correct": false,
+          "explanation": "Rate limits are set at the organization level (with optional per-workspace limits), so rotating keys within the same organization does not create new capacity and can look like abuse. Proper pacing and backoff are the fix.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D5-09",
+      "question": "A publishing platform generates long-form reports with large max_tokens values. Users complain nothing appears for a long time, and some requests die with HTTP timeouts before completing. Which change addresses both problems?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Enable streaming (stream: true) so tokens arrive incrementally via server-sent events.",
+          "correct": true,
+          "explanation": "Streaming delivers the response incrementally over SSE, so users see output immediately (better perceived latency) and the connection stays active for long generations. Anthropic's SDKs require streaming for requests with large max_tokens values precisely to avoid HTTP timeouts.",
+          "citation": {
+            "title": "Streaming Messages",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Reduce max_tokens sharply so each response finishes within the timeout, truncating reports as needed.",
+          "correct": false,
+          "explanation": "Cutting max_tokens produces incomplete reports (stop_reason max_tokens) and sacrifices the product requirement. Streaming solves the delivery problem without shrinking output.",
+          "citation": {
+            "title": "Handling stop reasons",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Poll the Messages endpoint repeatedly with the same request until a complete response is returned.",
+          "correct": false,
+          "explanation": "The Messages API is not a polling interface; resending the request just starts new generations and multiplies cost. Incremental delivery is provided by SSE streaming, not repeated calls.",
+          "citation": {
+            "title": "Streaming Messages",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/streaming"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Enable prompt caching, which makes output generation fast enough to beat the request timeout.",
+          "correct": false,
+          "explanation": "Prompt caching accelerates and discounts processing of repeated input prefixes; it does not speed up output token generation, which is what dominates long-report latency. Streaming is the mechanism for long outputs.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F1-D5-10",
+      "question": "A healthcare document service repeatedly hits its input-tokens-per-minute (ITPM) rate limit. Every request resends the same 150K-token policy manual uncached, plus a short question. What should the team understand about caching and rate limits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Caching only reduces cost; every input token still counts toward ITPM, so throughput cannot improve.",
+          "correct": false,
+          "explanation": "This understates the benefit: on most models cache reads are excluded from ITPM counting, so caching raises effective throughput as well as cutting cost. Anthropic explicitly recommends caching to make the most of rate limits.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "B",
+          "text": "They should request a Custom tier immediately, because prompt structure has no effect on rate-limit consumption.",
+          "correct": false,
+          "explanation": "Prompt structure directly determines what counts against ITPM: uncached tokens count, cache reads (on most models) do not. Restructuring for caching is the documented first step before paying for higher limits.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "C",
+          "text": "For most models cache reads do not count toward ITPM, so a cached stable prefix raises throughput.",
+          "correct": true,
+          "explanation": "Anthropic documents cache-aware ITPM: uncached input and cache writes count toward the limit, but cache_read_input_tokens do not on most models. Caching the large static manual means subsequent requests consume only the small uncached remainder, dramatically raising effective throughput.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Cached tokens also stop counting toward the context window, letting them exceed the model's window size.",
+          "correct": false,
+          "explanation": "Caching changes what you pay and what counts against ITPM, not what occupies the context window: cached prefixes still consume window space. Rate-limit accounting and context capacity are separate constraints.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        }
+      ]
+    }
+  ]
+}

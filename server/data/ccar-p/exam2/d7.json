@@ -1,0 +1,99 @@
+{
+  "examId": "ccar-p-exam2",
+  "domainId": "D7",
+  "domainName": "Developer Productivity & Operational Enablement",
+  "questions": [
+    {
+      "id": "P2-D7-01",
+      "question": "A 40-engineer platform team finds that each developer has independently configured personal slash commands and review agents, producing inconsistent code review quality across the organization. The architect wants every engineer to get the same standardized tooling immediately on cloning the repo. What should be done?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Publish a wiki page documenting the recommended commands and ask each developer to copy them into their personal ~/.claude/commands/ directory.",
+          "correct": false,
+          "explanation": "This preserves the underlying problem: adoption is manual, drifts over time, and new hires start with nothing until they find the page. Personal-scope configuration cannot deliver an organization-wide guarantee.",
+          "citation": {
+            "title": "Claude Code slash commands",
+            "url": "https://docs.claude.com/en/docs/claude-code/slash-commands"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Commit the commands to the repository's .claude/commands/ directory and shared subagents to .claude/agents/, alongside a project CLAUDE.md capturing team conventions.",
+          "correct": true,
+          "explanation": "Project-scoped commands and agents live in the repository, so they are version-controlled, reviewable through normal pull requests, and automatically available to everyone who clones it. Pairing them with a project CLAUDE.md gives the team a single shared source of conventions that also accelerates onboarding.",
+          "citation": {
+            "title": "Claude Code slash commands — project scope",
+            "url": "https://docs.claude.com/en/docs/claude-code/slash-commands"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have each developer define the review workflow in their personal user-scoped CLAUDE.md so it applies across all their projects.",
+          "correct": false,
+          "explanation": "User-scoped memory is per-developer and not shared, so standardization still depends on 40 individuals configuring themselves identically. It also incorrectly applies one repository's review conventions to every project the developer touches.",
+          "citation": {
+            "title": "Claude Code memory (CLAUDE.md)",
+            "url": "https://docs.claude.com/en/docs/claude-code/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Paste the full review checklist into the prompt at the start of every session, since that guarantees it is always present.",
+          "correct": false,
+          "explanation": "Manual pasting is exactly the inconsistent, human-dependent process being replaced, and it wastes context on content that a committed command or memory file supplies automatically. It provides no versioning or review path when conventions change.",
+          "citation": {
+            "title": "Claude Code memory (CLAUDE.md)",
+            "url": "https://docs.claude.com/en/docs/claude-code/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2-D7-02",
+      "question": "An adtech company wants Claude Code to triage failing builds automatically in CI. The pipeline runs unattended with repository write access, and security requires that the automation can never push directly to main or modify CI configuration. What is the correct enablement approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run in headless mode with an explicit tool allowlist scoped to the minimum needed, and enforce the prohibited operations with a PreToolUse hook that blocks them deterministically.",
+          "correct": true,
+          "explanation": "Headless mode is the supported path for non-interactive CI execution, and an explicit allowlist grants only the capabilities the job requires. Because a PreToolUse hook runs before a tool executes and can block the call, it converts the security requirement into a deterministic guarantee rather than a prompt-level request.",
+          "citation": {
+            "title": "Claude Code hooks",
+            "url": "https://docs.claude.com/en/docs/claude-code/hooks"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run interactively in CI with full tool access and rely on the prompt to instruct the agent never to push to main or edit CI files.",
+          "correct": false,
+          "explanation": "Interactive mode is unsuitable for unattended pipelines, and full tool access with a prompt-based restriction leaves a probabilistic control guarding a hard security boundary. Anthropic's guidance is to enforce must-hold rules programmatically rather than trusting prompt instructions.",
+          "citation": {
+            "title": "Claude Code hooks",
+            "url": "https://docs.claude.com/en/docs/claude-code/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Grant full access but review the automation's commits weekly, reverting anything that violated the policy.",
+          "correct": false,
+          "explanation": "This is purely detective and operates a week after an unauthorized push to main or a CI configuration change could have shipped. Reverting after the fact does not satisfy a requirement that the action never occur.",
+          "citation": {
+            "title": "Claude Code security",
+            "url": "https://docs.claude.com/en/docs/claude-code/security"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Give the CI job the same broad credentials developers use, since the automation performs the same kinds of tasks they do.",
+          "correct": false,
+          "explanation": "An unattended automation has no human judgment in the loop, so it warrants tighter privileges than an interactive developer, not equivalent ones. Reusing broad developer credentials maximizes blast radius and violates least privilege.",
+          "citation": {
+            "title": "Claude Code security",
+            "url": "https://docs.claude.com/en/docs/claude-code/security"
+          }
+        }
+      ]
+    }
+  ]
+}

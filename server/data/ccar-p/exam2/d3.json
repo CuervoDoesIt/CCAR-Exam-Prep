@@ -1,0 +1,585 @@
+{
+  "examId": "ccar-p-exam2",
+  "domainId": "D3",
+  "domainName": "Integration (Tool Use, MCP, Agent SDK)",
+  "questions": [
+    {
+      "id": "P2-D3-01",
+      "question": "A maritime shipping operator is building a Claude agent for port coordination. Its vessel-management platform exposes 140 REST endpoints, and an engineer proposes auto-generating one tool per endpoint. Latency and token budgets are tight. What tool strategy should the architect recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Generate all 140 tools so the agent has maximum flexibility to compose any operation.",
+          "correct": false,
+          "explanation": "Wrapping every endpoint bloats the context with tool definitions and creates ambiguous, overlapping choices. Anthropic warns against auto-wrapping full API surfaces because more tools do not equal better agent performance.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Build a few consolidated tools targeting high-impact workflows, such as one tool that handles berth scheduling end to end.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is to build a small number of thoughtful tools targeting specific high-impact workflows rather than wrapping every API endpoint. Consolidated tools reduce token overhead and make tool selection unambiguous for the agent.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Expose no tools and paste API documentation into the system prompt so Claude emits raw HTTP requests as text.",
+          "correct": false,
+          "explanation": "This abandons the structured tool_use flow, where Claude returns typed calls your application executes and answers with tool_result blocks. Free-text HTTP requests lose schema validation and the reliability of the documented tool-calling loop.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Expose only one generic execute_api tool that accepts an arbitrary endpoint path and JSON body.",
+          "correct": false,
+          "explanation": "A catch-all tool pushes all the API's implicit knowledge onto the model and defeats clear descriptions and unambiguous parameters, which Anthropic identifies as among the most impactful levers for tool performance. It also complicates permissioning and evaluation.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-02",
+      "question": "An adtech company's reporting agent calls a get_campaign_metrics tool. The tool currently returns every metric, dimension, and internal UUID for each campaign, and multi-campaign reviews regularly overflow the context window. Which redesign best follows Anthropic's tool-writing guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Return the full payload but instruct Claude in the system prompt to ignore fields it does not need.",
+          "correct": false,
+          "explanation": "Tokens are consumed the moment the tool_result enters context, regardless of instructions to ignore them. Anthropic treats context as a finite resource with diminishing returns, so the fix belongs in the tool response, not the prompt.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Split the tool into 40 single-metric tools so each response is tiny.",
+          "correct": false,
+          "explanation": "This trades response bloat for tool-set bloat and forces many round trips per report. Anthropic recommends consolidated tools for workflows, with response verbosity controlled inside the tool rather than by multiplying tools.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Have the tool write results to a file and return only the file path for Claude to fetch later.",
+          "correct": false,
+          "explanation": "Indirection adds a retrieval step to every call and still surfaces the full payload when read. The documented pattern is to make the tool response itself concise and semantically relevant, returning names rather than low-level identifiers.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Default to a concise response with semantic names, and add a response_format enum so the agent can request 'detailed' output when needed.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is to prioritize contextual relevance, exclude low-level technical identifiers like UUIDs, and offer a response_format parameter with 'concise' and 'detailed' options. This keeps routine calls cheap while preserving depth on demand.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-03",
+      "question": "An HR tech platform's recruiting agent has a search_candidates tool. Broad queries can match 8,000 profiles, and returning them all destroys latency and cost targets. How should the tool handle oversized result sets?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Paginate and truncate with sensible defaults, and include guidance in the truncated response steering the agent toward narrower searches.",
+          "correct": true,
+          "explanation": "Anthropic recommends implementing pagination, filtering, and truncation with sensible defaults, and when truncating, returning helpful guidance that steers agents toward more targeted queries. This preserves the token budget while keeping the agent productive.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Return all 8,000 profiles because withholding data risks the agent missing the best candidate.",
+          "correct": false,
+          "explanation": "Flooding context degrades model performance and blows cost and latency budgets; context must be treated as a finite resource. Anthropic's guidance favors the smallest set of high-signal tokens that supports the task.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Silently cap results at 10 with no indication that more matches exist.",
+          "correct": false,
+          "explanation": "Silent truncation misleads the agent into treating a partial view as complete. Anthropic's tool guidance says truncated responses should be transparent and provide direction, just as detailed error messages beat opaque failures.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Reject broad queries with a generic 'query failed' error until the recruiter types a narrower request.",
+          "correct": false,
+          "explanation": "Opaque errors leave the model guessing. Anthropic's documented practice is to write instructive messages that explain what went wrong and what to try next so Claude can recover or adapt without guessing.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-04",
+      "question": "A field services dispatch agent calls a schedule_technician tool mid-loop, and the scheduling API returns HTTP 500. The engineering team debates how to surface this to Claude so the agentic loop can continue gracefully. What is the correct handling?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Terminate the conversation and restart the whole task from scratch with a fresh context.",
+          "correct": false,
+          "explanation": "Restarting discards useful progress and is unnecessary; the tool-use protocol is designed for in-loop error recovery. Anthropic's production guidance favors letting agents adapt when tools fail rather than restarting from scratch.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "B",
+          "text": "Omit the tool_result block for the failed call and send a plain text message describing the outage.",
+          "correct": false,
+          "explanation": "Every tool_use block must be answered by a tool_result immediately after, and tool_result blocks must come before any text in that user message. Skipping the result produces a malformed conversation and API errors.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Return a tool_result with is_error set to true and an instructive message, e.g. the failure cause and whether to retry.",
+          "correct": true,
+          "explanation": "The documented pattern is to return the error in the tool_result content with \"is_error\": true. Anthropic advises instructive error messages, such as 'Rate limit exceeded. Retry after 60 seconds,' so Claude has the context to recover or adapt.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Return a normal tool_result claiming success so the loop keeps moving, then fix the booking asynchronously.",
+          "correct": false,
+          "explanation": "Fabricating success poisons the agent's state: Claude will confirm a booking that never happened. The is_error flag exists precisely so failures are represented truthfully and incorporated into Claude's next step.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-05",
+      "question": "A maritime logistics agent issues three tool calls in one assistant turn: write_manifest, then notify_customs, then update_eta. The team executes them sequentially, and write_manifest fails, so they skip the remaining two. What must the next user message contain?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Only the tool_result for write_manifest; the skipped calls need no results because they never ran.",
+          "correct": false,
+          "explanation": "Every tool_use block requires a matching tool_result in the next user message, even for calls you chose not to execute. Missing results for outstanding tool_use ids make the request invalid.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "B",
+          "text": "A tool_result for all three calls: the real error for write_manifest, and is_error results such as 'Not executed: preceding call failed' for the other two.",
+          "correct": true,
+          "explanation": "The docs state that if you choose not to run a call, for example because an earlier sequential call failed, you must still return a tool_result for it with is_error: true and a brief explanation. All results go together in the next user message, matched by tool_use_id.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "C",
+          "text": "A new user text message asking Claude to reissue the two skipped tool calls.",
+          "correct": false,
+          "explanation": "You cannot insert a plain text turn while tool_use blocks remain unanswered; tool_result blocks must immediately follow the assistant's tool use message. Claude will naturally decide whether to reissue calls after seeing the error results.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Three successful tool_results, since reporting failures for unexecuted calls would confuse the model.",
+          "correct": false,
+          "explanation": "Reporting success for actions that never happened corrupts the agent's world model and can cascade into wrong downstream decisions. The protocol's is_error flag exists so Claude can reason accurately about failures.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-06",
+      "question": "An adtech pacing agent uses four tools: three read-only metric lookups on independent exchanges, plus an adjust_bid tool whose input depends on those metrics. The team wants minimal latency without unsafe ordering. Which execution design is best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Let Claude call the three independent lookups in parallel in one turn, run them concurrently, then let adjust_bid follow in a later turn once results are in context.",
+          "correct": true,
+          "explanation": "The docs advise running independent, read-only operations concurrently for lower latency, while side-effecting or order-dependent tools run after their inputs exist. Dependent calls naturally sequence across turns because Claude needs the results before computing the bid.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "B",
+          "text": "Set disable_parallel_tool_use to true inside tool_choice so every tool call, including the lookups, happens one per turn.",
+          "correct": false,
+          "explanation": "Forcing at most one tool call per response sacrifices the latency win on the three independent lookups. disable_parallel_tool_use is a legitimate control, set inside the tool_choice object rather than as a top-level parameter, but applying it here trades away the main benefit of parallel tool use without adding safety.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "C",
+          "text": "Run all four tools concurrently in one batch, passing adjust_bid placeholder inputs to be corrected later.",
+          "correct": false,
+          "explanation": "adjust_bid depends on the lookup outputs, so executing it with placeholders performs a side-effecting action on invalid data. The guidance is that tools with side effects, shared state, or ordering requirements are better run sequentially.",
+          "citation": { "title": "Parallel tool use", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "D",
+          "text": "Merge everything into a single mega-tool that fetches metrics and adjusts bids in one opaque call.",
+          "correct": false,
+          "explanation": "Collapsing reads and a consequential write into one opaque call removes the model's decision point and any approval gate before the bid change. Anthropic's ACI guidance treats tool boundaries as deliberate interface design, not just plumbing.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-07",
+      "question": "An HR tech engineer's agent loop intermittently gets 400 errors: 'tool_use ids were found without tool_result blocks immediately after.' Their code sends tool results with a leading text block summarizing what happened, followed by the tool_result blocks. What is the fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the summary into the system prompt, since user messages may never contain text alongside tool results.",
+          "correct": false,
+          "explanation": "Text is allowed in the same user message; it just must come after all tool_result blocks. Rewriting the system prompt every turn is also not how per-turn context should be delivered.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "B",
+          "text": "Wrap the summary in a second tool_result block with a fabricated tool_use_id.",
+          "correct": false,
+          "explanation": "tool_result blocks must reference real tool_use ids from the preceding assistant turn; inventing ids creates mismatched blocks and new errors. The formatting rules, not extra results, are the issue here.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Retry the request with exponential backoff, since this is a transient API-side failure.",
+          "correct": false,
+          "explanation": "A 400 with this message is a deterministic message-formatting error, not a transient fault; retrying identical malformed payloads will fail forever. Accuracy about the tool_use/tool_result flow is a core integration competency.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Reorder the content array so every tool_result block comes first and any text follows them.",
+          "correct": true,
+          "explanation": "The docs require tool_result blocks to come first in the content array of the user message, with any text after all tool results, and results must immediately follow the assistant's tool_use message. Placing text first causes exactly this 400 error.",
+          "citation": { "title": "Handle tool calls", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-08",
+      "question": "A field services company is developing an MCP server for its work-order system. Developers run it beside Claude Code on laptops today, but next quarter it must serve many remote agents from a central deployment behind the company's load balancer. Which transport plan fits MCP's design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use streamable HTTP for local development and switch to stdio for the remote deployment.",
+          "correct": false,
+          "explanation": "This is inverted. stdio runs the server as a client-launched local subprocess communicating over standard streams, which cannot serve remote clients behind a load balancer; the HTTP binding exists for networked deployment.",
+          "citation": { "title": "MCP specification: Transports", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports" }
+        },
+        {
+          "key": "B",
+          "text": "Invent a custom TCP framing now so both environments share one bespoke protocol.",
+          "correct": false,
+          "explanation": "Custom transports are permitted but must preserve JSON-RPC framing and message patterns, and the spec says stream-based custom transports should reuse stdio framing rather than define new ones. Standard bindings already cover both needs here.",
+          "citation": { "title": "MCP specification: Transports", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports" }
+        },
+        {
+          "key": "C",
+          "text": "Use stdio for local development, then expose the server over streamable HTTP for the remote multi-client deployment.",
+          "correct": true,
+          "explanation": "MCP's standard bindings map exactly to this: stdio delivers newline-delimited messages over the standard streams of a client-launched subprocess (ideal locally), while streamable HTTP posts each message to a single MCP endpoint, suiting remote, load-balanced servers.",
+          "citation": { "title": "MCP specification: Transports", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports" }
+        },
+        {
+          "key": "D",
+          "text": "Transports are interchangeable at runtime, so ship stdio only and let the load balancer bridge it to HTTP automatically.",
+          "correct": false,
+          "explanation": "A transport is a binding that defines framing, delivery, and lifecycle; a load balancer cannot conjure an HTTP MCP endpoint from a subprocess's stdin/stdout. The server must implement the streamable HTTP binding to be remotely reachable.",
+          "citation": { "title": "MCP specification: Transports", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-09",
+      "question": "An HR tech MCP server automates employee onboarding. Mid-way through a provision_accounts tool call it discovers the new hire's preferred display name and equipment choices were never supplied. The server should gather this from the user without failing the operation. Which MCP feature applies?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Sampling, so the server can ask the model to guess plausible values for the missing fields.",
+          "correct": false,
+          "explanation": "Sampling lets a server request an LLM completion through the client; it does not collect facts only the human knows, and guessing personal choices invites errors. User-supplied data mid-operation is exactly what elicitation exists for.",
+          "citation": { "title": "Understanding MCP clients", "url": "https://modelcontextprotocol.io/docs/learn/client-concepts" }
+        },
+        {
+          "key": "B",
+          "text": "Elicitation in form mode: the server sends a schema-backed request and the client renders a validated input form to the user.",
+          "correct": true,
+          "explanation": "Elicitation provides a structured way for servers to pause an operation and request specific information from users, with a schema the client uses to build and validate the form. The client then retries the original request with the collected input.",
+          "citation": { "title": "Understanding MCP clients", "url": "https://modelcontextprotocol.io/docs/learn/client-concepts" }
+        },
+        {
+          "key": "C",
+          "text": "A resource template the model reads to look up the employee's preferences.",
+          "correct": false,
+          "explanation": "Resources are application-driven, read-only context sources; they cannot solicit brand-new answers from a human mid-flow. The preferences do not exist anywhere yet, so no resource read can produce them.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "D",
+          "text": "Elicitation in form mode is also correct for collecting the new hire's initial system password.",
+          "correct": false,
+          "explanation": "The docs are explicit that servers must not use form-mode elicitation for sensitive data such as passwords, API keys, or payment credentials. Those flows belong in URL mode, which keeps data out of band so it never passes through the client or model context.",
+          "citation": { "title": "Understanding MCP clients", "url": "https://modelcontextprotocol.io/docs/learn/client-concepts" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-10",
+      "question": "A maritime routing MCP server's find_best_route tool gathers 60 candidate routes and needs an LLM to rank them by fuel, weather, and schedule trade-offs. The server team has no model API key and wants the host application to keep control. Which MCP capability was designed for this, and what should the team know?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Elicitation: the server asks the end user to rank the 60 routes manually in a form.",
+          "correct": false,
+          "explanation": "Elicitation gathers specific user input, not large-scale analytical judgments; asking a human to rank 60 multi-factor routes defeats the automation. The server needs a model completion, which is sampling's role.",
+          "citation": { "title": "Understanding MCP clients", "url": "https://modelcontextprotocol.io/docs/learn/client-concepts" }
+        },
+        {
+          "key": "B",
+          "text": "Roots: declare the route dataset as a root so the client's model scans it automatically.",
+          "correct": false,
+          "explanation": "Roots communicated filesystem boundaries to servers; they never triggered model completions, and they are deprecated in the latest protocol revision. This primitive has no role in requesting analysis.",
+          "citation": { "title": "Understanding MCP clients", "url": "https://modelcontextprotocol.io/docs/learn/client-concepts" }
+        },
+        {
+          "key": "C",
+          "text": "Tools: expose a rank_routes tool and assume the client always invokes it with its own reasoning attached.",
+          "correct": false,
+          "explanation": "Exposing another tool still leaves the server without a model to perform the ranking; tools are called by the model, they do not grant the server model access. The server-initiated completion pathway is sampling.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "D",
+          "text": "Sampling: the server requests a completion through the client, which controls approval and model access; note it is deprecated in the newest protocol revision in favor of direct LLM API integration.",
+          "correct": true,
+          "explanation": "Sampling lets servers request LLM completions through the client without holding their own model credentials, keeping the client in charge of permissions and human-in-the-loop review. Architects should also know the 2026-07-28 revision deprecates it, recommending direct provider integration going forward.",
+          "citation": { "title": "Understanding MCP clients", "url": "https://modelcontextprotocol.io/docs/learn/client-concepts" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-11",
+      "question": "An adtech MCP server must give host applications read access to campaign performance data for any advertiser and month combination, discoverable and self-documenting, without minting a separate endpoint for each of 5,000 advertisers. Which MCP construct fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A resource template with a parameterized URI such as adtech://campaigns/{advertiser}/{month}, listed via resources/templates/list.",
+          "correct": true,
+          "explanation": "Resource templates are dynamic URIs with parameters for flexible queries, discovered through resources/templates/list, and they carry metadata like title, description, and MIME type, making them self-documenting. One template covers every advertiser/month combination, and parameters support completion.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "B",
+          "text": "5,000 direct resources, one fixed URI per advertiser, refreshed monthly.",
+          "correct": false,
+          "explanation": "Direct resources are fixed URIs pointing to specific data, which is exactly the per-entity explosion the team wants to avoid. Templates exist so a single parameterized definition replaces enumerating every combination.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "C",
+          "text": "An MCP prompt per advertiser that embeds the performance data in its template text.",
+          "correct": false,
+          "explanation": "Prompts are user-controlled instruction templates invoked explicitly, for example via slash commands; they are not a data-access mechanism and would bloat with embedded metrics. Read-only structured data belongs in resources.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "D",
+          "text": "A side-effecting tool, since only tools can accept parameters like advertiser and month.",
+          "correct": false,
+          "explanation": "Resource templates also accept parameters via their URI templates, so parameterization does not force tool use. Tools are model-controlled functions for actions, whereas passive read-only context is the documented role of resources.",
+          "citation": { "title": "Understanding MCP servers", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-12",
+      "question": "An HR tech vendor builds an MCP server fronting its HRIS API. A shortcut is proposed: accept whatever OAuth token the MCP client sends and forward it unmodified to the HRIS API, skipping local validation. Why does the MCP specification prohibit this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "It is allowed, provided the connection uses TLS and the token has not expired.",
+          "correct": false,
+          "explanation": "Transport encryption does not address the problem. Token passthrough is explicitly called an anti-pattern and forbidden regardless of TLS, because the flaw is accepting tokens not issued to the MCP server itself.",
+          "citation": { "title": "MCP security best practices", "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices" }
+        },
+        {
+          "key": "B",
+          "text": "It is forbidden only because forwarding adds a network hop that violates latency requirements in the spec.",
+          "correct": false,
+          "explanation": "MCP imposes no latency mandate; the prohibition is a security control, not a performance one. Proxying itself is fine when the server validates tokens issued for it and uses its own credentials downstream.",
+          "citation": { "title": "MCP security best practices", "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices" }
+        },
+        {
+          "key": "C",
+          "text": "Token passthrough circumvents rate limiting and audience checks, breaks audit trails, and lets a stolen token turn the server into a data-exfiltration proxy.",
+          "correct": true,
+          "explanation": "The spec states MCP servers MUST NOT accept tokens not explicitly issued for them. Passthrough bypasses downstream security controls that depend on token audience, obscures which client acted in logs, and erodes trust boundaries between services.",
+          "citation": { "title": "MCP security best practices", "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices" }
+        },
+        {
+          "key": "D",
+          "text": "The concern is only about OAuth scopes being too narrow; requesting broader scopes up front resolves it.",
+          "correct": false,
+          "explanation": "Broader scopes make things worse: the spec's scope-minimization guidance warns that omnibus scopes expand blast radius on compromise. The passthrough prohibition is about token audience validation, not scope breadth.",
+          "citation": { "title": "MCP security best practices", "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-13",
+      "question": "A field services platform integrates a vendor's MCP server. After the vendor upgrades to a newer MCP protocol revision, some client requests fail with error code -32022 listing the server's supported versions. How should the client behave, per the MCP versioning model?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Treat it as fatal: MCP versions are incompatible by design and the vendor must roll back.",
+          "correct": false,
+          "explanation": "The spec builds in graceful negotiation; UnsupportedProtocolVersionError includes the server's supported list precisely so clients can retry rather than hard-fail. Rollback is only needed when no mutually supported version exists.",
+          "citation": { "title": "MCP specification: Versioning and compatibility", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning" }
+        },
+        {
+          "key": "B",
+          "text": "Select a mutually supported version from the error's 'supported' list and retry the request declaring that version.",
+          "correct": true,
+          "explanation": "MCP uses date-based protocol versions declared on each request; when a server returns UnsupportedProtocolVersionError, the client should pick a mutually supported version from the listed set and retry, surfacing an error only if none overlaps.",
+          "citation": { "title": "MCP specification: Versioning and compatibility", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning" }
+        },
+        {
+          "key": "C",
+          "text": "Strip the version metadata from requests so the server cannot reject them on version grounds.",
+          "correct": false,
+          "explanation": "The protocol version travels in request metadata by design, and servers validate it; omitting required metadata produces rejections, not compatibility. Version declaration is how both sides agree on semantics.",
+          "citation": { "title": "MCP specification: Versioning and compatibility", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning" }
+        },
+        {
+          "key": "D",
+          "text": "Ignore the error body and retry the identical request, since version errors are transient.",
+          "correct": false,
+          "explanation": "Version mismatch is deterministic: the same request will fail the same way. The error's data field carries the actionable information (supported versions) that the client is expected to act on.",
+          "citation": { "title": "MCP specification: Versioning and compatibility", "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-14",
+      "question": "A maritime software team's coding agent keeps corrupting voyage-plan files: it passes relative file paths that resolve differently depending on the working directory. Per the agent-computer interface (ACI) guidance in Building Effective Agents, what is the strongest remedy?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add 'ALWAYS use absolute paths' in bold to the system prompt and keep the tool unchanged.",
+          "correct": false,
+          "explanation": "Prompt admonitions are weaker than interface changes and erode as context grows. Anthropic's ACI appendix emphasizes changing the tool itself so mistakes become structurally difficult, not just discouraged.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Lower the temperature so the model makes fewer formatting mistakes.",
+          "correct": false,
+          "explanation": "Sampling parameters do not fix an ambiguous interface; the model still faces a parameter that accepts unsafe values. The documented lesson is that tool design, not decoding settings, eliminated this error class.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Switch the agent to a diff-based editing format, since diffs are always easier for models to emit.",
+          "correct": false,
+          "explanation": "The appendix actually flags diff formats as carrying formatting overhead, like knowing changed line counts before writing code. Format choice should minimize overhead for the model, and it does not address the path-ambiguity bug at all.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Poka-yoke the tool: change its schema to require absolute file paths so relative ones are invalid inputs.",
+          "correct": true,
+          "explanation": "Anthropic's ACI guidance is to redesign arguments so mistakes are harder to make, citing their SWE-bench work where requiring absolute filepaths eliminated the errors relative paths had caused. Treat tool design with the same rigor as human interface design.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-15",
+      "question": "During an adtech tool review, an architect finds a tool named q with description 'runs query' and a parameter called user. The agent frequently passes an email address where an internal ID is expected. What change does Anthropic's guidance rank among the highest-impact fixes?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Rewrite the description as you would explain it to a new team member, making implicit context explicit, and rename the parameter to something unambiguous like user_id.",
+          "correct": true,
+          "explanation": "Anthropic ranks prompt-engineering tool descriptions among the most impactful optimizations: describe the tool as you would to a new hire and use unambiguous parameter names, explicitly citing user_id over user. Clear naming resolves exactly this ID-versus-email confusion.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Leave the definition alone and add server-side coercion that converts emails into IDs silently.",
+          "correct": false,
+          "explanation": "Silent coercion hides the ambiguity rather than fixing it and fails for lookalike inputs. The evaluated finding is that description and naming quality measurably drive tool-use accuracy, so the definition is where to invest.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Force the call with tool_choice so Claude must use the tool on every turn, increasing practice.",
+          "correct": false,
+          "explanation": "tool_choice controls whether a tool is invoked, not whether its inputs are correct; forcing calls with a confusing schema just produces more bad calls. Correct input formation depends on schema clarity and descriptions.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Duplicate the tool under three alternative names so the model can pick whichever it understands.",
+          "correct": false,
+          "explanation": "Redundant overlapping tools create ambiguous choices, a failure mode Anthropic explicitly warns about: if a human engineer cannot say definitively which tool applies, the agent cannot either. Consolidation plus clarity beats duplication.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-16",
+      "question": "A field services ISV is building a production agent that must read repo files, run shell commands, spawn specialized subagents, and enforce tool permissions, in Python. The team does not want to implement the tool-execution loop themselves. Which Anthropic offering matches?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The Client SDK, because production systems should always own a hand-rolled tool loop.",
+          "correct": false,
+          "explanation": "The Client SDK gives direct API access where you implement the tool loop yourself; that is exactly the work this team wants to avoid. Anthropic's comparison table routes loop-included agent building to the Agent SDK.",
+          "citation": { "title": "Agent SDK overview", "url": "https://docs.claude.com/en/api/agent-sdk/overview" }
+        },
+        {
+          "key": "B",
+          "text": "The interactive Claude Code CLI, wired into production via screen-scraping its terminal output.",
+          "correct": false,
+          "explanation": "The CLI is built for interactive terminal use; for programmatic automation Anthropic points to the Agent SDK library, or headless CLI invocation with -p and JSON output for other languages, never scraping an interactive TUI.",
+          "citation": { "title": "Agent SDK overview", "url": "https://docs.claude.com/en/api/agent-sdk/overview" }
+        },
+        {
+          "key": "C",
+          "text": "The Claude Agent SDK, which runs the same agent loop, built-in tools, permissions, subagents, and MCP support as Claude Code, as a Python library.",
+          "correct": true,
+          "explanation": "The Agent SDK is a Python/TypeScript library exposing Claude Code's agent loop, built-in file/command tools, hooks, subagents, permission controls, sessions, and MCP connectivity in your own process. It is the documented fit for building agents without reimplementing the tool loop.",
+          "citation": { "title": "Agent SDK overview", "url": "https://docs.claude.com/en/api/agent-sdk/overview" }
+        },
+        {
+          "key": "D",
+          "text": "An MCP server, since MCP servers are Anthropic's standard way to host complete agents.",
+          "correct": false,
+          "explanation": "MCP servers expose tools, resources, and prompts to AI applications; they are integration endpoints, not agent harnesses running a reasoning loop. The agent that consumes those servers is built with something like the Agent SDK.",
+          "citation": { "title": "What is the Model Context Protocol?", "url": "https://modelcontextprotocol.io/docs/getting-started/intro" }
+        }
+      ]
+    },
+    {
+      "id": "P2-D3-17",
+      "question": "An HR tech agent connects three MCP servers (ATS, payroll, benefits) whose combined 55 tools include four different search variants with overlapping descriptions. Trajectory reviews show the agent alternates between wrong search tools. Beyond trimming tools, what does Anthropic recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Increase max_tokens so the model has more room to reason about which search tool to pick.",
+          "correct": false,
+          "explanation": "Output-length headroom does not resolve interface ambiguity. Anthropic's context-engineering guidance frames bloated, overlapping tool sets as the failure mode itself; no amount of reasoning space makes an undecidable choice decidable.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Namespace tools under service prefixes (e.g., ats_search, payroll_search) and make each tool's distinct purpose unambiguous, since if a human can't say which tool applies, the agent can't either.",
+          "correct": true,
+          "explanation": "Anthropic's tool-writing guidance recommends namespacing related tools under common prefixes, noting the choice has non-trivial effects on tool-use evaluations, and warns that when tools overlap in function or have a vague purpose agents get confused about which to use. Its context-engineering guidance states the heuristic outright: if a human engineer cannot definitively say which tool should be used, an AI agent cannot be expected to do better.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Randomize tool ordering each turn so the agent does not anchor on the first search tool listed.",
+          "correct": false,
+          "explanation": "Shuffling definitions adds noise without removing the underlying ambiguity, and it churns the prompt prefix. The documented levers are naming, namespacing, and descriptions, evaluated against realistic tasks.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Set tool_choice to 'any' so the model is compelled to commit to some tool quickly.",
+          "correct": false,
+          "explanation": "tool_choice 'any' forces a tool call to occur but does nothing to help select the correct one among lookalikes. Selection accuracy comes from distinct, well-described tools, not from invocation pressure.",
+          "citation": { "title": "Tool use with Claude", "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" }
+        }
+      ]
+    }
+  ]
+}
