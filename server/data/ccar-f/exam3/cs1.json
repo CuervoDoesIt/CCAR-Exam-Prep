@@ -1,0 +1,555 @@
+{
+  "examId": "ccar-f-exam3",
+  "caseId": "CS1",
+  "caseTitle": "Kestrel Point Terminals — \"Bollard\" berth-planning and customs-reconciliation agent",
+  "caseScenario": "Kestrel Point Terminals operates a four-berth container terminal on a tidal estuary, handling roughly 2.1 million TEU and 38 vessel calls a week. Three things in the operations centre never stop: a berth-allocation plan that is regenerated whenever a vessel's ETA slips, customs reconciliation that matches declarations and manifests against the terminal operating system (TOS) before boxes are released, and a constant stream of questions from straddle-carrier dispatchers who need to know where a container is and which stack it may move to.\n\nFour engineers and one embedded operations analyst are building Bollard on top of the existing stack: a TOS exposing 46 REST endpoints, an EDI gateway to the customs broker, a yard telemetry feed, and a tide-and-draft service. Dispatcher questions are answered while a driver idles at the stack, so the interactive path is held to a p95 of three seconds. A full berth-plan regeneration is a background job with a six-minute wall-clock budget; it runs unattended at shift change and typically issues about 400 tool calls as it works through a 90-minute vessel window. In pilot runs that volume filled the context window, after which the planner began re-proposing berth windows it had already ruled out twenty minutes earlier.\n\nNothing Bollard produces reaches the TOS on its own. The duty superintendent reviews a plan and approves it, and only then may a single write path commit it. Customs discrepancies are reported, never resolved. Both outputs are read by people who will immediately open the underlying record, so a finding without a source reference is worthless. Berth heuristics change most weeks as the terminal tunes crane productivity; the customs path changes rarely, and the broker reviews it when it does.",
+  "caseRequirements": [
+    "R1: Dispatcher answers must hold a p95 under 3 seconds, and a full berth-plan regeneration must finish within 6 minutes as a single unattended run, with no human restart.",
+    "R2: Every berth assignment and every customs discrepancy Bollard reports must carry a machine-checkable reference to its source record — vessel call ID, container number, or declaration number.",
+    "R3: Bollard may read the TOS freely but may write only through the confirm_berth_assignment path, and only after a named duty superintendent has approved the plan.",
+    "R4: A regeneration run issues up to 400 tool calls across a 90-minute vessel window; it must stay inside the context window and must not lose constraints established earlier in the same run.",
+    "R5: Berth-planning logic and customs-reconciliation logic must be independently changeable — editing one must not require redeploying or re-reviewing the other.",
+    "R6: Everything an engineer needs to reproduce and diagnose a failed regeneration run must live in the repository; no procedure may depend on an individual's local setup or personal notes."
+  ],
+  "questions": [
+    {
+      "id": "F3-CS1-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Bollard has to cover three jobs at Kestrel Point: a six-minute unattended berth-plan regeneration, per-declaration customs reconciliation, and sub-three-second dispatcher answers about yard moves. The team is choosing the top-level decomposition before writing any tools. Which structure fits the case best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "One agent holding every TOS, EDI, yard and tide tool, with a routing preamble in the system prompt that tells it which job it is doing and an iteration cap of 60 tool calls per request.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a genuinely reasonable starting point — one deployment, one prompt to maintain, no hand-off to lose information across — and Anthropic's guidance does favour the simplest structure that works. It fails R4, though: a single agent carrying all four subsystems' tool definitions and every job's history is the exact shape that filled the context window in pilot, and a 60-call cap cannot cover a 400-call regeneration. It also strains R1, because the dispatcher path inherits the whole tool surface and its definition tokens on a three-second budget.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A fixed prompt chain applied to every incoming request: reconcile the declaration, then regenerate the berth plan, then answer the dispatcher, passing each step's output into the next.",
+          "correct": false,
+          "explanation": "Prompt chaining is for decomposing one task into ordered subtasks, not for forcing three unrelated jobs into one pipeline. A dispatcher asking where a container sits would trigger a customs reconciliation and a berth regeneration first, which is both wasteful and impossible inside R1's three-second budget. Chaining is the right pattern only when each step genuinely depends on the previous step's output.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Three separately scoped paths behind a thin router: a berth-plan orchestrator with its own long-running context, a customs reconciler invoked per declaration, and a stateless dispatcher-answer path that never enters an agent loop.",
+          "correct": true,
+          "explanation": "The three jobs have incompatible shapes — one long-running and tool-heavy, one short and per-record, one latency-critical and read-only — so they get different structures. The dispatcher path stays a single-turn workflow and keeps R1's three-second p95 within reach; the regeneration run gets a context of its own, which is what R4 needs; and the customs reconciler can be deployed and reviewed on its own cadence, satisfying R5. Option A is the close call: it is simpler to operate, but a shared context and a 60-call cap put R4 out of reach.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A single supervisory orchestrator that spawns a subagent per vessel call and per declaration, with dispatcher questions also routed through the orchestrator so all three jobs share one supervisory context.",
+          "correct": false,
+          "explanation": "Routing a read-only lookup through a supervisory agent adds a model hop and the orchestrator's accumulated history to a request that has a three-second budget. Anthropic's multi-agent guidance is explicit that orchestration earns its overhead only when a task genuinely needs parallel exploration; a yard-location lookup does not, and a shared supervisory context reintroduces the context growth R4 forbids.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-02",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D4", "D2"],
+      "question": "Inside the berth-plan orchestrator, 38 vessel windows must be assigned across four berths and a shared pool of quay cranes, all inside a six-minute unattended budget. How should the orchestrator process the vessel windows?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Orchestrator-workers: one worker per vessel window, each given only that vessel's constraints, each returning a compact structured window proposal, with the orchestrator merging proposals and resolving quay-crane contention.",
+          "correct": true,
+          "explanation": "This is the orchestrator-workers pattern applied to a task that decomposes cleanly: each vessel window is independent until cranes are allocated, so workers can run concurrently and the orchestrator's own context holds only compact proposals rather than raw TOS payloads. That keeps the run inside R4's context ceiling while the concurrency keeps it inside R1's six minutes. Option B produces better plans in principle but its loop has no bound, which is precisely what R1 cannot absorb.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Evaluator-optimizer: a planner drafts the whole berth plan, a second agent critiques it against berthing and draft rules, and the pair iterate until the critic returns no findings.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Evaluator-optimizer is a strong fit for tasks with clear evaluation criteria and room to iterate, and berthing rules are exactly such criteria — a competent architect would reach for it. It does not meet R1: the loop terminates on a quality condition rather than a clock, so a plan with a stubborn crane conflict can iterate indefinitely, and an unattended six-minute job has no one to stop it. The pattern belongs in an offline plan-quality harness, not on the regeneration path.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A single agent walking the vessel list in one conversation, retaining every TOS payload it has read so that no constraint discovered earlier can be lost later in the run.",
+          "correct": false,
+          "explanation": "Retaining every payload is exactly the behaviour that filled the context window in pilot. Long contexts also degrade quality well before they overflow, which is why Anthropic recommends actively curating what the model sees rather than accumulating everything. Keeping raw payloads is the wrong way to preserve constraints; a compact ledger of decided constraints preserves them at a fraction of the tokens.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Parallelization by voting: run three independent planners over the full vessel list and adopt whichever complete plan two of them agree on.",
+          "correct": false,
+          "explanation": "Voting works when the output is a small judgement that replicas can plausibly agree on. A 38-vessel berth plan is a high-dimensional artefact; three planners will produce three different valid plans and agreement will essentially never occur, so the vote degenerates to picking one at random after paying triple the cost and no reduction in wall-clock time.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-03",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "The TOS exposes 46 REST endpoints. The team must now fix the shape of the tool surface the regeneration run will use, knowing that a run issues up to 400 tool calls and that every assignment it emits has to cite a source record. Which tool surface should they build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A single passthrough tool that takes an endpoint path, an HTTP method and a JSON body, so the whole TOS is reachable without writing 46 schemas.",
+          "correct": false,
+          "explanation": "A generic passthrough moves the entire API contract into the prompt: the model must recall paths and body shapes, and the schema can validate nothing beyond \"this is a string\". It also erases the write boundary R3 depends on, because the same tool can reach any endpoint. Anthropic's tool-writing guidance is to build tools around the task, not around the transport.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Mirror all 46 endpoints as 46 thin tools, prefix each with its subsystem, and enable the tool search tool so only the handful needed for a given step are loaded into context.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a defensible design and the tool search tool genuinely solves the definition-bloat half of the problem — a large catalogue no longer costs 55k tokens up front. It still misses R4, because the cost that matters here is not definitions but traffic: a thin CRUD mirror forces the agent to assemble one vessel window from many small calls, and every raw response lands in the run's context. The 400-call budget is spent on plumbing, and the accumulated payloads are what overflowed the window in pilot.",
+          "citation": {
+            "title": "Tool search tool",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        },
+        {
+          "key": "C",
+          "text": "One coarse tool per vessel call that returns the complete TOS record for that call, so a single request supplies everything the planner could conceivably need about the vessel.",
+          "correct": false,
+          "explanation": "Swinging from too fine to too coarse trades call count for payload size and loses on R4 either way: a full vessel record carries stowage, billing and gate history the planner never reads, and 38 of them will not fit alongside the run's working state. Anthropic's guidance is that tool responses should return the information the next step needs, at the granularity the agent actually reasons over.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A small set of task-shaped tools — get_vessel_call_constraints, get_quay_crane_availability, propose_berth_window, confirm_berth_assignment, reconcile_declaration — each returning only the fields the next step needs plus the record's source reference.",
+          "correct": true,
+          "explanation": "Tools shaped around the work rather than the API collapse many round trips into one and return token-efficient responses, which is how the run stays inside R4's context ceiling across 400 calls. Carrying the source reference in every response is what makes R2 achievable, because the model is copying an identifier it was handed rather than reconstructing one. A single named write tool also makes R3's boundary explicit in the tool surface itself. Option B's mirrored catalogue plus tool search fixes definition bloat but leaves the call-count and payload problem R4 actually cares about.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-04",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D3", "D1"],
+      "question": "Kestrel Point will expose the tool surface over MCP so that Bollard and the engineers' Claude Code sessions consume the same definitions. Berth heuristics change most weeks; the customs path changes rarely and is reviewed by the broker each time. How should the MCP surface be organised?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Skip MCP and declare the tools inline in each API request, since the list is short and the engineers already own the application code that issues the requests.",
+          "correct": false,
+          "explanation": "Inline declarations are fine for a single application, but here two very different clients — the production agent and interactive Claude Code sessions — must see the same tools with the same semantics. Duplicating definitions across them guarantees drift, and it gives up MCP's ability to expose reference data as resources and standard procedures as prompts alongside the executable tools.",
+          "citation": {
+            "title": "Understanding MCP servers",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Two MCP servers — one for berth planning, one for customs — versioned and deployed separately, with each agent granted only the server its job needs.",
+          "correct": true,
+          "explanation": "The deployment boundary is what R5 is really about: with two servers, a weekly berth-heuristic change ships without touching the artefact the broker reviews, and a broker-reviewed customs change ships without a berth regression run. Granting each agent only its own server also narrows the tool surface each context carries, which helps R4, and keeps the single write tool inside the berth server where R3's approval check lives. Option D achieves the same runtime scoping but not the same release independence.",
+          "citation": {
+            "title": "Understanding MCP servers",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "C",
+          "text": "One MCP server whose tools each take a mode argument selecting berth or customs behaviour, keeping the tool count low and the interface uniform across both jobs.",
+          "correct": false,
+          "explanation": "A mode-switched tool is two tools wearing one schema. The description has to explain both behaviours, so the model reasons about which mode to pass instead of which tool to call, and the input schema can no longer describe required fields precisely because they differ per mode. Anthropic's guidance favours distinct, unambiguous tools over one overloaded entry point with a discriminator argument.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "One MCP server exposing both toolsets under namespaced tool names, with per-agent allow-lists controlling which namespace each agent may call, keeping a single deployment and a single authentication path to operate.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Namespacing plus allow-lists is a clean and widely used design, and at runtime it isolates the two toolsets exactly as well as two servers would — one connection, one credential, less operational surface. It does not meet R5, because independence here is about the release unit, not the call path: a single server means every berth-heuristic change redeploys the customs tools too, dragging the broker-reviewed path into a weekly cadence it was deliberately kept out of.",
+          "citation": {
+            "title": "Understanding MCP servers",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-05",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "Two pieces of knowledge need a home in Bollard's repository. First, the build and test commands and the standing rule that generated plans always cite source references — relevant in every session. Second, a 40-step customs-discrepancy triage runbook the team works through a few times a month. Where should each live in the Claude Code setup?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put the commands and the citation rule in CLAUDE.md, and put the 40-step runbook in a skill under .claude/ that can be invoked as a slash command, so its body loads only when someone runs it.",
+          "correct": true,
+          "explanation": "This matches the documented split: CLAUDE.md holds facts and rules that should be true in every session, while a skill holds a multi-step procedure whose body costs nothing until it is invoked. It also serves R5 — the customs runbook is versioned and changed on its own, without touching the file every berth-planning session loads. Option C keeps everything in one place, which is operationally tidy, but permanently couples the two paths' context.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Put both in CLAUDE.md, with the runbook in a clearly marked section near the bottom so readers can skip past it when they are working on berth heuristics.",
+          "correct": false,
+          "explanation": "Section headings organise the file for humans but change nothing about what is loaded: CLAUDE.md is read in full at the start of every session, so a 40-step runbook is in context whether or not anyone is doing customs work. The documented guidance is to move procedures and long reference material out of CLAUDE.md and into a skill precisely because a skill's body loads on demand.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Put both in CLAUDE.md, on the grounds that it is the one file every session already loads, so the runbook can never be missed, forgotten, or invoked with a stale copy by an engineer working under time pressure.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The reasoning is sound as far as it goes — CLAUDE.md is the highest-availability place to put anything, and \"it is always there\" is a real advantage for a procedure used during incidents. It fails R5: a runbook in CLAUDE.md is loaded into every berth-planning session too, so a customs procedure edit now shows up in the context of work it has nothing to do with, and the broker-reviewed and weekly-changing material stop being separable. A skill keeps availability without the coupling.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Put the commands and the citation rule in CLAUDE.md, and encode the 40-step runbook as a hook so that Claude Code executes the triage steps automatically whenever a declaration file is opened.",
+          "correct": false,
+          "explanation": "Hooks are deterministic shell, HTTP or prompt handlers bound to lifecycle events; they are the right tool for enforcing or automating a check, not for holding a 40-step judgement-heavy procedure a human drives. Firing triage on every file open would also run the procedure constantly against declarations nobody asked about.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-06",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "Diagnosing a failed regeneration run means replaying a 400-call trace. Done in the main Claude Code session it floods the window with tool output, and each of the four engineers currently has a different way of doing it. What should the team standardise on?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep doing the analysis in the main session and run the compaction command whenever the window fills, so the engineer keeps one continuous thread through the whole investigation and never has to re-establish which run is under examination or what it was supposed to produce.",
+          "correct": false,
+          "explanation": "Compacting mid-investigation replaces the raw trace with a summary, so the detail the engineer has not looked at yet is gone before it is read. The documented reason to use a subagent is exactly this case: a side task that would flood the main conversation with output nobody will reference again should happen in its own context and return only conclusions.",
+          "citation": {
+            "title": "Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add a SessionStart hook that loads the most recent failed run's trace into every Claude Code session, so the data is always at hand when an engineer starts work.",
+          "correct": false,
+          "explanation": "This inverts the problem: instead of one bloated session it creates a bloated session every time, including sessions that have nothing to do with the failure. Hooks are well suited to injecting small, always-relevant context or enforcing checks, not to preloading a 400-call trace into unrelated work.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Define a trace-analysis subagent in the repository's .claude/agents directory with read-only tools and a focused system prompt, so the replay runs in its own context window and returns only the constraints that were violated.",
+          "correct": true,
+          "explanation": "A subagent runs in a separate context window with its own system prompt and restricted tools, returning a summary rather than the raw material — which is the documented remedy for a side task that would otherwise flood the main conversation. Committing it to .claude/agents satisfies R6, because the procedure ships with the repository and every engineer gets the same one. Option D isolates the context just as well but leaves the definition outside the repository, which is the part R6 forbids.",
+          "citation": {
+            "title": "Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Publish a shared prompt template on the team wiki that each engineer pastes into a fresh Claude Code session before analysing a trace, which also keeps the trace out of the session where they are writing code.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a real and cheap answer: a fresh session does isolate the trace, and a shared template does converge the four engineers on one method, with no repository changes at all. It fails R6, because the procedure now lives on a wiki and depends on each engineer remembering to fetch the current version and paste it correctly. Committing the same instructions as a subagent definition gives identical isolation while keeping reproduction entirely inside the repository.",
+          "citation": {
+            "title": "Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-07",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "The regeneration run's plan is consumed by a TOS writer that rejects any assignment lacking a source reference. The run is unattended and has six minutes. How should the team pin down the plan's output format?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Prefill the assistant turn with an opening brace and set a closing-brace stop sequence, which forces the response into JSON without any schema work.",
+          "correct": false,
+          "explanation": "Assistant prefill is no longer a supported technique on current models, so a design that depends on it is building on a removed capability. The documented replacements are structured outputs, an output format configuration, system-prompt instructions and XML output tags. Even where prefill once worked it constrained only the first character, not the presence of a source reference on every assignment.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have the planner write the plan as prose, then make a second model call whose job is to convert that prose into the JSON the TOS writer expects.",
+          "correct": false,
+          "explanation": "A translation step adds a full round trip to a six-minute budget and introduces a second place for a source reference to go missing — the converter can only cite what the prose happened to mention. Anthropic's guidance is to constrain the generating call itself rather than to repair its output downstream.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Ask for the plan inside XML tags following a documented template, parse the tags in the application layer, and re-prompt the planner whenever an assignment comes back without a source reference.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "XML output tags are a documented and portable way to structure a response, and re-prompting on a failed parse is standard defensive practice, so this is a credible design. It does not satisfy R1: the number of re-prompts is a function of how often the model omits a reference, which is unbounded, and there is nobody watching an unattended run to cut it off at six minutes. Constraining the response by schema removes the retry loop instead of budgeting for it.",
+          "citation": {
+            "title": "Use XML tags to structure your prompts",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/use-xml-tags"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use structured outputs to constrain the response to a JSON schema in which every assignment object requires its source reference, so the writer's precondition holds by construction.",
+          "correct": true,
+          "explanation": "Structured outputs constrain decoding to the schema, so a plan missing a source reference is not a thing the model can emit — R2 is enforced rather than checked, and the TOS writer needs no rejection path. Because there is no parse-failure retry loop, the run's wall-clock cost is predictable, which is what R1 needs from an unattended job. Option C reaches the same format most of the time but pays for it with an unbounded retry loop inside a fixed budget.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-08",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D5", "D3"],
+      "question": "In pilot, the customs reconciler occasionally reports a discrepancy citing a container number that does not appear anywhere in the declaration it was given. The superintendent who chases it finds nothing. Which change to the reconciler's prompt design most directly addresses this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise the reconciler's reasoning effort and have the superintendent send back any finding that turns out to be unfounded so the team can re-run it.",
+          "correct": false,
+          "explanation": "More reasoning effort helps with hard inference; it does not stop a model from filling in a plausible-looking identifier when the field it needs is absent. Routing failures back through the superintendent also makes a human the detector of fabricated references, which is the opposite of what R2 is for.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Require each finding to quote the container number and declaration number verbatim from the tool result, and to be emitted as a not-verifiable finding when the field is absent rather than inferred.",
+          "correct": true,
+          "explanation": "Anthropic's hallucination guidance is to ground claims in supplied material by requiring direct quotation, and to give the model an explicit, acceptable way to say it cannot answer. Together those remove the incentive to invent: a missing field now has a legal output. This is what makes R2's machine-checkable reference real, because the reference is copied from the tool result rather than reconstructed. Option C improves the shape of findings but leaves the same incentive to fabricate intact.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add eight worked examples of well-formed discrepancy findings to the prompt, drawn from real declarations, so the model learns the expected structure, tone and level of detail from demonstrations rather than description.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Multishot prompting is a legitimate and often underused lever, and eight consistent examples will measurably improve the format and completeness of findings — this is a reasonable first move. It does not meet R2, because examples teach the shape of a finding, not its provenance: a fabricated container number in a beautifully formed finding is exactly the failure being reported, and demonstrations make such findings look more convincing rather than less.",
+          "citation": {
+            "title": "Use examples (multishot prompting)",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/multishot-prompting"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Post-filter findings in the application layer by checking that each container number matches the ISO 6346 check-digit format, discarding any that do not.",
+          "correct": false,
+          "explanation": "A format check confirms that an identifier is well-formed, not that it exists in the declaration that was read. A fabricated container number generated in the right pattern passes the filter unchanged, so the superintendent still chases a reference to nothing. The check R2 needs is membership in the source record, not syntactic validity.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-09",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "By call 250 of a regeneration run the context is close to its limit and the orchestrator has begun re-proposing berth windows it ruled out in the first twenty minutes. Which change best addresses this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the run to a model with a larger context window and change nothing else, buying enough headroom that 400 calls fit comfortably.",
+          "correct": false,
+          "explanation": "A larger window postpones the overflow but not the quality problem: response quality degrades as context grows well before the limit is reached, which is why Anthropic frames context as a finite resource to be curated rather than filled. The run would also overflow again the moment the terminal adds vessel calls.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Every 50 calls, have the model summarise the run so far into a single paragraph and discard everything else, including the record of which windows were already rejected, which keeps the window small and predictable no matter how long the regeneration run continues.",
+          "correct": false,
+          "explanation": "Summarising is the right instinct, but discarding the rejection record deletes the one thing the failure is about. A paragraph cannot hold 38 vessels' constraints, so the orchestrator loses exactly the earlier constraints R4 requires it to keep, and the re-proposal loop continues at a lower token cost.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Enable server-side compaction for the run and clear stale tool results, while the orchestrator maintains an explicit constraints ledger in durable storage that is re-injected verbatim at each phase boundary.",
+          "correct": true,
+          "explanation": "Compaction summarises older context automatically as the window fills, and tool-result clearing removes payloads the run has finished with — together they bound growth without the agent having to manage it. The durable ledger is what protects R4's second clause: rejected windows and fixed constraints survive as verbatim text outside the conversation and are re-stated at each phase, so nothing established at minute five can be forgotten at minute fifty. Option D bounds context just as reliably but has no such mechanism, so it drops the constraints instead of compressing them.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep a sliding window of the 40 most recent tool results and drop older turns as new ones arrive, which bounds context growth predictably and is simple for the team to reason about at runtime.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A sliding window is the simplest possible bound, it is cheap, and its behaviour is completely predictable — a reasonable engineer would try it first. It fails R4 for the same reason the current run fails: dropping the oldest turns is precisely how a constraint decided at minute five disappears by minute fifty, which is the re-proposal symptom being investigated. Bounding context is necessary, but it has to compress old context rather than delete it.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-10",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "Forty minutes into an unattended regeneration run, the quay-crane availability service starts returning 503 responses and stays down for four minutes. How should the application layer handle this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Persist the constraints ledger and completed windows after each phase, return an instructive error naming the affected vessel call, let the run continue with the remaining vessels and mark that window unresolved, then resume the unfinished windows when the service recovers.",
+          "correct": true,
+          "explanation": "Anthropic's guidance on tool errors is to return a message that tells the agent what failed and what to do next, which is what lets the run degrade rather than stop. Checkpointing plus resumable unfinished work is what keeps R1's single unattended run intact through a four-minute outage, and marking the window unresolved rather than guessing preserves R2, since an unresolved window makes no claim to cite. Option D handles the transient case correctly but converts a recoverable outage into a human restart.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Return an empty successful tool result on a 503 so the agent is not derailed by an error and can carry on planning the remaining vessels.",
+          "correct": false,
+          "explanation": "An empty success is indistinguishable from \"no cranes are available\", so the planner will reason from a false premise and produce a plan it believes is complete. Anthropic's guidance is that a tool error should be surfaced as an error with an explanation of what went wrong, so the model can adapt instead of silently mis-planning.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have the agent carry forward the last known crane availability and assign cranes from it, noting in the plan that the figures may be slightly out of date.",
+          "correct": false,
+          "explanation": "An assignment built on stale availability carries a source reference that does not support it, which is the failure R2 exists to prevent — the superintendent opens the record and finds different numbers. A caveat in prose does not make the citation checkable, and the plan is presented as committable when it is not.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Retry the crane service with exponential backoff for up to five minutes, and if it is still failing, abort the run cleanly and page the on-call engineer to restart the regeneration from the beginning once the service is healthy.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Backoff with a bounded retry budget is correct practice for a transient dependency, and failing cleanly beats failing halfway — this is what most production systems do. It does not meet R1, which requires the regeneration to finish within six minutes as a single unattended run with no human restart: a five-minute backoff alone consumes the budget, and the abort-and-restart path makes an engineer part of the normal recovery flow for a four-minute blip.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS1-11",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D3", "D5"],
+      "question": "Eighteen months on, Kestrel Point opens a second terminal. Vessel calls rise from 38 to 76 a week, a regeneration now takes eleven minutes, and the two terminals share a pool of six mobile quay cranes. How should the architecture from Q02 change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the single orchestrator, move it to a faster model, and accept eleven minutes as the new regeneration time now that the terminal is twice the size.",
+          "correct": false,
+          "explanation": "R1's six-minute budget is not a comfort target; it exists because regeneration runs at shift change and a plan that lands after the shift has started is not actionable. A faster model shaves per-call latency but does nothing about a workload that has doubled, and accepting eleven minutes abandons the requirement rather than meeting it.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Split by function instead of by terminal: one orchestrator allocates berths across both terminals, then hands its output to a second orchestrator that allocates cranes across both.",
+          "correct": false,
+          "explanation": "Berth and crane allocation are mutually constraining — a berth choice that leaves no crane is not a valid plan — so a one-way hand-off forces the crane stage to either accept infeasible berths or bounce work back, recreating a loop with worse information. Splitting a jointly constrained problem along the wrong seam trades one bottleneck for a coordination failure.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep one orchestrator but fan out all 76 vessel-window workers concurrently, so wall-clock time stays close to the time for a single window regardless of how many vessels the terminal handles.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Widening the fan-out is the natural next move and it does attack the right variable — the run is slow because it is doing twice the work, and workers are independent until cranes are allocated. It fails R4: every one of the 76 worker results still returns into a single orchestrator context, so doubling the fan-out doubles the merge context, which is the pressure point that the ledger and compaction were introduced to relieve. Parallelism fixes wall-clock at the cost of the exact resource that is already scarce.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Shard by terminal: one orchestrator per terminal, each with its own context and its own six-minute run, exchanging only a compact shared-crane reservation ledger through a tool.",
+          "correct": true,
+          "explanation": "Sharding keeps each orchestrator's merge context at roughly its previous size, so R4 holds as the port grows, and the two runs proceed concurrently so each stays inside R1's six minutes. The shared cranes are the only genuine cross-terminal coupling, and a small reservation ledger passed through a tool is enough to resolve them without either orchestrator carrying the other's vessel detail. Option C is the tempting alternative: it fixes wall-clock time, but by concentrating 76 worker results into one context it spends the very budget R4 protects.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        }
+      ]
+    }
+  ]
+}

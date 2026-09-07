@@ -1,0 +1,555 @@
+{
+  "examId": "ccar-f-exam4",
+  "caseId": "CS4",
+  "caseTitle": "Brackenhill Apparel Group — Loomline sourcing and materials-traceability agent",
+  "caseScenario": "Brackenhill Apparel Group is a mid-market outerwear and knitwear brand that ships four seasonal collections a year across roughly 2,400 active SKUs. Behind those styles sit 190 tier-1 cut-and-sew factories in 14 countries and about 5,000 tier-2 and tier-3 mills, dye houses and spinners. Twenty-six sourcing managers work the \"sourcing desk\" every day, and the company is building an internal agent called Loomline to support three jobs: walking a finished style back through its supplier chain to fibre origin, rebuilding the seasonal production plan against factory capacity, and drafting purchase-order change memos.\n\nLoomline is an Agent SDK orchestrator running on Brackenhill's own infrastructure. Four MCP servers sit underneath it: one wrapping the PLM system that holds bills of materials, one wrapping the SAP ERP that holds purchase orders and capacity, one over a supplier-compliance database of mill certificates and audit narratives, and one over the third-party logistics provider's container-manifest API. The build team is four engineers plus two embedded sourcing analysts who are not developers; the engineers work in Claude Code against a single monorepo, and the nightly job also runs Claude Code headless in CI.\n\nThe desk path is interactive: managers expect a reply to begin streaming within about three seconds, and the desk handles roughly 700 queries a day. The nightly season-plan rebuild is the opposite shape — it touches all 2,400 SKUs at three to six tool calls each and must land inside a 40-minute window before the 05:00 ERP load. A single six-tier traceability walk routinely issues more than 200 tool calls; the first prototype exhausted its context at tier 3 and quietly began deriving fibre origins from the model's own general knowledge instead of from certificates. That matters commercially: last season a compliance failure was traced to a mill nobody had a record of. The AI budget is $18,000 a month for both workloads combined.",
+  "caseRequirements": [
+    "R1: Sourcing-desk replies must begin streaming within 3 seconds, and the nightly season-plan rebuild for all 2,400 SKUs must finish inside its 40-minute window.",
+    "R2: Every material-origin or certification claim must carry the supplier ID and the certificate document ID it came from; no origin claim may be produced from the model's own knowledge.",
+    "R3: A single traceability run must complete a six-tier supplier walk of 200 or more tool calls without exceeding the context window or losing findings recorded at earlier tiers.",
+    "R4: Loomline may never write to the ERP or to production PLM records, and that prohibition must be enforced by shared configuration rather than by instruction; proposed changes are emitted as documents for a human sourcing manager to approve.",
+    "R5: Sourcing-desk output consumed by the season-planning importer must be schema-valid on every response; the importer silently drops malformed records and has no repair path.",
+    "R6: Combined Claude spend for the desk and nightly workloads must stay under $18,000 per month."
+  ],
+  "questions": [
+    {
+      "id": "F4-CS4-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D5", "D2"],
+      "question": "A Loomline traceability walk starts from a finished style and can only discover each next tier after reading the current tier's supplier records, so a six-tier walk routinely issues more than 200 tool calls. The prototype exhausted its context at tier 3. Which decomposition should the team adopt?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Fan out to all six tiers in parallel at the start of the run from the style's bill of materials, then reconcile whatever each tier returns once every branch has completed.",
+          "correct": false,
+          "explanation": "Parallelisation only helps where the work items are known in advance. Here the members of tier n+1 are discovered inside tier n's supplier records, so there is nothing to fan out to at the start. Parallelism belongs within a tier, across sibling branches, not across tiers.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run an orchestrator that spawns one subagent per supplier branch; each subagent walks its own branch in a separate context and returns a compact findings record of tier, supplier ID and certificate ID.",
+          "correct": true,
+          "explanation": "This is the orchestrator-workers pattern. Each subagent gets its own context window, so the bulk of the 200-plus tool results is absorbed where it is produced and never reaches the orchestrator, which holds findings rather than transcripts — that is what makes R3 achievable. Because the findings record carries supplier and certificate IDs verbatim, the identifiers R2 requires survive the hand-off. Option C also keeps the run inside the window, but it does so by discarding the very tool results the certificate IDs live in.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep the whole walk in a single agent loop and enable server-side tool-result clearing, so that once a tier's supplier records have been read the oldest tool results are dropped from the conversation automatically.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Tool-result clearing is a documented context-editing strategy aimed at exactly this shape of workload — heavy tool use where old results are no longer needed — and it would genuinely keep the run inside the context window. It fails R2. Cleared results are replaced with placeholder text, so by the time the run reaches the report-writing step the certificate document IDs read at tiers 1 and 2 are simply gone, and the only way to state an origin is from recall. It also weakens R3's second clause, which requires earlier-tier findings to survive, not merely the window to hold.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Express the walk as a fixed six-step prompt chain, one model call per tier, passing the previous tier's raw response forward into the next step's prompt.",
+          "correct": false,
+          "explanation": "Prompt chaining suits tasks that decompose into a fixed linear sequence. This one does not: a parka may have forty tier-2 suppliers and a jersey three, so the fan-out is data-dependent and unknown when the chain is written. Passing raw responses forward also accumulates the same volume that broke the prototype.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-02",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The compliance MCP server exposes one tool, a free-text supplier query that returns the supplier's entire record — 3,000 to 6,000 tokens including years of audit narrative. A traceability run calls it more than 200 times. How should the tool surface be redesigned?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the existing tool but preload the compliance database into the system prompt as a cached block, so most tier lookups need no tool call at all.",
+          "correct": false,
+          "explanation": "Five thousand supplier records do not fit in a prompt, and certificates are reissued and revoked daily, so any cached prefix would be invalidated almost continuously. The team would pay cache-write cost repeatedly for a block that is stale as often as it is warm, which works against R6 without solving the lookup problem.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Keep the single broad tool and add a system-prompt instruction telling Claude to read only the certificate fields it needs from each response and to ignore the historical audit narrative entirely.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "One broad tool is genuinely easier to version and document than a family of narrow ones, and the instruction does help the model attend to the right fields, which improves answer quality. It fails R3. The instruction governs what Claude attends to, not what the server sends: all 3,000 to 6,000 tokens still enter the context window on each of the 200-plus calls, so the walk hits the same ceiling that broke the prototype. Shaping the payload at the server is the only lever that changes the arithmetic.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Replace it with narrow tools: one returning a supplier's certificates as a bounded list of certificate ID, issuer, material and validity window, and a separate tool that fetches a full audit narrative by ID on request.",
+          "correct": true,
+          "explanation": "Anthropic's tool-writing guidance is to return high-signal, token-efficient results and to let the agent ask for detail only when it needs it. The bounded certificate list gives exactly the identifiers R2 demands while keeping the per-call payload small enough for a 200-call walk to stay inside the window (R3), and the narrative tool keeps the rare deep-dive available without taxing every call. Option B tries to reach the same place by telling the model what to ignore, which does not reduce what is sent.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Expose a single tool that accepts a SQL statement so Claude can select precisely the columns it needs at each tier.",
+          "correct": false,
+          "explanation": "A tool whose input is an arbitrary query hands the model an unconstrained surface: nothing guarantees the certificate ID column is selected, schema drift silently changes results, and the server cannot validate intent. Narrow, typed tools with clear boundaries are what Anthropic recommends over general-purpose escape hatches.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-03",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "Two things keep going wrong in the engineers' Claude Code sessions. An agent occasionally attempts an ERP write during local testing, and everyone re-derives the same five-step procedure for regenerating tool schemas from the PLM OpenAPI spec. Where should each concern live?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put both in the project CLAUDE.md: the ERP prohibition in bold at the top of the file, and the five-step schema procedure written out below it.",
+          "correct": false,
+          "explanation": "CLAUDE.md is loaded as context, not as enforced configuration, so a prohibition written there is guidance Claude can deviate from. A multi-step procedure also belongs in a skill, whose body loads only when invoked, rather than in a file that is read into every session and grows until adherence degrades.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "State the ERP prohibition in the project CLAUDE.md and add a PostToolUse hook that alerts the team whenever an ERP write is observed; keep the schema procedure as a committed project skill.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The skill placement here is right, and pairing a written rule with automated detection is a reasonable defence-in-depth instinct that also produces a paper trail. It fails R4 on timing and on force. PostToolUse fires after a tool call has already succeeded, so the alert describes a write that happened rather than preventing one, and CLAUDE.md remains context rather than enforced configuration. R4 asks for a shared configuration boundary, which only a blocking pre-execution control provides.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Put both in each engineer's user-level CLAUDE.md so the rule and the procedure follow them into every project they work on, including side repositories.",
+          "correct": false,
+          "explanation": "User-scope memory lives in an engineer's home directory and is not shared through version control, so a new teammate, the analysts, and the headless CI run all get nothing. Team-shared instructions belong in the project scope precisely so they travel with the repository.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Configure a PreToolUse hook in project settings that blocks ERP-write tool calls, publish the schema procedure as a committed project skill, and keep CLAUDE.md for standing facts only.",
+          "correct": true,
+          "explanation": "This puts each concern on the mechanism built for it. A PreToolUse hook runs before the call and can block it, which is exactly what the documentation recommends when an action must be prevented regardless of what Claude decides — that is R4's \"enforced by configuration\" clause. The procedure becomes a skill whose body loads only when invoked, so it costs nothing in sessions that do not need it, and CLAUDE.md stays short enough to be followed. Option B gets the skill right but detects the ERP write after it has already landed.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-04",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "Every sourcing-desk answer contains prose for the manager plus a machine-readable block that the season-planning importer ingests. The importer drops malformed records without telling anyone. Which approach best guarantees the machine-readable part is valid on every response?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Split the turn: stream the conversational answer to the manager, then make a second call that produces the importer record under a structured-outputs JSON schema, which constrains decoding to that schema.",
+          "correct": true,
+          "explanation": "Structured outputs constrain generation so the response is schema-compliant by construction rather than by inspection, which removes the class of failure R5 is written against — there is nothing to repair because nothing invalid can be emitted. Splitting the turn also keeps the manager's prose streaming inside R1's three-second budget instead of waiting on a constrained block. Option C reaches high reliability by validating after the fact, which is a different guarantee.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Prefill the assistant turn with an opening brace so the model is forced to continue in JSON, then parse whatever text follows it.",
+          "correct": false,
+          "explanation": "Assistant prefill is no longer a supported technique on current Claude models; the documented replacements are structured outputs, output-format configuration, system-prompt instruction and XML output tags. Even where prefill once worked it only constrained the first character and never guaranteed that the remainder of the object closed or validated.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Describe the schema in the system prompt inside XML tags, add three worked examples of correct records, and validate the parsed block in application code with one automatic retry whenever validation fails.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a well-established pattern and it works most of the time: a clearly delimited schema plus examples produces conforming output at a high rate, and the retry recovers most of the remainder. It fails R5, which is written in absolutes — the importer has no repair path and drops bad records silently, so a residual failure rate is indistinguishable from data loss nobody notices. The retry also costs a second round trip on the interactive path, eating into R1. Constrained decoding removes the failure mode rather than sampling against it.",
+          "citation": {
+            "title": "Use XML tags to structure your prompts",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/use-xml-tags"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Ask for JSON in the system prompt and strip markdown code fences and any preamble with a regular expression before parsing the result.",
+          "correct": false,
+          "explanation": "Fence-stripping addresses one narrow failure mode, the wrapper. It does nothing about a missing required field, a string where a number was expected, or an object truncated at the token limit — all of which produce text that parses but fails the importer's schema.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-05",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D3"],
+      "question": "The nightly rebuild must process all 2,400 SKUs at three to six tool calls each and land before the 05:00 ERP load. Which run architecture should the team choose?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run all 2,400 SKUs in one session on the largest available context window, so the agent can look back at any earlier SKU's result whenever it meets a shared-fabric dependency.",
+          "correct": false,
+          "explanation": "The combined tool output for 2,400 SKUs exceeds any context window, and response quality degrades well before the hard limit as active context grows. Shared-fabric dependencies are better answered from an index the run can query than from conversational recall of something processed 1,900 SKUs ago.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Launch 2,400 independent single-SKU sessions all at once, each rebuilding the shared season-planning preamble from scratch so that no session depends on any other.",
+          "correct": false,
+          "explanation": "Unbounded concurrency will collide with rate limits and hammer the ERP, and re-sending the shared planning preamble 2,400 times multiplies input tokens for no analytical gain — a direct cost problem against R6. Isolation is right; the granularity and the lack of batching are not.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Partition the SKUs into bounded batches that run concurrently in independent contexts, with each batch writing its result to a durable artifact store the orchestrator reads from.",
+          "correct": true,
+          "explanation": "Writing results out to a durable store instead of holding them in the conversation is the core of Anthropic's context-engineering guidance for long-horizon work: context stays small and correct because it holds pointers and summaries, not history. Independent contexts are also what let batches run at the same time, which is the only way 2,400 SKUs fit a 40-minute window (R1), and a durable per-batch artifact means a failed batch is retried alone rather than restarting the run (R3). Option D solves context but leaves the work sequential.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Process the SKUs in batches but keep one continuous session across all of them, enabling server-side compaction so older turns are summarised automatically as the conversation grows past its threshold.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Compaction is the documented, recommended strategy for long-running agentic conversations, and it would genuinely keep this run inside the context window without any client-side summarisation code — the context half of the problem is properly solved. It fails R1. A single session is inherently sequential: only one batch is ever in flight, so 2,400 SKUs at three to six tool calls each cannot clear a 40-minute window no matter how well the history is compacted. Independent contexts are what buy the concurrency.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-06",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D5", "D4"],
+      "question": "The logistics MCP server's container-manifest tool returns every row for a shipment — up to 5,000 rows, roughly 40,000 tokens — and sourcing managers call it from the interactive desk while chasing a single style. What is the right tool-result design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have the server compose a natural-language paragraph summarising the shipment and return that instead of rows, so the result is compact and immediately readable.",
+          "correct": false,
+          "explanation": "A prose summary is compact but lossy in exactly the wrong dimension: it drops the per-row lot and certificate identifiers that a traceability claim has to cite, so the agent can describe the shipment and still not substantiate anything in it. Summarisation at the tool boundary should preserve identifiers.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Return a bounded first page of rows filtered to the requested style, along with the total row count, an explicit truncation flag, and a page token the model can pass to a follow-up call.",
+          "correct": true,
+          "explanation": "This follows Anthropic's guidance on token-efficient tool results: return high-signal content, paginate deliberately, and make truncation explicit so the agent never reasons over a partial set believing it is complete. Filtering to the requested style keeps the interactive payload small enough for a three-second first token (R1) while every returned row still carries its own identifiers (R2), and the page token preserves access to the rest without paying for it up front.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Return a presigned URL pointing at the manifest file and let Claude retrieve and parse it during the turn.",
+          "correct": false,
+          "explanation": "Fetching a URL is the application's job, not the model's; the agent has no general retrieval capability unless a tool provides one. And if a tool did fetch it, the same 40,000 tokens would arrive in context anyway, so the indirection buys nothing.",
+          "citation": {
+            "title": "How to implement tool use",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Return the full manifest wrapped in XML tags and instruct Claude to attend only to the rows matching the style in question, so nothing is ever missed from the shipment.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "XML delimiting genuinely helps Claude locate relevant rows in a long block, and the completeness argument is real: a row silently excluded by a filter is a material Brackenhill cannot trace. It fails R1. Forty thousand tokens of manifest on an interactive call pushes time to first token far past three seconds, and at roughly 700 desk queries a day the same input is paid for repeatedly against R6. Pagination with an explicit truncation flag gives the same coverage on demand instead of on every call.",
+          "citation": {
+            "title": "Reducing latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-07",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Traceability subagents finish their branch walks and hand off to a report-writing step. Some branches end unresolved — a mill that lists no upstream spinner, or a dye house whose certificate has lapsed. How should that hand-off be designed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Each subagent returns a typed findings record — tier, supplier ID, certificate ID, plus an explicit unresolved list with reasons — and the writer composes only from that record.",
+          "correct": true,
+          "explanation": "A typed hand-off contract is what makes a multi-agent run auditable. The writer never sees raw transcripts, so orchestrator context stays bounded (R3), and because the findings record is its only input it structurally cannot state an origin that has no identifier attached (R2). Unresolved branches arrive as first-class gaps the sourcing manager can act on rather than as silence. Option C would also satisfy R2, but it pays for that with a second full pass of tool calls.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Pass each subagent's full transcript to the writer so it can judge for itself how reliable each branch was before deciding what to include in the report.",
+          "correct": false,
+          "explanation": "This reintroduces the exact pressure subagents were adopted to remove: 200-plus raw tool results land back in one context, and the writer is asked to re-adjudicate work the subagent already did. The value of a subagent is that it returns a condensed result, not its working.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have the writer re-call the compliance tool for every claim in the findings record before writing it, so that no statement reaches the report without a freshly verified certificate behind it.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Independent verification at the point of writing is a strong reliability pattern, and it would satisfy R2 as thoroughly as anything on this list — arguably more so, since it catches a certificate that lapsed mid-run. It fails R1. Re-verifying every claim roughly doubles a run that already issues more than 200 tool calls, and the nightly rebuild has no slack in its 40-minute window; the desk path would miss three seconds outright. Verification of this kind belongs in a sampled audit, not on the hot path.",
+          "citation": {
+            "title": "Reducing latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Let the writer complete unresolved upstream links from its knowledge of typical supply chains for that fabric type, marking each inferred link clearly as an estimate.",
+          "correct": false,
+          "explanation": "R2 forbids origin claims produced from the model's own knowledge outright, and labelling one an estimate does not make it traceable. This is precisely the failure mode that produced last season's unrecorded mill: fluent, plausible chain data with no document behind it.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-08",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "Four engineers and two sourcing analysts run Claude Code against the Loomline monorepo, and the nightly rebuild runs Claude Code headless in CI. Today each person adds the PLM, ERP and compliance MCP servers themselves. What configuration should the team adopt?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have everyone add the three servers at user scope so they are available in every project on their machine and nobody has to repeat the setup per repository.",
+          "correct": false,
+          "explanation": "User-scope servers are stored in an individual's own configuration and are private to that account, so they follow the person rather than the project. The CI runner has no such configuration, and the two analysts would each be configuring production data sources by hand.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Keep the servers at local scope so each engineer can point at a personal sandbox, and have the CI job pass its own explicit server list on the command line for reproducibility.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a defensible split: local scope gives engineers a fast iteration loop against sandboxes, and an explicit CI server list is genuinely reproducible for that one job. It fails R4. With the definitions living per machine and per invocation, the read-only scoping of the ERP server is asserted in six places and enforced in none — a single engineer pointing local scope at production reintroduces the write path. R4 asks for a boundary the whole team shares, which a committed project-scope file provides and per-user configuration cannot.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Consolidate PLM, ERP and compliance behind a single in-house MCP server so there is only ever one entry to configure anywhere, in CI and on every laptop.",
+          "correct": false,
+          "explanation": "Server count is not the problem. Merging three unrelated systems erases the boundary that keeps ERP writes separable from PLM and compliance reads, makes tool-level permissioning coarser, and puts all three integrations behind a single point of failure.",
+          "citation": {
+            "title": "Understanding MCP servers",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Define the three servers at project scope in a committed configuration file at the repository root, with the ERP server exposing read-only tools.",
+          "correct": true,
+          "explanation": "Project scope stores server definitions in a file at the project root that is checked into version control, so all six people and the headless CI run load the same set — and headless and SDK sessions load project-scoped servers without an interactive approval step, so nothing blocks the nightly job. Restricting the ERP server's exposed tools to reads makes R4's prohibition a property of shared configuration rather than of anyone's memory. Option B keeps engineers fast but leaves that boundary unenforced.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "Loomline drafts purchase-order change memos for a sourcing manager to approve. In testing the memos read cleanly but silently omitted line items the agent could not substantiate, so the manager could not tell \"no change needed\" from \"no evidence found\". How should the prompt be fixed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Instruct the model to include only line items it is confident about, and to print a confidence percentage beside each one so the manager can weigh them.",
+          "correct": false,
+          "explanation": "A self-reported percentage is not calibrated and cannot distinguish a weakly supported item from one with no evidence at all. Worse, \"include only what you are confident about\" is close to the instruction already producing the silent omissions the team is trying to eliminate.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add eight worked examples of previously approved, well-formed memos to the prompt so the model reliably learns the house format and section ordering.",
+          "correct": false,
+          "explanation": "Multishot examples teach shape, and every one of these examples is a complete, tidy memo — which pushes the model harder towards producing complete-looking output, reinforcing the exact failure. Eight full memos on the interactive path also add standing input cost against R6.",
+          "citation": {
+            "title": "Use examples (multishot prompting)",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/multishot-prompting"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Require every line item to carry the originating supplier and certificate ID in an evidence field, and require items with no such evidence to appear in an explicit unsupported list rather than be dropped.",
+          "correct": true,
+          "explanation": "Giving the model a sanctioned way to say \"I could not substantiate this\" is the documented way to suppress both fabrication and silent omission — the model no longer has to choose between inventing an item and deleting it. The required evidence field makes R2 mechanically checkable rather than a matter of trust, and the unsupported list is what gives the manager something real to exercise the approval R4 grants them. Option D audits for the same problem after the fact instead of designing it out.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep the memo format as it is and add a reviewer pass in which the model re-reads its own draft against the findings record and appends anything it left out.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "An evaluator pass over a first draft is a legitimate workflow pattern and would catch some omissions, especially obvious ones. It fails R2 because the reviewer inherits the writer's blind spot: nothing in the memo's shape requires an evidence ID, so an item that was dropped for lack of a certificate leaves no trace to notice on re-read, and the reviewer is comparing prose to prose. Making the evidence field structurally required removes the failure; a second pass only samples for it, at the cost of another round trip against R1.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-10",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "Eighteen minutes into a nightly rebuild the compliance MCP server goes down for six minutes. Three of eleven traceability branches were in flight; the other eight had already completed several tiers. What should the run do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Let the agent retry the failed tool call inside its own loop until the server answers, so the affected branches complete within the same run.",
+          "correct": false,
+          "explanation": "In-loop retries spin the agentic loop without progress, and every failed tool result stays in the conversation, consuming the window that R3 depends on. A six-minute outage retried this way would burn a large share of the 40-minute budget and could still end with nothing recorded.",
+          "citation": {
+            "title": "Errors",
+            "url": "https://platform.claude.com/docs/en/api/errors"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Checkpoint each completed tier's findings, mark the three in-flight branches unresolved with the failure reason, finish the remaining branches, and resume only the failed branches on the next attempt.",
+          "correct": true,
+          "explanation": "Checkpointing findings to durable storage as the walk proceeds is what makes partial failure survivable: the tiers already read are not re-fetched (R3), eight branches still complete so the run lands inside its window (R1), and the three failures are visible as marked gaps rather than as an absence nobody can distinguish from a clean result (R2). Option C protects snapshot consistency but pays for it with time the window does not have.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Abort the rebuild when the server fails and restart it from the beginning once the server recovers, so the whole season plan is built from a single internally consistent snapshot of the compliance data.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Snapshot consistency is a genuinely valuable property — a plan built half from pre-outage and half from post-outage data can contain contradictions — and a clean restart is far simpler to reason about than branch-level resume logic. It fails R1. A run that has already consumed eighteen of its forty minutes cannot wait out a six-minute recovery, start again from zero, and still finish before the 05:00 ERP load. Resuming only the failed branches preserves the completed work and keeps the window reachable.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Substitute the previous night's findings for the three affected branches so that the season plan is complete and no downstream consumer sees a hole.",
+          "correct": false,
+          "explanation": "This presents last night's data as tonight's without saying so. Certificates lapse and are reissued daily, so R2's provenance becomes a false statement rather than a missing one — and a flagged gap is far safer for a compliance team than a stale value silently reused.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS4-11",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D3", "D5"],
+      "question": "The sourcing team asks for forty new region-specific logistics tools, one per shipping lane, on top of Loomline's existing twelve. The desk path is latency-sensitive and the nightly run touches only a handful of lanes per SKU. What should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Consolidate the lanes into a small number of parameterised tools that take the lane as an enumerated argument, and put the genuinely distinct remainder behind on-demand tool discovery.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is that loading every definition up front is pure context cost, and that tool-selection accuracy degrades once an agent has more than roughly thirty to fifty tools available. Collapsing forty near-identical lane tools into a few schemas with an enumerated lane argument removes most of the catalogue outright, and on-demand discovery keeps the rest out of the desk path's input, protecting first-token latency (R1) and the per-request bill (R6). Option B keeps the catalogue flat and pays that cost on every call.",
+          "citation": {
+            "title": "Tool search tool",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Define all fifty-two tools up front with carefully written, disambiguating descriptions and let Claude select among them, since the definitions are static and cache cleanly across requests.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Careful descriptions on a stable, cacheable tool block is often the right answer, and it avoids the operational complexity of a discovery layer entirely — for a batch-only workload this would be fine. It fails R1 here. Fifty-two definitions are a substantial standing block on every interactive request, adding measurable time to first token, and Anthropic notes that selection accuracy falls off past roughly thirty to fifty tools, so the cost is not only latency but wrongly picked lanes on the desk.",
+          "citation": {
+            "title": "Tool search tool",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Describe the lanes in prose in the system prompt and keep one generic logistics tool that accepts a lane name as free text.",
+          "correct": false,
+          "explanation": "Prose in a system prompt is not a schema. A free-text lane argument is unvalidated, so the model can pass a lane that does not exist and the server has to guess or fail; an enumerated argument gives the constraint at the point where it can actually be checked.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add a routing agent whose only job is to read the request and tell the main agent which logistics tool to call.",
+          "correct": false,
+          "explanation": "This adds a full model round trip before any work begins, which the desk path cannot absorb, and it solves the wrong problem: the router itself needs all fifty-two descriptions in its own context, so the catalogue cost is moved rather than removed.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

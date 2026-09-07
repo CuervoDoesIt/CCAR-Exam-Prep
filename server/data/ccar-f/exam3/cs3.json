@@ -1,0 +1,555 @@
+{
+  "examId": "ccar-f-exam3",
+  "caseId": "CS3",
+  "caseTitle": "Larkspur Pharmacy Group — \"Counter\" pharmacist workflow and inventory agent",
+  "caseScenario": "Larkspur Pharmacy Group runs 1,240 retail pharmacies and fills about 62 million prescriptions a year with roughly 4,800 pharmacists. Five engineers and one pharmacist informaticist are building Counter, which does three quite different things. At intake, an inline check reads each incoming prescription and flags ambiguities — an unclear strength, a sig that does not parse, a quantity that disagrees with the days supply — before the pharmacist begins verification. At the counter, pharmacists ask questions answered from Larkspur's own policy corpus and a licensed drug-interaction database reached through the vendor's remote MCP server. Overnight, an inventory agent proposes stock transfers between nearby stores.\n\nThe intake check sits directly in the fill workflow, so it has 1.5 seconds before it starts slowing the queue, and it runs on all 62 million scripts — which makes per-script inference cost a first-order design constraint rather than a rounding error. About 91 percent of intake arrives as structured electronic prescriptions; the remaining 9 percent are faxed or scanned images, and those are where the flagging errors cluster. Counter Q&A is used with a patient standing at the counter, so it is held to a p95 of 2.5 seconds.\n\nCounter never makes a clinical decision. It surfaces information to a licensed pharmacist who decides. Anything the pharmacist reads must therefore be attributable — a Larkspur policy section or an entry in the licensed database — because an assistant that sounds authoritative without a source is worse than one that says nothing. The interaction-database adapter is frozen for the current licence term following a vendor certification, and the informaticist, who is not an engineer, maintains the policy corpus herself.",
+  "caseRequirements": [
+    "R1: The inline intake check must complete in under 1.5 seconds, and counter Q&A must hold a p95 under 2.5 seconds.",
+    "R2: Counter must never assert a clinical statement without attributing it to a named Larkspur policy section or a named entry in the licensed interaction database; anything it cannot attribute must be withheld.",
+    "R3: Every transfer proposal must be traceable to the store-level stock and demand figures it used, and the full 1,240-store run must finish inside a 4-hour overnight window.",
+    "R4: The intake path and the Q&A path must not share a conversation context; one patient's prescription must never influence another patient's check.",
+    "R5: Per-script inference cost on the inline intake path must stay at or below the cost of a Haiku-class call, since it runs on all 62 million prescriptions.",
+    "R6: The licensed interaction-database adapter is frozen for the licence term; edits must be blocked by the tooling rather than discouraged, and every person working on the repository must get that block regardless of their local configuration."
+  ],
+  "questions": [
+    {
+      "id": "F3-CS3-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D4", "D5"],
+      "question": "Counter's three jobs — a 1.5-second inline intake check on every script, counter Q&A with a patient waiting, and a nightly inventory run across 1,240 stores — need a top-level shape. Which decomposition fits the case?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Route every request through one orchestrator agent that first classifies which of the three jobs it is and then delegates to the appropriate handler.",
+          "correct": false,
+          "explanation": "The request source already tells the system which job it is — an intake message is not ambiguous with a pharmacist's typed question — so a classification hop adds a model round trip to a 1.5-second path to rediscover something the caller already knows. Anthropic's guidance is that routing earns its cost when categories are genuinely ambiguous, not when they are structurally distinct.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Give each of the 1,240 stores its own agent that handles intake, Q&A and that store's inventory position, so local context such as usual prescribers and typical stock stays available across all three, and no request ever has to start from a cold context.",
+          "correct": false,
+          "explanation": "A per-store agent that spans intake and Q&A puts every patient handled by that store into one shared conversation, which is exactly the coupling R4 forbids. Store-level context such as prescriber patterns is real, but it belongs in a data source the tools read, not in an accumulating conversation history.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "One long-lived session per pharmacist per shift covering both intake and Q&A, so the pharmacist's working context carries across scripts and the large cached policy prefix is reused all day at cache-read rates.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The cost argument here is genuine — a shift-long session keeps a cached prefix warm, and continuity does help a pharmacist working a queue — so this is the kind of design a competent architect would propose to protect R5. It fails R4 outright: a single session covering a shift means the previous patient's prescription is in context when the next patient's check runs, which is the specific coupling the requirement rules out. Prefix caching does not require a shared conversation to work.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Three independently scoped paths: a stateless single-call intake classifier per script, a short-lived retrieval-grounded exchange per counter question, and a nightly inventory orchestrator — none sharing a conversation.",
+          "correct": true,
+          "explanation": "Each path takes the structure its constraints demand. A stateless per-script call is the only shape that satisfies R4 by construction, and being a single call with a small output it is also the cheapest thing that can meet R5 across 62 million scripts. The Q&A exchange is short-lived because a counter question is answered from retrieval rather than from history, and the inventory run is batch work with a four-hour window. Option C would be cheaper per script, but only by sharing the context R4 forbids.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-02",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D3"],
+      "question": "The nightly inventory agent must cover 1,240 stores inside a four-hour window and each transfer proposal has to be traceable to the figures behind it. How should the overnight run be organised?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Assemble a single file containing every store's stock position and recent demand, pass it to the model in one call, and have it emit the full national transfer plan in one response.",
+          "correct": false,
+          "explanation": "A national position for 1,240 stores is an enormous single input, and quality degrades as context grows long before any hard limit is reached. A single monolithic response also has no natural place to record which figures supported which proposal, so R3's traceability becomes a post-hoc reconstruction rather than a product of the run.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "An orchestrator-workers batch: each worker handles one distribution region and returns compact structured proposals carrying the figures it used, with the orchestrator merging them; worker calls go through the Batch API since nothing here is interactive.",
+          "correct": true,
+          "explanation": "Regions are close to independent for transfer purposes, so workers parallelise cleanly and the four-hour window in R3 stops being a serial-throughput problem. Each worker sees only its region's figures, which keeps the traceability R3 demands attached to the proposal rather than reconstructed later, and because the run is unattended overnight the Batch API applies at half the cost, with most batches completing in well under an hour. Option D preserves network-wide reasoning but cannot cover 1,240 stores serially in four hours.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "An evaluator-optimizer loop over the whole network: a planner proposes a transfer set, an evaluator scores it against a service-level target, and the pair iterate until the score clears the threshold, with each accepted plan written out alongside the evaluator scores that justified accepting it.",
+          "correct": false,
+          "explanation": "Evaluator-optimizer suits tasks with clear criteria and room to iterate, but its stopping condition is a quality score rather than a clock. An overnight job with a fixed four-hour window and no one watching cannot safely run a loop that terminates when it is satisfied; the run must be bounded by the window it has.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A single long-running agent that walks the store list in one conversation with server-side compaction enabled, so it carries what it has learned about the network from store to store and can spot chains of transfers a regional split would miss.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The insight is a real one — multi-hop transfer chains genuinely do cross regional boundaries, and compaction is the documented way to keep a long conversation viable — so this is a thoughtful design rather than a naive one. It fails R3 twice: a serial walk through 1,240 stores cannot fit a four-hour window, and compaction replaces earlier detail with a summary, so a proposal made at store 900 can no longer cite the exact stock and demand figures it rests on.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-03",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Six months in, the intake check's false-flag rate on the 9 percent of scripts that arrive as faxed images is roughly three times its rate on structured electronic prescriptions. Which change closes the gap while respecting the case's constraints?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Stop accepting faxed prescriptions and require every prescriber to submit electronically, eliminating the image path and the error rate that comes with it.",
+          "correct": false,
+          "explanation": "This solves the engineering problem by removing an intake channel Larkspur does not control — prescribers, not the pharmacy, decide how a script is sent. Anthropic's guidance is to change the design when the story needs something unavailable; here the design has to accommodate the channel rather than legislate it away.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run both a cheap and an expensive check on every script and adopt whichever one flags fewer exceptions, so accuracy improves without anyone having to classify the source.",
+          "correct": false,
+          "explanation": "Fewer flags is not a proxy for correctness — the failure mode being investigated is a check that flags things it should not, but the same rule would also suppress a correct flag. Running both paths on all 62 million scripts also costs strictly more than running the expensive one alone, which is the opposite of what R5 needs.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Route by intake source: structured electronic prescriptions take a deterministic validator plus a Haiku-class check, while images take a vision-capable path with a larger token budget.",
+          "correct": true,
+          "explanation": "This is the routing pattern used for its intended purpose — inputs fall into distinct categories that are better handled separately, and the category is known for free from the intake channel. Because images are 9 percent of volume, the expensive path applies to 9 percent of scripts, so the blended per-script cost stays inside R5 while the error rate falls where it actually is. Option D reaches similar accuracy but charges the image-grade path to all 62 million scripts.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Move every intake check to the more capable model with a higher reasoning effort setting, which lifts accuracy on the difficult image cases without introducing a routing layer or a second code path to maintain.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Uniform quality with one code path is a real architectural virtue, and raising model capability and effort is the documented lever when accuracy on hard inputs is short. It fails R5: the requirement caps per-script inline cost at roughly a Haiku-class call, and this applies a materially more expensive call to all 62 million prescriptions in order to fix the 9 percent that are images. The accuracy gain is real; it is simply being bought for 91 percent of scripts that did not need it.",
+          "citation": {
+            "title": "Extended thinking effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-04",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D4", "D1"],
+      "question": "The counter Q&A path retrieves from Larkspur's policy corpus. The pharmacist must be able to see the named source behind every clinical statement, and anything unattributable has to be withheld. How should the retrieval tool be designed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Return each passage with its document name and section label attached, and return an explicit no-match result when nothing clears the relevance threshold, so the model has a supported way to withhold.",
+          "correct": true,
+          "explanation": "Two design choices carry R2 here. Attaching the document name and section label to each passage means the model cites an identifier it was handed rather than recalling one, which is the documented way to keep grounded claims grounded. Returning an explicit no-match gives \"I cannot answer from Larkspur policy\" a first-class representation, so withholding is a normal outcome rather than a failure the model routes around. Option D leaves the model to make that call from scores alone, with something plausible always in front of it.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Concatenate the five best passages into a single block of text and return it, so the model reads one coherent piece of context instead of five fragments.",
+          "correct": false,
+          "explanation": "Concatenation destroys exactly the structure R2 depends on: once five passages are one blob, there is no reliable way to say which document a given sentence came from, so any citation the model produces is a guess about its own input. Tool responses should preserve the boundaries the downstream reasoning needs.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Return the passage text only, keeping the payload small, and have the model name the policy document from its knowledge of Larkspur's corpus when it composes the answer, which keeps retrieval payloads as small as possible while still putting a document name in front of the pharmacist.",
+          "correct": false,
+          "explanation": "Asking the model to supply the source from memory is asking it to generate the one part of the answer that has to be verifiable. This is the classic path to a confident, well-formatted citation pointing at a policy section that does not say what the answer claims — the precise failure R2 exists to prevent.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Always return the five nearest passages with their similarity scores and let the model judge from the scores which of them, if any, actually support an answer to the pharmacist's question.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Handing the model the candidates and their scores is a reasonable, widely used retrieval contract that keeps relevance judgement where the semantic context is. It falls short of R2 because the tool always returns something: when the corpus genuinely has nothing on a question, five loosely related passages arrive looking like evidence, and a low similarity score is a weak signal against a question that seems answerable. An explicit no-match makes withholding the tool's answer rather than the model's inference.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-05",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D3", "D5"],
+      "question": "The drug-interaction data comes from a vendor who operates a remote MCP server. The vendor ships changes on its own schedule and has added and renamed tools before. The counter Q&A path calls it with a patient waiting. How should Larkspur integrate it?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Mirror the vendor's database into Larkspur's own storage each night and query it directly, dropping the MCP integration entirely.",
+          "correct": false,
+          "explanation": "This trades one problem for two: interaction data is exactly the kind of content where a day of staleness matters clinically, and bulk replication of a licensed dataset is a different arrangement from querying it. The integration risk is about controlling the tool surface, which a wrapper solves without giving up the vendor's freshness.",
+          "citation": {
+            "title": "Security best practices",
+            "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Connect the vendor server directly and cache every tool result for 24 hours so repeated interaction lookups cost nothing and latency stays predictable at the counter.",
+          "correct": false,
+          "explanation": "Caching addresses latency and cost but does nothing about the actual risk, which is that the set of tools the vendor exposes can change underneath a live session. A day-long cache on interaction data is also its own clinical hazard when the vendor publishes an update.",
+          "citation": {
+            "title": "Security best practices",
+            "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Connect the vendor's remote server directly to the Q&A path and require an interactive approval for each of its tool calls, so a tool that has been added or redefined since the last review cannot run without a human noticing it.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Requiring approval for third-party tool calls is a recommended control and it does catch a changed tool surface, which is the right thing to be worried about with a vendor server. It fails R1: an approval step is a human round trip in the middle of a path held to a 2.5-second p95 with a patient at the counter, so the control cannot survive contact with the workflow and will be turned off. A pinned allow-list gives the same protection with no interactive step.",
+          "citation": {
+            "title": "Security best practices",
+            "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Proxy the vendor server behind Larkspur's own MCP server that pins an explicit allow-list of tools and schemas, rejects anything outside it, and logs every call.",
+          "correct": true,
+          "explanation": "A pinned allow-list turns \"the vendor changed something\" from a live behaviour change into a rejected call and an alert, which is the documented posture towards a third-party server whose definitions you do not control. Because enforcement happens in Larkspur's proxy rather than in a dialogue, nothing is added to the request path, so R1's 2.5-second budget is untouched, and the call log gives the informaticist the attribution trail R2 relies on. Option C detects the same change but pays for it with an approval step the counter cannot absorb.",
+          "citation": {
+            "title": "Security best practices",
+            "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-06",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "Three things need a home in Counter's Claude Code setup: the build and test conventions plus the standing attribution rule, relevant in every session; a 30-step procedure for onboarding a new drug monograph into the policy corpus, run a few times a month; and an absolute prohibition on editing the frozen interaction-database adapter. Where does each belong?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put all three into skills, so each is versioned in the repository, each can be invoked by name, and nothing bloats the always-loaded context.",
+          "correct": false,
+          "explanation": "A skill's body loads only when it is used, which is why it suits the onboarding procedure — and is exactly why it is wrong for a convention that must hold in every session and for a prohibition that must hold whether or not anyone invokes anything. Conventions belong in memory; prohibitions belong in a mechanism that executes.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
+          }
+        },
+        {
+          "key": "B",
+          "text": "CLAUDE.md for the conventions and the attribution rule, a skill for the 30-step onboarding procedure, and a PreToolUse hook that denies any write to the adapter path.",
+          "correct": true,
+          "explanation": "Each mechanism is doing what it is for: CLAUDE.md carries facts that should hold in every session, a skill carries a long procedure whose body costs nothing until it is invoked, and a hook is the documented way to block an action regardless of what Claude decides — which is exactly the language R6 uses. Option C gets the first two placements right and is otherwise identical, but it leaves the frozen adapter protected by an instruction, and the documentation is explicit that CLAUDE.md is treated as context rather than enforced configuration.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "CLAUDE.md for the conventions and the attribution rule, a skill for the 30-step onboarding procedure, and a clearly worded rule at the top of CLAUDE.md stating that the adapter must never be modified during the licence term.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Two of the three placements are exactly right, and putting a critical rule at the top of the file every session loads is genuinely the strongest thing memory alone can do — this is a near-miss rather than a wrong answer. It fails R6, which requires the edit to be blocked rather than discouraged: CLAUDE.md is loaded as context and Claude treats it as guidance, so the documented mechanism for an action that must not happen is a PreToolUse hook.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Implement all three as hooks so that every rule is enforced deterministically by the harness rather than left to the model's discretion in any session.",
+          "correct": false,
+          "explanation": "Hooks execute at lifecycle events; they are the right shape for a block or an automated check, and the wrong shape for a 30-step procedure a human drives with judgement at each step, or for background conventions that simply need to be known. Forcing all three into one mechanism gives up the distinctions the three mechanisms exist to express.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-07",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "The pharmacist informaticist maintains the policy corpus and wants to run the monograph-onboarding procedure and the attribution audit herself. She is not an engineer, her workstation must reach only the read-only policy server, and she must inherit the frozen-adapter protection like everyone else. How should her environment be set up?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ship the Claude Code configuration in the repository — the onboarding skill, a project-scoped MCP entry pointing at the read-only policy server, and the project's permission rules and hook — so cloning the repository is the entire setup.",
+          "correct": true,
+          "explanation": "Project-scoped configuration is checked in and shared, so the skill, the server entry and the protective rules all arrive together with the code and apply identically to whoever opens the repository. That is what makes R6's \"regardless of their local configuration\" true for a non-engineer, and it puts the read-only endpoint in the same reviewed artefact as everything else. Option B produces the same end state on a good day, but only if each instruction is followed correctly.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Write her a setup guide listing the user-level settings and the MCP server entry to add to her own configuration directory, and walk her through it once so she can repeat it if her machine is rebuilt.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Onboarding by documented setup is entirely normal and this would work — the guide is explicit, the walkthrough covers the first run, and user-level configuration is a legitimate scope. It fails R6, which requires everyone to inherit the frozen-adapter block regardless of local configuration: a per-user setup makes the protection contingent on a manual step being performed correctly on every machine, and drift is invisible because nothing in the repository asserts what her configuration contains.",
+          "citation": {
+            "title": "Claude Code settings",
+            "url": "https://code.claude.com/docs/en/settings"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have her file a ticket describing each monograph she wants onboarded and let an engineer run the procedure on her behalf during the next sprint.",
+          "correct": false,
+          "explanation": "This removes the risk by removing the informaticist from the loop, at the cost of putting an engineering queue between the corpus and the person who owns it. It also makes the engineer the interpreter of clinical source material, which is the opposite of the expertise split the team was designed around.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Give her the production API credentials and a shell script that runs the onboarding steps end to end, so she never needs to configure Claude Code at all.",
+          "correct": false,
+          "explanation": "Handing production credentials to a workstation that is supposed to reach only a read-only endpoint inverts the access boundary the case sets out. It also discards the reviewable, versioned configuration that makes the frozen-adapter block and the read-only server entry auditable in the first place.",
+          "citation": {
+            "title": "Claude Code security",
+            "url": "https://code.claude.com/docs/en/security"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-08",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "The inline intake check has under 1.5 seconds and runs on all 62 million scripts a year. Its output is consumed by the fill workflow, which needs to know the exception type and which field on the prescription triggered it. How should that output be specified?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have the model write a short free-text note explaining the ambiguity in the pharmacist's own vocabulary, and display it directly in the fill workflow.",
+          "correct": false,
+          "explanation": "Free text is the most expensive output per script and the least useful downstream: the fill workflow cannot branch on prose, and an exception type expressed in varying wording cannot be counted, alerted on, or regression-tested. On a path that runs 62 million times, output tokens are a first-order cost, not a detail.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Prefill the opening of the assistant turn with the start of the exception record so the model is committed to the format before it generates anything else.",
+          "correct": false,
+          "explanation": "Assistant prefill is no longer a valid technique on current models; the documented replacements are structured outputs, an output format configuration, system-prompt instructions and XML output tags. Even historically it constrained only the beginning of the response, so the exception type could still have fallen outside the intended set.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Constrain the check to a compact JSON schema with an enumerated exception-type field and a pointer to the offending prescription field, so the output is a handful of tokens and always lands inside the known taxonomy.",
+          "correct": true,
+          "explanation": "Constraining decoding to a schema does three things at once here: an enumerated type cannot drift outside the taxonomy the fill workflow branches on, the response is a few tokens rather than a sentence, which is what keeps 62 million calls inside R5, and there is no validate-and-retry cycle to blow R1's 1.5 seconds. Option D produces friendlier text but spends a second model call and a second round trip to recover structure that could have been guaranteed in the first.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Ask for a brief natural-language exception note and parse it downstream with a second, cheaper model call that maps the note onto the taxonomy the fill workflow expects.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Generate-then-normalise is a real pattern and it does give pharmacists a readable note alongside a machine-usable type, which has genuine workflow value. It fails R1 and R5 together: two sequential model calls will not reliably fit 1.5 seconds inline, and paying for a second call on every one of 62 million scripts is precisely the per-script cost the requirement caps. The same information can be obtained from one constrained call.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "In pilot, counter Q&A sometimes answers a policy question fluently when the retrieved passages do not actually address it, and the pharmacist only discovers this by opening the cited section. Which prompt design most directly fixes this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add an instruction telling the model to cite its sources wherever possible and to be careful not to overstate what Larkspur policy says.",
+          "correct": false,
+          "explanation": "\"Wherever possible\" leaves the model to decide when a citation is optional, which is the discretion that produces the observed failure. Anthropic's guidance on grounding is to require quotation from supplied material and to give an explicit, acceptable way to decline — both concrete behaviours rather than an appeal to care.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Place the entire policy corpus in the system prompt so that every section is always available to cite, removing the dependence on whether retrieval surfaced the right passage.",
+          "correct": false,
+          "explanation": "This makes citation availability the problem when the problem is citation discipline — the model was already citing something, just not something that supported the claim. A corpus-sized prompt also degrades quality as context grows and adds latency to a 2.5-second path for material that is almost entirely irrelevant to any single question.",
+          "citation": {
+            "title": "Long context prompting tips",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/long-context-tips"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add a verification pass: a second model call reads the draft answer against the retrieved passages, strips any sentence the passages do not support, and returns the trimmed answer to the pharmacist.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A verification pass is a strong guarantee and this is the shape of a genuinely good answer — checking claims against the source is more reliable than asking the generator to police itself. It fails R1: a second full model call inside a 2.5-second p95 with a patient at the counter leaves no room for retrieval and the first generation, so the control would be dropped the first time the queue backed up. Constraining the first call achieves most of the benefit inside the budget.",
+          "citation": {
+            "title": "Reduce latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Instruct the model to quote the supporting sentence and its section label from the retrieved passages, and to reply that the question is not covered by Larkspur policy — escalating to the clinical desk — whenever no retrieved passage supports an answer.",
+          "correct": true,
+          "explanation": "Requiring a verbatim supporting sentence makes the attribution a quotation rather than a claim about the corpus, which is what R2 means by attributable, and giving an explicit escalation reply makes \"not covered\" a legitimate outcome instead of a gap the model smooths over. Both are documented anti-hallucination measures and neither adds a round trip, so R1's 2.5 seconds is preserved. Option C would verify more thoroughly but cannot fit the budget the counter actually has.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-10",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "The team must guarantee that no part of one patient's prescription can influence the check on another patient's, while still keeping the inline path cheap enough to run 62 million times. Which context design achieves both?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep one session per pharmacist and begin each new script with a message instructing the model to disregard everything about the previous patient before it starts.",
+          "correct": false,
+          "explanation": "An instruction to disregard prior content does not remove it: the earlier prescription is still in the context window and still available to influence the response. R4 is an isolation requirement, and isolation has to be a property of how the request is constructed, not a request made inside a shared conversation.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Build each check as a fresh single-turn request from that script's own bundle, with the cached prefix limited to the static taxonomy and policy header so nothing patient-specific is ever reused.",
+          "correct": true,
+          "explanation": "A fresh single-turn request makes R4 structural: there is no prior turn for a previous patient to occupy. The cost concern is met separately and correctly — prompt caching works on the stable prefix, so the taxonomy and policy header are still read at cache rates across millions of calls while the variable patient content sits after the breakpoint and is never cached or carried. Option C keeps the same cached prefix but only by keeping the session, and clearing tool results does not remove the assistant's own earlier turns.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep one session per pharmacist and use tool-result clearing to drop each previous script's retrieved data once its check is finished, which bounds context growth and keeps the cached prefix warm across the shift.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Tool-result clearing is the documented way to shed stale tool output in a long agentic session, and pairing it with a warm cached prefix is a sensible cost play — the instinct is right. It fails R4 because of what clearing does not touch: it removes tool results, not the assistant's own earlier turns, so the model's previous reasoning about the last patient's strength or sig remains in context and can still colour the next check. Isolation needs a new request, not a pruned one.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Maintain a per-patient session keyed by patient identifier so that each patient's history is isolated from every other patient's and can be reused across their repeat fills.",
+          "correct": false,
+          "explanation": "This satisfies the letter of cross-patient isolation while creating a long-lived store of one patient's prescription history that grows for years and is read on every fill. It also does not solve the stated problem economically, since the accumulated history is billed as input on every subsequent check for that patient.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS3-11",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D3", "D4"],
+      "question": "Two hours into the overnight inventory run, the demand-forecast service fails for twenty minutes and four regions' workers error out. The run has to produce something usable by the time stores open. How should the failure be handled?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Checkpoint each region's completed proposals to durable storage, key each worker's output idempotently by store pair and date, resume only the unfinished regions when the service recovers, and emit a manifest of what did and did not complete.",
+          "correct": true,
+          "explanation": "Checkpointing means the two hours already spent are not lost, and idempotent keying means a resumed region cannot double-propose a transfer it already emitted — together they let the run finish inside R3's four-hour window despite a twenty-minute outage. The manifest keeps R3's traceability honest by stating explicitly which stores were covered, so nobody reads an incomplete plan as a complete one. Option D also produces a consistent plan, but only by discarding the work already done.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run the whole overnight job twice on independent workers and compare the two outputs, using any disagreement as the signal that a region needs to be re-run before stores open.",
+          "correct": false,
+          "explanation": "Duplicating the run doubles cost and, more importantly, doubles the time budget consumed inside a fixed four-hour window. It also detects disagreement rather than failure: the four regions that errored produced nothing to compare, so the mechanism is silent on the actual incident.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Let the four failed regions drop out silently and allow the next night's run to pick up whatever imbalance has accumulated in them, keeping the pipeline simple.",
+          "correct": false,
+          "explanation": "Silence is the problem: a plan that covers 1,236 of 1,240 stores looks identical to a complete one, so the stores in the four missing regions are managed as though they had been assessed. R3's traceability obligation implies knowing which figures a plan rests on, including the ones it never read.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Wrap the run in a retry that restarts it from the first store on any failure, which guarantees that the plan stores act on is internally consistent and generated against a single coherent snapshot of demand.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Restart-from-clean is a defensible reliability posture and the consistency argument is a real one — a plan assembled from figures read at different times can contain contradictions. It fails R3's four-hour window: discarding two hours of completed work and starting again after a twenty-minute outage leaves under two hours to redo everything, and a second failure would leave the stores with no plan at all. Checkpointing preserves consistency per region while keeping the completed work.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    }
+  ]
+}

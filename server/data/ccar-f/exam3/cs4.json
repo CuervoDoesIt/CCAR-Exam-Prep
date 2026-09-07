@@ -1,0 +1,555 @@
+{
+  "examId": "ccar-f-exam3",
+  "caseId": "CS4",
+  "caseTitle": "Longshadow Post — shot-desk agent for review rounds and render coordination",
+  "caseScenario": "Longshadow Post is a 340-person visual-effects and post-production studio with facilities in Montreal and Wellington. It carries six concurrent shows — two episodic series and four features — totalling roughly 9,000 live shots. Production is tracked in Autodesk Flow Production Tracking (formerly ShotGrid); renders are dispatched to a 4,200-core farm through Deadline; client review rounds run in a browser review tool that emits timestamped notes against a specific shot version. A single review round on a large episodic block can generate 1,400 note items in one evening.\n\nThe studio is building a 'shot desk' agent with two paths. During a live dailies session it answers supervisor questions — which shots in this sequence are blocked, what changed between v012 and v014, does the farm have capacity to re-render this sequence before the Wellington handover. Overnight it runs the round close-out: it reads every note from the review tool, maps each note to a shot code and version, drafts an artist-facing task brief, and files the mapping back to the production tracker. Wellington's day shift starts at 08:00 NZT, which leaves a 90-minute close-out window.\n\nThe team is four pipeline TDs and one ML engineer, working in a Python pipeline monorepo they develop with Claude Code. The annual Claude budget is $180,000 across both paths. Two facts shape every design choice. The production tracker is the studio's system of record, and an unapproved write to it can silently reassign an artist's night of work. And shot state genuinely changes during the close-out run: a render finishing at 02:40 flips a shot from 'pending' to 'ready for review' while the agent is still working through the round.",
+  "caseRequirements": [
+    "R1: During a live dailies session the shot desk must answer within 6 seconds p95, measured from the supervisor's question to the first token displayed.",
+    "R2: The agent may write to the production tracker only through a single approval-gated tool, and every write must record the name of the human who approved it.",
+    "R3: Every note-to-shot mapping the agent emits must be machine-parseable and must carry the tracker shot code and the version number the note was left against, so the close-out job applies it without a TD retyping anything.",
+    "R4: The overnight close-out for a round of up to 1,400 notes must finish inside the 90-minute window before the 08:00 NZT Wellington handover.",
+    "R5: Combined annual Claude spend for the dailies path and the close-out path must stay within $180,000.",
+    "R6: The close-out must act on current shot state: a shot whose status changed after the run began must not be written up from the status the agent read at the start of the run."
+  ],
+  "questions": [
+    {
+      "id": "F3-CS4-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D5", "D2"],
+      "question": "The close-out must work through as many as 1,400 notes inside the 90-minute Wellington window, and shot status can flip while the run is in progress. Which decomposition should the shot desk use for the overnight run?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run one long-lived agent that reads all 1,400 notes into a single conversation and works through them in order, relying on the context window to keep the whole round in view.",
+          "correct": false,
+          "explanation": "A single serial pass over 1,400 notes cannot plausibly finish in 90 minutes, and a context holding the entire round spends the model's attention budget on notes it has already dealt with. Anthropic's context-engineering guidance is to keep the smallest set of high-signal tokens in view, not the whole workload.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Fan the round out into per-sequence batches handled by parallel workers, each with its own fresh context and an orchestrator that collects results, and have each worker read the shot's status from the tracker at the moment it drafts the mapping.",
+          "correct": true,
+          "explanation": "This is the orchestrator-workers pattern from 'Building Effective Agents'. Parallel per-sequence workers are what makes the 90-minute R4 window reachable, and separate contexts keep one sequence's noise out of another's. The read-at-draft-time detail is what distinguishes it from option C: because the status is fetched when the mapping is written rather than when the run started, a 02:40 render that flips a shot is picked up, satisfying R6.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Fan the round out into per-sequence workers running in parallel, but load one snapshot of tracker shot status at the start of the run and pass that snapshot to every worker, so all workers reason from a single consistent view of the round.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The parallel decomposition here is right and a consistent snapshot is a genuinely defensible engineering choice — it removes a whole class of workers-disagree bugs and makes a run reproducible. It does not meet R6. A snapshot taken at 01:00 is exactly the stale state R6 forbids writing from, and a close-out that runs until 03:00 will write up shots from statuses two hours old. Option B keeps the same parallelism but re-reads status at the moment of the write.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Push the round through one fixed prompt chain — classify every note, then draft every brief, then file every mapping — with each stage consuming the previous stage's complete output.",
+          "correct": false,
+          "explanation": "Prompt chaining decomposes a single task into ordered subtasks; it is not a throughput mechanism. Three sequential stages over 1,400 notes is still a serial pass, and passing each stage's complete output forward recreates the oversized context that option A suffers from.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-02",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D3"],
+      "question": "The shot desk has to file note-to-shot mappings back into the production tracker, which is the studio's system of record. Which tool surface should the pipeline team expose to the agent?",
+      "options": [
+        {
+          "key": "A",
+          "text": "One general purpose tracker_write tool that takes an entity type, a record id and a field map, so the agent can file whatever a round happens to require without new tool work.",
+          "correct": false,
+          "explanation": "A tool that can write any field on any entity gives the model an unbounded blast radius, and there is no place in its schema for an approver. Anthropic's tool-writing guidance argues for a small number of purposeful tools with clear boundaries rather than one generic passthrough.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A set of narrow write tools — file_note_mapping, reassign_task, bump_version — each with a tight schema, plus a clear system-prompt policy instructing the agent to obtain a supervisor's agreement before it calls any of them.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Narrow, purposeful write tools are exactly what the tool-design guidance recommends, and this option gets that half right. It does not meet R2 for two reasons. R2 requires a single approval-gated tool, and it requires the approver's name to be recorded on the write; here approval lives in a system-prompt instruction, which shapes behaviour but does not enforce it, and no field in any of the three schemas carries an approver. Option C moves the gate into the schema so an unapproved call cannot be made at all.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A single submit_tracker_change tool whose schema requires the shot code, the proposed change and an approval token minted when a named supervisor accepts the change in the review UI, with the tool rejecting any call lacking a valid token.",
+          "correct": true,
+          "explanation": "R2 asks for one gate and a recorded approver, and this design provides both structurally: the token cannot be produced by the model, so an unapproved write is not expressible, and the token carries the supervisor's identity into the audit record. Option B's narrow tools are good practice but leave approval as a prompt-level instruction, which is guidance rather than enforcement.",
+          "citation": {
+            "title": "Define tools for Claude",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Let the agent call the tracker's REST API directly through a shell tool in the pipeline container, since the TDs already keep working credentials there.",
+          "correct": false,
+          "explanation": "This removes the tool boundary altogether: the model composes arbitrary requests against a system of record using credentials that were never scoped for it. There is no schema to validate, no approval step, and no record of who authorised the change.",
+          "citation": {
+            "title": "Claude Code security",
+            "url": "https://code.claude.com/docs/en/security"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-03",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "The close-out job applies mappings automatically, and one malformed mapping stalls the round. Review notes are free text such as 'the wire on the left of frame in the last one is still there'. How should the team pin the mapping output down?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Request the mapping as JSON constrained by a schema through the API's structured JSON output, making shot code, version number, note id and confidence required fields.",
+          "correct": true,
+          "explanation": "Structured outputs constrain decoding to the schema, so a response that omits the version number or emits malformed JSON is not something the model can produce. That is what R3 needs: not a mapping that usually parses, but one that always carries the shot code and version in a machine-readable shape. Option B can produce tags that parse yet omit the version, and pays for retries out of the R4 window.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Instruct the model in the system prompt to wrap each mapping in XML tags, one tag per field, parse the tags in the close-out job, and retry any response whose tags fail to parse.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "XML output tags are a documented technique and this is how many teams shipped structured extraction before constrained decoding existed, so it is a fair choice. It falls short on two named requirements. R3 asks for a guarantee that every mapping carries the shot code and version; tags can parse cleanly while a version tag is simply absent, because nothing constrains the generation. And the retry loop is charged against R4: on a 1,400-note round even a small reparse rate consumes minutes of the 90-minute window unpredictably.",
+          "citation": {
+            "title": "Use XML tags to structure your prompts",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/use-xml-tags"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Prefill the assistant turn with the opening brace of the mapping object so the model has no choice but to continue in JSON from there.",
+          "correct": false,
+          "explanation": "Assistant prefill is not a supported technique on current Claude models. The documented ways to control response shape are structured outputs, the output format configuration, system-prompt instructions and XML output tags. Building the close-out on prefill would leave the pipeline dependent on behaviour the platform no longer offers.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have the model describe each mapping in natural language, then run a second cheap model call over each description to convert it into the JSON the close-out job expects.",
+          "correct": false,
+          "explanation": "The conversion call is itself an unconstrained generation, so it can invent or transpose a shot code that the first call never mentioned — a fabricated mapping is worse than a malformed one, because it applies cleanly. It also doubles the per-note call count for a guarantee that constrained decoding provides in a single call.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-04",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "The TDs exercise the shot desk's tools from Claude Code sessions while developing the pipeline. Twice, a development session has filed a mapping into the live production tracker. Which Claude Code control actually closes this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "State in the project CLAUDE.md that the live tracker must never be written to from a development session, and repeat the rule in a .claude/rules/ file scoped to the tracker client module so it loads whenever Claude touches that code.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is where project conventions belong, and a path-scoped rule is the right home for guidance that only matters in one module — a sound instinct. It does not meet R2. The Claude Code documentation is explicit that CLAUDE.md files and rules are loaded as context rather than enforced configuration, and that to block an action regardless of what Claude decides you use a PreToolUse hook. Guidance raises the odds; R2 needs the write to be impossible without an approver.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Configure a PreToolUse hook that inspects the pending tool call and denies any tracker write whose target environment is production, so the call is stopped before it executes whatever the model decided to do.",
+          "correct": true,
+          "explanation": "PreToolUse fires before a tool call executes and can deny it, which makes it the only option here that holds regardless of the model's judgement, the session's length, or whether anyone is watching. That determinism is what R2 requires. Option A puts the same rule in CLAUDE.md and rules files, which the documentation describes as context rather than enforced configuration.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Move the tracker write behind a skill marked disable-model-invocation so Claude cannot trigger it on its own and only a TD typing the command can start it.",
+          "correct": false,
+          "explanation": "disable-model-invocation stops Claude from auto-invoking that skill; it does nothing to the underlying tool, which remains callable directly. The debugging sessions that caused the incidents were calling the write tool, not a skill, so the control is aimed at the wrong layer.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/slash-commands"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Leave the tools as they are and rely on the interactive permission prompt, trusting the TD to decline when a tracker write is proposed.",
+          "correct": false,
+          "explanation": "A control that depends on a human reading and refusing a prompt fails in exactly the conditions that produced the incidents — a long session, a familiar-looking prompt, an accepted default. It also disappears entirely in non-interactive runs, where there is no one to answer.",
+          "citation": {
+            "title": "Claude Code permissions",
+            "url": "https://code.claude.com/docs/en/permissions"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-05",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "Longshadow runs MCP servers for the production tracker, the review tool, the render farm and the asset library. Between them they expose 214 tools, and dailies answers have started slipping past the 6-second budget. What should the team change first?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Enable the tool search tool so definitions are discovered and loaded on demand, leaving only the handful a given dailies question needs in context.",
+          "correct": true,
+          "explanation": "Anthropic documents two failures that appear as a tool library grows: definitions consume the context window before any work starts, and selection accuracy degrades past roughly 30 to 50 available tools. Tool search addresses both by loading only the few tools a request needs, typically cutting definition tokens by over 85 percent — which is where the R1 headroom comes back. Option B fixes the tool count per agent but pays a full extra model round trip for it.",
+          "citation": {
+            "title": "Tool search tool",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Split the dailies agent into four subagents, one per MCP server, each carrying only its own server's tools, and put an orchestrator in front that routes each supervisor question to whichever subagent owns it.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Decomposing by tool surface is a real pattern and each subagent would indeed see a manageable tool list, so this is a defensible design. It fails R1. Every dailies question now costs an orchestrator turn plus a subagent turn, adding a full model round trip to a 6-second budget that is already breached. Worse, the studio's actual questions span servers — 'does the farm have capacity to re-render this sequence before handover' needs the tracker and the farm — so the orchestrator has to make two hops on the common case.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep all 214 definitions loaded but cut every tool description down to a single line to reduce the token cost of the tool block.",
+          "correct": false,
+          "explanation": "Tool descriptions are the main signal the model uses to choose correctly, so stripping them trades a modest token saving for worse selection. The documented accuracy cliff past 30 to 50 tools is about how many tools compete for the choice, and shortening descriptions does not reduce that number.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Leave the tool block intact and rely on prompt caching so the 214 definitions are cheap to send on every dailies request.",
+          "correct": false,
+          "explanation": "Caching lowers the cost of a stable prefix and can help time to first token, but the definitions still occupy the context window and 214 tools still compete for a single selection. Caching a bad tool surface makes it cheaper, not faster to reason over.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-06",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "A worker handling one sequence's 180 notes accumulates tracker lookups, farm queries and draft briefs. By note 120 its context is mostly tool results it will never consult again, and its briefs have started drifting from the studio's format. Which context strategy fits the close-out?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Restart the worker with a completely fresh context after every note so nothing accumulates, passing no state forward between notes.",
+          "correct": false,
+          "explanation": "Notes within a sequence reference each other — 'same fix as the last one' is a normal review comment — so discarding all continuity produces incoherent briefs. It also destroys the cached prefix on every note, which multiplies input cost across a 1,400-note round.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Turn on server-side compaction for the worker so the conversation is summarised automatically as it nears the context limit, letting one worker carry an entire sequence from first note to last without any manual pruning.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Compaction is Anthropic's recommended default for long-running conversations, and choosing it here is reasonable. It does not meet R6. A summary carries forward the shot statuses the worker read earlier as settled facts, so a status that flipped at 02:40 survives compaction as a stale assertion the worker will happily write up. The documentation describes compaction as replacing older content with a concise summary, which is precisely why the per-shot version numbers R3 depends on cannot be assumed to survive it.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Raise the worker's max output tokens and instruct it to restate the full state of the sequence in every turn so that no detail is ever lost from view.",
+          "correct": false,
+          "explanation": "Restating state each turn grows the input on every step, so cost and latency climb through the run and the 90-minute window shrinks. Max output tokens governs how long a response may be and has nothing to do with input context pressure.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Clear old tool results from the worker's history as it advances, keep the brief format and round instructions in the system prompt, and re-read each shot's status from the tracker at the moment its mapping is drafted.",
+          "correct": true,
+          "explanation": "Tool result clearing is described as the lightest-touch form of compaction: it removes the bulk that no longer earns its place without summarising away detail. Keeping the format rules in the system prompt is why brief drift stops, and re-reading status at draft time is what satisfies R6 — unlike option B's summary, nothing stale is carried forward as fact.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-07",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D4", "D3"],
+      "question": "The team wants specialised workers inside the close-out: one that maps notes to shots, one that drafts artist briefs, and one that checks farm capacity. What should govern the hand-off between them?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Pass the mapping worker's full transcript into the brief-drafting worker so that no detail of its reasoning is lost on the way.",
+          "correct": false,
+          "explanation": "Forwarding a full transcript defeats the reason for separate workers: the search and lookup noise the mapping worker generated lands straight back in the next worker's context. Anthropic's sub-agent guidance is that detailed working context stays isolated and only the distilled result crosses the boundary.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have every worker return a prose summary of what it established, which the orchestrator concatenates into the prompt for the next worker in the chain, keeping each hand-off readable by a TD who is debugging the run.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Prose hand-offs are how a great many multi-agent systems are built, they are easy to debug, and keeping the intermediate artefacts human-readable is a genuine benefit. It fails R3. A prose summary carries no guarantee that the shot code and version survived the hand-off in a parseable form, so the close-out job receives something a TD has to read and retype — precisely the manual step R3 exists to remove.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Define a typed hand-off record — shot code, version, note id, brief text, farm verdict — that every worker returns and the orchestrator validates before the next worker starts.",
+          "correct": true,
+          "explanation": "A typed contract at each boundary keeps the workers' contexts clean while guaranteeing that the fields the close-out job needs survive every hop, which is what R3 requires end to end. Validating at the orchestrator means a worker that drops a version number fails loudly at the hand-off rather than silently at filing time, unlike option B's prose summaries.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Let each worker write its result straight into the production tracker as it finishes, so the next worker simply reads the tracker instead of receiving a hand-off record.",
+          "correct": false,
+          "explanation": "Using the system of record as a scratchpad means intermediate, unreviewed state reaches artists' task lists, and it routes writes around the approval gate that R2 establishes. Inter-agent state belongs in the orchestration layer, not in the production database.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-08",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "Each morning a TD works through the same nine-step triage of the overnight close-out log: pull the log, count unmapped notes, group failures by cause, check the farm queue, re-file the mappings that failed, and write a summary for standup. Written out it runs to about 400 lines. Where should it live in their Claude Code setup?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Paste the nine steps into the project CLAUDE.md so they are loaded and available in every session without anyone having to remember where they are.",
+          "correct": false,
+          "explanation": "CLAUDE.md loads into the context window at the start of every session, and Anthropic advises keeping it to standing facts and targeting under about 200 lines, moving multi-step procedures elsewhere. A 400-line routine would be paid for in every unrelated session and would dilute the instructions that do apply.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Put it in a skill invoked as /triage-round, marked disable-model-invocation so only a TD can start it, with allowed-tools pre-approving the log-reading commands.",
+          "correct": true,
+          "explanation": "A skill's body loads only when it is invoked, so a long procedure costs nothing until it is needed — the documented reason to move a grown CLAUDE.md section into a skill. disable-model-invocation is the field Anthropic recommends for workflows with side effects, and re-filing mappings has side effects: it keeps the TD as the trigger, so R2's named approver is a person who chose to run the routine. Option C would let Claude start the same side effects on its own judgement.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/slash-commands"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Define it as a project subagent in .claude/agents/ with the nine steps as its system prompt and a tools list holding the log reader and the tracker client, so the triage runs in its own context window and returns only a short summary to the main session.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a textbook use of a subagent — a noisy side task that would otherwise flood the main conversation, run in its own window with a restricted tool list. It fails R2. Claude decides on its own when to delegate to a subagent, based on the description field, so the re-filing step can run without a TD ever asking for it, and nothing then binds the resulting write to a named approver. Option B keeps a human as the trigger while getting the same context benefit.",
+          "citation": {
+            "title": "Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add the nine steps as a .claude/rules/ file with a paths pattern matching the close-out log directory, so the routine loads whenever Claude reads a log file.",
+          "correct": false,
+          "explanation": "Path-scoped rules are standing constraints that load when Claude works with matching files; they are not invocable procedures, and reading a log file is an unreliable trigger for a routine someone wants to run at a fixed time each morning. Anthropic points procedures at skills and reserves rules for guidance that should apply to matching files.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D5", "D2"],
+      "question": "About 8 percent of review notes are too vague to place — 'this one still feels off'. In the pilot the agent produced a shot code for every note it saw, and two artists re-rendered the wrong shot overnight. How should the prompt and schema change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a resolution field to the mapping schema with an enum that includes unresolved, make shot code required only when the resolution is a real mapping, and instruct the model to route unresolved notes to a TD queue.",
+          "correct": true,
+          "explanation": "The pilot failure is structural, not stylistic: the schema had no legal way to express 'this note does not identify a shot', so the model produced the closest thing it could. Giving abstention a first-class representation is the documented way to stop that, and it keeps R3 intact because the unresolved record is still machine-parseable. Option B's instructions push against a schema that still demands a shot code on every record.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Leave the schema as it is and add a firm system-prompt rule that the model must not map a note unless the note identifies a shot, together with two worked examples showing vague notes being declined.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Explicit instruction plus multishot examples is a real and measurable lever on this behaviour, so this would reduce the error rate. It still fails R3. The schema continues to require a shot code on every mapping, so a note the model correctly wants to decline has no valid record to occupy; the model must either invent a code or emit something the close-out job cannot parse. Option A removes the contradiction instead of arguing with it.",
+          "citation": {
+            "title": "Use examples (multishot prompting)",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/multishot-prompting"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add a second pass in which the model reviews its own mappings for the round and deletes the ones it judges to be low confidence before they are filed.",
+          "correct": false,
+          "explanation": "A self-review pass sees the same ambiguous note and the same evidence, so it cannot recover information the note never contained. It also adds a full second pass over 1,400 notes, spending the R4 window and the R5 budget for no new signal.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Route the vague notes to a larger, more capable model on the grounds that a stronger model will resolve the ambiguity the smaller one could not.",
+          "correct": false,
+          "explanation": "Model capability cannot supply information that is absent from the input. 'This one still feels off' does not name a shot at any capability level; a stronger model simply produces a more confident guess.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-10",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D4", "D1"],
+      "question": "The get_sequence_shots tool returns every field the tracker holds for each shot — 340 fields including base64 thumbnails and the full change history. On a 300-shot sequence one call returns roughly 190,000 tokens. What is the right fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Cap every tool response at 20,000 tokens in the pipeline layer so no single call can dominate the context window.",
+          "correct": false,
+          "explanation": "A blind cap cuts the response mid-sequence, so shots simply disappear from the middle of the round with no signal that anything was dropped. The model then files a complete-looking set of mappings against a partial sequence, which is a silent correctness failure rather than a visible one.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Leave the tool as it is and clear its results from the conversation once the worker has used them, so the oversized payloads do not accumulate as the run proceeds.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Tool result clearing is a recommended technique and it does solve accumulation, which is a real problem in this run — a defensible choice on its own terms. It fails R1. The payload still has to be produced, transferred and read once before anything can be cleared, and a single 190,000-token tool result on the dailies path exhausts the 6-second budget on that one call. Clearing manages history; option D stops the payload existing.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Cache the tool results with prompt caching so repeated lookups of the same sequence become cheap over the course of the round.",
+          "correct": false,
+          "explanation": "Caching applies to a stable prefix, and these results differ per call and per night, so hits would be rare. More fundamentally, the model still has to read every one of those tokens, and reading time is what breaks the dailies budget.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Redesign the tool to return a purposeful record per shot — code, current version, status, assigned artist, latest note id — with pagination and an optional detail parameter for the rare case a full record is needed.",
+          "correct": true,
+          "explanation": "Anthropic's tool-writing guidance is to return meaningful context rather than everything the underlying system holds, and to optimise responses for token efficiency. A compact record answers the questions the dailies path actually asks, which restores R1 headroom at source; the detail parameter keeps the full record reachable when it is genuinely required. Option B only manages the consequences of an oversized payload.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS4-11",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "Three weeks in, a shot that flipped to 'ready for review' at 02:40 was written up as blocked and an artist lost a night. The run had read that shot at 01:05. The parallel workers and the tool-result clearing from earlier are both in place. What is the right correction?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the whole close-out earlier in the night so that it finishes before the farm's busiest period and fewer renders land while it is running.",
+          "correct": false,
+          "explanation": "Rescheduling narrows the window in which the race can occur but does not remove it, and a render can finish at any hour. The 90-minute slot is also pinned by the 08:00 handover, so there is limited room to move.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have the orchestrator re-read the full round's shot statuses every fifteen minutes and push the refreshed snapshot out to every worker, so no worker is ever reasoning from data more than a quarter of an hour old.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Bounded-staleness refresh is a legitimate pattern, it is cheap, and it would have caught the 02:40 flip if the write had happened after 02:45. It still fails R6, which forbids writing a shot up from a status read before the change rather than asking for the staleness to be small. A fourteen-minute gap is enough to lose an artist a night, and the failure mode is unchanged — only its probability moves.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Make the approval-gated write tool re-read the shot's current status and reject any write whose mapping was drafted against a different status, returning the current status so the worker can redraft.",
+          "correct": true,
+          "explanation": "This turns a probabilistic problem into a deterministic check at the one place every change already has to pass through, so R6 holds no matter how long a worker took to reach the write. It composes neatly with R2's single gate, and the rejection carries the current status back so the worker can recover rather than fail. Option B only shortens the stale window; this closes it.",
+          "citation": {
+            "title": "Handle tool calls in your application",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add a system-prompt instruction reminding workers that a shot's status may have changed since they read it and that they should take that possibility into account.",
+          "correct": false,
+          "explanation": "The model has no way to observe a change that happened outside its context, so the reminder can only make it hedge, not detect. Checks against live external state belong in the tool layer, where they can actually be performed.",
+          "citation": {
+            "title": "Handle tool calls in your application",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        }
+      ]
+    }
+  ]
+}

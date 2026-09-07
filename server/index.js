@@ -12,6 +12,8 @@ const ATTEMPTS_FILE = path.join(STORE_DIR, "attempts.json");
 const EXAM_META = {
   "ccar-f-exam1": { cert: "CCAR-F", title: "CCAR-F Mock Exam 1", dir: ["ccar-f", "exam1"], questionCount: 60, timeLimitMinutes: 120 },
   "ccar-f-exam2": { cert: "CCAR-F", title: "CCAR-F Mock Exam 2", dir: ["ccar-f", "exam2"], questionCount: 60, timeLimitMinutes: 120 },
+  "ccar-f-exam3": { cert: "CCAR-F", title: "CCAR-F Mock Exam 3 — Case Studies", dir: ["ccar-f", "exam3"], questionCount: 60, timeLimitMinutes: 120, format: "case" },
+  "ccar-f-exam4": { cert: "CCAR-F", title: "CCAR-F Mock Exam 4 — Case Studies", dir: ["ccar-f", "exam4"], questionCount: 60, timeLimitMinutes: 120, format: "case" },
   "ccar-p-exam1": { cert: "CCAR-P", title: "CCAR-P Mock Exam 1", dir: ["ccar-p", "exam1"], questionCount: 63, timeLimitMinutes: 120 },
   "ccar-p-exam2": { cert: "CCAR-P", title: "CCAR-P Mock Exam 2", dir: ["ccar-p", "exam2"], questionCount: 63, timeLimitMinutes: 120 },
   "ccar-p-exam3": { cert: "CCAR-P", title: "CCAR-P Mock Exam 3 — Case Studies", dir: ["ccar-p", "exam3"], questionCount: 63, timeLimitMinutes: 120, format: "case" },
@@ -26,6 +28,13 @@ const PASSING_SCALED = 720;
 // Case exams carry only a primaryDomain id per question; the display name comes
 // from the certification's blueprint.
 const DOMAIN_NAMES = {
+  "CCAR-F": {
+    D1: "Agentic Architecture & Orchestration",
+    D2: "Tool Design & MCP Integration",
+    D3: "Claude Code Configuration & Workflows",
+    D4: "Prompt Engineering & Structured Output",
+    D5: "Context Management & Reliability",
+  },
   "CCAR-P": {
     D1: "Solution Design & Architecture",
     D2: "Claude Models, Prompting & Context Engineering",

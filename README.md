@@ -2,7 +2,7 @@
 
 An interactive study app for the Claude Certified **Architect** exams — CCAR-F (Foundations) and CCAR-P (Professional) — and the Claude Certified **Developer** exam, CCDV-F (Foundations).
 
-Ten full-length mock exams — 584 questions total — each answer option explained and cited against Anthropic's official documentation.
+Twelve full-length mock exams — 704 questions total — each answer option explained and cited against Anthropic's official documentation. Every certification has both a blueprint-exact set and a harder case-study set.
 
 ## Two study modes
 
@@ -15,6 +15,7 @@ Ten full-length mock exams — 584 questions total — each answer option explai
 | Exam | Format | Questions | Time | Pass |
 |---|---|---|---|---|
 | CCAR-F Mock 1 & 2 | 5 domains | 60 | 120 min | 720 / 1000 |
+| CCAR-F Mock 3 & 4 | Case studies · **hard** | 60 | 120 min | 720 / 1000 |
 | CCAR-P Mock 1 & 2 | 7 domains | 63 | 120 min | 720 / 1000 |
 | CCAR-P Mock 3 & 4 | Case studies · **hard** | 63 | 120 min | 720 / 1000 |
 | CCDV-F Mock 1 & 2 | 8 domains | 53 | 120 min | 720 / 1000 |
@@ -26,11 +27,13 @@ The CCDV-F exams also include **multiple-response** items ("Which TWO…"), as t
 
 ### Case-study exams (hard mode)
 
-CCAR-P Mock 3 & 4 and CCDV-F Mock 3 & 4 mirror the harder shape of the real professional exam: a detailed client scenario with numbered requirements (`R1`–`R6`), followed by twelve questions that each require reasoning across several exam domains at once.
+Mock 3 & 4 of every certification mirror the harder shape of the real professional exam: a detailed client scenario with numbered requirements (`R1`–`R6`), followed by a run of questions that each require reasoning across several exam domains at once.
 
 Their defining feature is the **close second**. On every question two options are defensible, but one is stronger because it satisfies *all* the stated requirements while the other quietly drops one. The runner-up is tracked separately, so your results tell you not just what you got wrong but where you chose a sound design that missed a requirement — usually the most useful thing to re-read.
 
-Twenty-two client scenarios, no two in the same vertical: healthcare, finance, e-commerce, legal, field service, developer tooling, public sector, media, telecom, education, insurance, biotech, freight, airline, gaming, agritech, proptech, music streaming, construction, hospitality, philanthropy, and automotive.
+Thirty-four client scenarios, no two in the same vertical: healthcare, finance, e-commerce, legal, field service, developer tooling, public sector, media, telecom, education, insurance, biotech, freight, airline, gaming, agritech, proptech, music streaming, construction, hospitality, philanthropy, automotive, maritime ports, electric utilities, retail pharmacy, film/VFX, recruiting, museums, card payments, semiconductors, veterinary care, apparel supply chain, wildfire response, and sports analytics.
+
+The three hard-mode banks stay distinct by design. CCAR-P turns on governance and stakeholder pressure; CCAR-F stays inside the build — decomposition, tool boundaries, `CLAUDE.md` vs slash command vs hook, structured output, long-run context; CCDV-F turns on the wire — parameters, payload shapes, and error handling. CCAR-F and CCAR-P hard mode are blueprint-exact; CCDV-F's deliberately over-weights its two thinnest domains, which are only 2 and 1 items on the real exam and too thin to study from.
 
 ## Running it
 

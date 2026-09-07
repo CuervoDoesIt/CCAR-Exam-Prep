@@ -133,6 +133,67 @@ mechanic is inherently a single-answer contrast.
 
 ---
 
+## 2c. Exam shape — CCAR-F hard mode
+
+| | |
+|---|---|
+| Question count | **60** |
+| Time limit | **120 minutes** |
+| Passing score | **720** scaled (`100 + correct/total × 900`) |
+| Structure | **5 full cases × 11 questions + 1 mini-case × 5 questions** |
+
+Files: `server/data/ccar-f/exam3/cs1.json` … `cs6.json`
+       `server/data/ccar-f/exam4/cs1.json` … `cs6.json`
+(`cs1`–`cs5` are 11 questions each; `cs6` is the 5-question mini-case.)
+`id` prefix is `F3-` for exam 3 and `F4-` for exam 4.
+
+### Domain allocation (must match exactly)
+
+**Unlike CCDV-F, this allocation is blueprint-exact.** CCAR-F's five domains are already
+evenly weighted on the real exam (14/13/11/12/10), so there is no thin domain to
+compensate for and no reason to distort section scoring.
+
+| Case | D1 | D2 | D3 | D4 | D5 | Total |
+|------|----|----|----|----|----|-------|
+| cs1  | 3 | 2 | 2 | 2 | 2 | 11 |
+| cs2  | 3 | 3 | 2 | 2 | 1 | 11 |
+| cs3  | 3 | 2 | 2 | 2 | 2 | 11 |
+| cs4  | 2 | 3 | 2 | 2 | 2 | 11 |
+| cs5  | 2 | 2 | 2 | 3 | 2 | 11 |
+| cs6  | 1 | 1 | 1 | 1 | 1 | 5  |
+| **Total** | **14** | **13** | **11** | **12** | **10** | **60** |
+
+Domain names (use verbatim):
+
+- `D1` Agentic Architecture & Orchestration
+- `D2` Tool Design & MCP Integration
+- `D3` Claude Code Configuration & Workflows
+- `D4` Prompt Engineering & Structured Output
+- `D5` Context Management & Reliability
+
+### CCAR-F flavour
+
+CCAR-F sits between the other two tracks and its cases should read that way. The questions
+are about **how an agent is put together** — decomposition into subagents, orchestration and
+hand-off, tool boundaries and schema design, what belongs in `CLAUDE.md` versus a slash
+command versus a hook, how a prompt pins down structured output, and how context stays
+correct across a long-running run.
+
+Two boundaries keep the three hard-mode banks from converging:
+
+- **Against CCAR-P (`ccar-p/exam3|4`)**: CCAR-P cases turn on governance, stakeholder and
+  lifecycle pressure — data residency, audit, procurement, rollout politics. CCAR-F cases
+  stay inside the build. If a question's crux is a regulator or an executive, it belongs
+  to CCAR-P.
+- **Against CCDV-F (`ccdv-f/exam3|4`)**: CCDV-F cases turn on the wire — exact parameters,
+  payload shapes, error handling, SDK call sequences. CCAR-F questions may name a mechanism
+  but must not hinge on recalling a field name. If the answer is a parameter value, it
+  belongs to CCDV-F.
+
+Multiple-response items are **not** permitted here, same as §2b.
+
+---
+
 ## 3. File schema
 
 ```json

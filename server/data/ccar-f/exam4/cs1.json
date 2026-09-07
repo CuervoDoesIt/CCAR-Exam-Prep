@@ -1,0 +1,554 @@
+{
+  "examId": "ccar-f-exam4",
+  "caseId": "CS1",
+  "caseTitle": "Marbrook Payments Network — dispute and chargeback investigation agent",
+  "caseScenario": "Marbrook Payments Network is a mid-sized card network that settles roughly 41 million transactions a day for 2,300 issuing and acquiring banks. Real-time authorization risk scoring is already handled by an in-house gradient-boosted model that must answer in under 300 milliseconds, and that path is not changing. The work Marbrook wants to automate sits one layer behind it: the fraud operations group receives about 4,200 disputes a day, and 60 analysts across three sites each spend twenty to forty minutes assembling a case before they decide. Assembling a case means pulling the transaction trail for the account, the merchant's prior dispute history, device and geolocation notes captured at authorization, the acquirer's representment packet, and the outcomes of similar past disputes.\n\nThe platform team is four engineers plus two fraud subject-matter experts who write and own the decision rubric. The internal case-management system already exists and is the system of record; the agent writes nothing to it directly. Data access is exposed through a single internal MCP server that wraps the transaction datastore, the merchant graph, and the archived dispute corpus. The team develops the agent in Claude Code against that same MCP server, and the repository holds the tool manifest, the system prompts, the rubric file, and a 200-case regression corpus.\n\nAn analyst clicks 'prepare case' and waits at the screen, so the interactive path is latency-critical. A single investigation can also stay open across a long analyst session while the analyst asks follow-up questions, and the team has measured runs that reach forty tool calls over ninety minutes. Finance has modelled the programme on Claude Sonnet 5 for composition and Claude Haiku 4.5 for routing and classification, and the per-case economics are tight enough that a doubled token footprint would put the programme over budget.",
+  "caseRequirements": [
+    "R1: The analyst-facing 'prepare case' path must return a complete draft recommendation in under 8 seconds at p95.",
+    "R2: Every recommendation must be emitted as a schema-valid record carrying a fixed verdict enum and a per-claim evidence reference, so the case-management system can store it with no free-text parsing fallback.",
+    "R3: The agent holds no write capability: it may not change dispute status, post ledger entries, or contact a merchant. Every state change stays with the human analyst.",
+    "R4: A single investigation may span up to 40 tool calls over a 90-minute analyst session and must not lose, or silently restate differently, a fact it established earlier in the same run.",
+    "R5: Blended model spend per prepared case must stay at or below $0.12 at 4,200 cases per day."
+  ],
+  "questions": [
+    {
+      "id": "F4-CS1-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Marbrook must choose the top-level shape of the 'prepare case' run. Five independent evidence sources have to be gathered before a recommendation can be composed, and the analyst is waiting at the screen. Which decomposition should the team build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Chain five fixed prompt steps, one per evidence source, each step passing its full output forward to the next so the final step sees everything gathered so far.",
+          "correct": false,
+          "explanation": "Prompt chaining is the right pattern when each step genuinely depends on the previous step's output. Here the five retrievals are independent, so chaining serialises five model turns for no analytical benefit and grows the context linearly, which is the worst of both worlds for an interactive path.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "An orchestrator that fans out to read-only retrieval subagents in parallel, each working in its own context window and returning a short structured brief that the orchestrator composes into the recommendation.",
+          "correct": true,
+          "explanation": "This is the orchestrator-workers shape from Anthropic's agent guidance, and it is the only option that keeps the wall clock near the slowest single retrieval instead of the sum of five. Each worker's bulky raw records stay in its own context window, so the orchestrator's context holds five compact briefs rather than five full record sets — which is what makes a 40-call, 90-minute session survivable under R4. Option C is the genuine alternative and is simpler to build, but its sequential loop puts the sum of five retrieval round trips inside the 8-second budget, so it cannot meet R1.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A single agent holding all five retrieval tools in one context window, looping until it decides it has gathered enough evidence, then composing the recommendation in that same conversation with no hand-off contract between components at all.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a defensible design and Anthropic's guidance genuinely does say to start with the simplest thing that works: one context window means no hand-off contract to maintain, no brief-format drift, and no risk of a worker withholding a detail the composer needed. It fails R1. A single loop issues its tool calls one turn at a time, so five retrieval round trips plus a composition turn serialise inside an 8-second p95 budget that the parallel fan-out in option B spends only once.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Give each of the 60 analysts a Claude Code session pointed at the MCP server and let them drive the investigation conversationally instead of building a service.",
+          "correct": false,
+          "explanation": "This replaces a product with a tool. Every analyst would hand-assemble a differently shaped case, nothing would land in the case-management system in a consistent form, and the fraud SMEs would have no single place to change the rubric. Interactive exploration is valuable for the engineers building the agent, not as the production path for 4,200 cases a day.",
+          "citation": {
+            "title": "Claude Code best practices",
+            "url": "https://www.anthropic.com/engineering/claude-code-best-practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-02",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D3"],
+      "question": "The internal MCP server already wraps the datastore, the merchant graph and the dispute corpus. The team is deciding what the investigation agent's tool surface should contain given that analysts, not the agent, own every state change. Which tool boundary should they implement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expose one general-purpose query tool that accepts an arbitrary SQL statement against the datastore, letting the agent shape whatever retrieval each dispute needs without new tool work.",
+          "correct": false,
+          "explanation": "A general SQL escape hatch makes the tool surface unbounded: the agent can reach tables nobody scoped, results come back in shapes the composer was never designed for, and any write-capable statement is one generated token away. Anthropic's tool-writing guidance is to build a small number of purposeful, well-named tools rather than one tool that can do anything.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Register the status-update and merchant-contact tools alongside the read tools, and use MCP elicitation to ask the analyst for confirmation at the moment the agent wants to call one of them.",
+          "correct": false,
+          "explanation": "Elicitation is a real MCP client feature for gathering additional input mid-interaction, but using it here inserts a synchronous human round trip into a path that is supposed to return a draft in seconds, and it still leaves write tools inside the agent's reach. Confirmation UX is the case-management system's job, after the analyst has read the draft.",
+          "citation": {
+            "title": "MCP client concepts",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Register the full server surface including status updates, and add a clear system-prompt instruction that the agent must never call a write tool and must instead recommend the change for the analyst to make.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A competent architect might well choose this: it keeps one server definition, the instruction is unambiguous, and in practice a well-prompted model complies almost all of the time. It fails R3. A prompt is context that the model weighs, not a boundary the system enforces, so 'almost all of the time' still leaves a path by which the agent changes a dispute status. R3 says the agent holds no write capability, and the only way to hold none is not to have the tool.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Publish a read-only investigation server whose surface contains only the retrieval tools, and keep the status and merchant-contact operations on a separate server the agent is never configured with.",
+          "correct": true,
+          "explanation": "R3 is a capability statement, and capability is decided by what is registered, not by what the prompt asks for. Splitting the servers means no prompt regression, jailbreak, or injected tool result can produce a write, because no write tool exists in the session. It also keeps the investigation surface small, which helps tool selection accuracy. Option C, the runner-up, keeps one server and relies on an instruction — sound engineering practice, but an instruction cannot satisfy a requirement phrased as an absence of capability.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-03",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "The case-management system must ingest each recommendation directly: a verdict drawn from a fixed enum, plus an evidence reference attached to every individual claim. Early prototypes occasionally produced a verdict word the system did not recognise. How should the team pin the output down?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Constrain generation with a JSON schema in which the verdict field is an enum of the permitted values and each claim object requires an evidence reference, so only schema-valid output can be produced.",
+          "correct": true,
+          "explanation": "Structured outputs constrain the response to a schema through constrained decoding, so an out-of-enum verdict is not a rare event to be caught downstream — it is unrepresentable. That is exactly the guarantee R2 asks for, because R2 forbids a free-text parsing fallback. Making the evidence reference a required field on every claim object also enforces the per-claim traceability half of R2 structurally. Option B, the runner-up, catches the same errors but only after generation, and a retry loop is a fallback by another name.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Ask for the recommendation inside labelled XML output tags, parse the tags in the application layer, and re-prompt the model with the validation error whenever the verdict falls outside the permitted set.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a solid, portable technique and XML output tags are documented Anthropic guidance for shaping responses, so a careful architect could ship it. It does not meet R2. R2 requires the record to arrive storable with no free-text parsing fallback, and a parse-then-repair loop is precisely a parsing fallback: it can still exhaust its retries, and each repair turn spends latency against R1 and tokens against R5.",
+          "citation": {
+            "title": "Use XML tags to structure your prompts",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/use-xml-tags"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Prefill the start of the assistant response with the opening of the JSON object so the model is forced to continue in the required format from its first token.",
+          "correct": false,
+          "explanation": "Assistant prefill is no longer a supported technique on current Claude models, so an architecture that depends on it is building on a removed foundation. The documented replacements are structured outputs, system-prompt instructions and XML output tags. Even when prefill worked it only shaped the opening tokens and never guaranteed that a later field stayed inside an enum.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Let the composer write a free-text narrative, then run a second Haiku 4.5 call whose job is to read that narrative and extract the verdict and the evidence list into the required record shape.",
+          "correct": false,
+          "explanation": "An extraction pass adds a full second model call to the interactive budget and introduces a new failure mode: the extractor can mis-attribute an evidence reference that the composer stated correctly. It also cannot invent a citation the narrative never contained, so claims written without evidence stay evidence-free. Constrain the primary generation rather than repairing it downstream.",
+          "citation": {
+            "title": "Reduce latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-04",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The transaction datastore is eventually consistent and the merchant graph is rebuilt hourly. In a 90-minute session an analyst noticed the agent quoting a merchant dispute rate of 2.1% early on and 1.8% for the same merchant later, with no explanation. How should the run treat retrieved evidence?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Cache every tool result for 24 hours in the application layer so repeated calls within and across sessions return identical values and the agent cannot see a moving number.",
+          "correct": false,
+          "explanation": "A blanket 24-hour cache stabilises the number by making it stale, and a dispute investigation that reasons over yesterday's merchant graph can reach a verdict the current data does not support. Consistency within a run and freshness across runs are different problems; conflating them into one long cache solves the first by breaking the second.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Instruct the agent in the system prompt to always reuse a figure it has already stated earlier in the conversation rather than issuing a second call for the same fact.",
+          "correct": false,
+          "explanation": "This asks the model to police its own consistency across a 40-call transcript, which is precisely the kind of bookkeeping that degrades as context grows. It also produces the wrong behaviour when a re-read is genuinely warranted, and it leaves no record of which snapshot a stated figure came from, so a reviewing analyst still cannot reconcile the two numbers.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Pin the investigation to an as-of marker taken at run start, have every tool result carry that marker, and treat the evidence set as immutable for the run — re-reading only the few status fields that gate the verdict.",
+          "correct": true,
+          "explanation": "An explicit as-of boundary turns a distributed-systems problem into a stated one: the run reasons over one coherent snapshot, every citation is reproducible against that marker, and the narrow set of gating fields is refreshed deliberately rather than accidentally. That satisfies R4, because a fact established at minute two still means the same thing at minute eighty-five. Option D, the runner-up, chases freshness instead and re-opens exactly the drift R4 forbids.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Re-fetch all five evidence sources immediately before the composition step, so that the recommendation an analyst reads is always written against the freshest available data rather than against figures that were gathered earlier in the session.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Preferring fresh data at decision time is a reasonable instinct, and for a short single-shot job it would be the right call. In a 90-minute session it fails R4. The composer would write conclusions from a second snapshot while the reasoning that produced those conclusions came from the first, so a fact the agent established earlier gets silently restated with a different value — the exact symptom the analyst reported. It also spends a full second retrieval pass against R1.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-05",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "The tool manifest that decides which MCP tools the investigation agent registers lives in the repository, and the four engineers work on it through Claude Code. The team wants a mechanism that stops any session from adding a write-capable tool to that manifest. Where should the control live?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a rule to the project CLAUDE.md stating that the investigation manifest must contain read tools only and that write tools belong on the separate server.",
+          "correct": false,
+          "explanation": "CLAUDE.md is loaded into every session and is the right home for the standing convention, so this is worth doing — but the documentation is explicit that CLAUDE.md is treated as context rather than enforced configuration. As the only control it is advisory, and advice is not what a capability boundary needs.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Configure a PreToolUse hook that inspects any edit targeting the investigation manifest and blocks the call when the change introduces a write-capable tool entry.",
+          "correct": true,
+          "explanation": "Hooks are user-defined handlers that fire at fixed points in the Claude Code lifecycle, and PreToolUse runs before the tool call is executed, so its decision is deterministic rather than persuasive. Claude Code's own memory documentation makes the point directly: to block an action regardless of what Claude decides, use a PreToolUse hook rather than an instruction. That is what R3 needs, since R3 is about capability the agent must not have. Option C, the runner-up, catches the same change but only after it has already been made.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Define a reviewer subagent with read-only tools that inspects the manifest diff at the end of every session and reports any newly added write-capable tool entry back to the engineer.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A scoped reviewer subagent is a genuinely good pattern — it reads the diff in its own context window and returns a short report, which keeps the main session clean, and it catches mistakes a human reviewer would skim past. It does not satisfy R3. Detection runs after the edit has landed and depends on the subagent being invoked and its report being acted on, so the write-capable tool exists in the repository in the interim. R3 asks for an absence of capability, which needs a control that refuses the change.",
+          "citation": {
+            "title": "Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Package the manifest edit procedure as a slash command so engineers change the file only through a reviewed path and never by hand.",
+          "correct": false,
+          "explanation": "A skill invoked as a slash command is a good way to package a repeatable procedure, but it constrains only the sessions that choose to use it. Nothing prevents an engineer, or Claude in an ordinary session, from editing the manifest directly, so it adds convenience rather than a boundary.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/slash-commands"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-06",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D3", "D5"],
+      "question": "In load testing, the merchant-history retrieval subagent from question 1 returned about 12,000 tokens of raw dispute rows straight into the orchestrator, and by the fourth follow-up question the orchestrator's context was dominated by rows nobody referenced again. What should the team change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise the orchestrator's context budget and rely on the large context window to absorb the raw rows for the length of a 90-minute session.",
+          "correct": false,
+          "explanation": "A larger window postpones the problem rather than fixing it. Context is a finite resource with diminishing returns: irrelevant content degrades the model's focus long before it exhausts the window, and every follow-up turn re-pays the input cost of rows the orchestrator has already extracted its answer from.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Move the merchant-history retrieval out of a subagent and back into the orchestrator so there is one context window and no hand-off format to design or maintain.",
+          "correct": false,
+          "explanation": "This removes the isolation that made the fan-out worth building. The raw rows would land in the orchestrator regardless, so the context pressure is unchanged, and the orchestrator additionally re-serialises the retrievals it was running in parallel. The problem is the return contract, not the existence of the worker.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep the raw rows flowing into the orchestrator but enable server-side tool-result clearing so older results are dropped from the transcript once the conversation grows past a configured threshold.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Tool-result clearing is a real and well-targeted lever for agentic workflows with heavy tool use, and it would genuinely keep the session alive across 40 calls, so this is a defensible choice. It falls short on R4 and R1. Clearing removes results after they have been paid for on the way in, so every follow-up turn until the threshold still carries 12,000 tokens against the 8-second budget, and once a result is cleared the orchestrator can no longer re-derive a figure it stated from it — which is how a run loses a fact it established earlier.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Define a bounded return contract for every worker — a fixed set of findings with evidence references and a token ceiling — so raw rows stay inside the worker's own context window.",
+          "correct": true,
+          "explanation": "The point of a subagent is that the heavy exploration happens in a separate context window and only the summary comes back. Fixing the return contract makes that true: the worker reads 12,000 tokens of rows, and the orchestrator receives a short findings object whose evidence references still point at the underlying records, so R4's traceability survives while the orchestrator stays small across the whole session. Option C, the runner-up, treats the symptom in the transcript after the tokens have already been spent and read.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-07",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D4", "D5"],
+      "question": "Telemetry shows the agent regularly calls the merchant-history tool with a date window the service rejects, then burns a turn recovering. On roughly 3% of cases it gives up and composes a recommendation whose merchant claim carries no evidence reference. What is the right fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Tighten the tool's input schema so the window is expressed as a bounded enum of supported ranges, mark it strict so inputs are schema-constrained, and return an actionable message naming the supported ranges on any remaining error.",
+          "correct": true,
+          "explanation": "Strict tool use constrains sampling to schema-valid inputs, which makes an unsupported window unrepresentable rather than merely discouraged, so the recovery turns disappear instead of getting cheaper. That protects R2 directly: the agent no longer reaches the point of composing a merchant claim it could not evidence. Option B, the runner-up, patches the same failure in the application layer but leaves the model free to keep emitting invalid windows and does nothing about the cases where it gives up.",
+          "citation": {
+            "title": "Strict tool use",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Leave the tool's input schema open and have the application layer clamp any out-of-range window to the nearest supported one before executing the query, so that the call always succeeds, no recovery turn is wasted, and the merchant claim always ends up with an evidence reference attached.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Clamping in the application layer is a reasonable robustness measure and it does remove the wasted recovery turns, which is why an experienced engineer would reach for it. It fails R2 in a subtler way than the current bug. The agent believes it queried the window it asked for, so it cites an evidence reference describing a period the query never covered, and R2 requires every claim's evidence reference to actually support that claim. A silent correction produces confidently wrong provenance.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add a paragraph to the system prompt describing the supported date windows in detail and instructing the agent to check its window before every merchant-history call.",
+          "correct": false,
+          "explanation": "Instruction can reduce the error rate but not eliminate it, and it adds tokens to a prefix that is paid on every request. Anthropic's tool guidance is to make the tool's own contract carry the constraint: a schema the model cannot violate is strictly better than a rule the model is asked to remember.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Replace the date window with a free-text period description and let the tool implementation interpret whatever phrasing the agent produces.",
+          "correct": false,
+          "explanation": "Moving the ambiguity from the model into a natural-language parser on the server makes the failure harder to see, not less likely. Tool inputs should be typed and enumerated wherever the domain allows it, because a machine-checkable contract is the only kind either side can rely on.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-08",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "The fraud SMEs report that the agent selects the 'insufficient evidence' verdict far more often than an analyst would on the same case, and its narrative often asserts the verdict first and then lists evidence that only partly supports it. How should the team change the composition prompt?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add thirty full worked cases from the archive as examples in the system prompt so the model can pattern-match the SMEs' judgement on borderline disputes.",
+          "correct": false,
+          "explanation": "Multishot prompting helps, but thirty full cases is a very large permanent addition to the cached prefix that is paid on every one of 4,200 daily requests, and examples teach house style more reliably than they teach a decision boundary. A small number of carefully chosen edge cases attached to an explicit rubric does far more work per token.",
+          "citation": {
+            "title": "Use examples (multishot prompting)",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/multishot-prompting"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have the model emit a self-rated confidence score alongside the verdict and downgrade any verdict scoring under 80 to 'insufficient evidence' in the application layer.",
+          "correct": false,
+          "explanation": "A self-reported score is not a calibrated probability and adding a threshold on top of it manufactures precision that was never there. It also pushes the system further in the direction the SMEs are already complaining about, since the downgrade rule can only ever increase the rate of 'insufficient evidence' verdicts.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Put the SMEs' rubric in the prompt with each verdict value defined by the evidence it requires, and order the output so evidence references and the rubric checks are emitted before the verdict is chosen.",
+          "correct": true,
+          "explanation": "Both symptoms have the same root cause: the model is choosing a label before it has assembled the grounds for it, and 'insufficient evidence' is the safe label to reach for under that uncertainty. Making the schema emit evidence and rubric checks first forces the verdict to be a consequence of what was found rather than a guess the narrative then decorates, and it costs no extra latency because it is one generation. Option D buys deliberation instead, at a price R5 cannot absorb.",
+          "citation": {
+            "title": "Claude prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Raise the composition step's reasoning effort above the default and turn on extended thinking, so the model deliberates over the rubric and the assembled evidence at considerably greater length before it commits to any particular verdict value.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "More deliberation is a legitimate lever and would probably improve borderline judgement, so this is a real contender rather than a straw man. It fails R5. Thinking tokens are billed as output, and applying them to every one of 4,200 daily cases is exactly the doubled token footprint the finance model cannot absorb at a $0.12 per-case ceiling — and the added generation time eats into R1 as well. Option C fixes the same reasoning defect by restructuring one generation instead of buying more of it.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-09",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "At the 09:00 dispute peak the merchant-graph service starts timing out on about 15% of calls. The retrieval worker receives the timeout as a tool error. What should the worker do so the analyst still gets a usable case within the interactive budget?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Return an empty tool result with no error indication so the composer treats the merchant history as containing nothing of note and finishes the recommendation without delay.",
+          "correct": false,
+          "explanation": "An empty result is indistinguishable from a clean merchant record, so the composer will write a recommendation that reads as though the merchant history was checked and found unremarkable. That is worse than a visible failure: it produces a confident claim with no evidence behind it, which R2's per-claim traceability exists to prevent.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Substitute the merchant's last successfully retrieved profile from the archive, up to thirty days old, and present it to the composer as the current merchant history.",
+          "correct": false,
+          "explanation": "A thirty-day-old profile presented as current is fabricated provenance. Dispute rates move quickly on a merchant that has just started attracting fraud, so the stale figure is most misleading exactly when it matters most. If a fallback source is used at all it has to arrive labelled as such with its own as-of marker.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Retry the call with exponential backoff up to five attempts so the transient peak-hour timeouts clear and the composer receives complete merchant evidence on almost every case.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Retrying through a transient dependency failure is standard practice and would indeed recover most of the 15%, so a careful engineer would defend it. It fails R1. Five exponential attempts can add several seconds to a single retrieval, and at peak the failures are correlated across concurrent cases, so the tail lands well outside an 8-second p95 rather than merely near it. Retry is right; unbounded retry inside an interactive budget is not.",
+          "citation": {
+            "title": "Errors",
+            "url": "https://platform.claude.com/docs/en/api/errors"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Retry once inside a hard wall-clock cap, then return an error result naming the unavailable source, so the composer selects the verdict value reserved for incomplete evidence and records the gap.",
+          "correct": true,
+          "explanation": "One bounded retry captures most transient timeouts while the wall-clock cap guarantees the degradation path cannot consume the R1 budget, and an error result that names what is missing lets the model act on it rather than guess. Routing the outcome to the enum value reserved for incomplete evidence keeps R2 intact, because the missing source is recorded as a gap instead of quietly becoming an unevidenced claim. Option C gets the retry logic right but has no ceiling, which is what puts it outside R1.",
+          "citation": {
+            "title": "Handle tool calls",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-10",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The two fraud SMEs own the rubric file but do not write application code. Before any rubric change ships they need to run it against the 200-case regression corpus and see how the verdict distribution moved. How should the team give them that capability in Claude Code?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Give the SMEs write access to the deployed system prompt behind a feature flag so they can adjust the rubric in production and watch live verdict distribution move before enabling it for all analysts.",
+          "correct": false,
+          "explanation": "This makes production the test environment and the analysts the test subjects. The regression corpus exists precisely so a rubric change can be judged against known cases before it touches live disputes, and live distribution drift is a lagging, noisy signal that mixes rubric changes with genuine changes in fraud patterns.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Ship a project skill invoked as a slash command that runs the 200-case corpus headlessly, asserts every output is schema-valid against the verdict enum, and prints the distribution diff against the stored baseline.",
+          "correct": true,
+          "explanation": "A skill is the right container for a repeatable multi-step procedure: its body loads only when invoked, it is versioned with the repository so every SME runs the same harness, and it can be invoked by name without any code knowledge. Crucially it asserts schema validity across all 200 cases mechanically, which is what protects R2 — the case-management system depends on that enum contract and a human reading samples cannot verify it. Option C, the runner-up, describes the same procedure but never checks it.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/slash-commands"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Write the regression procedure into CLAUDE.md so every session already knows how to run the corpus, and have each SME ask Claude to work through the 200 cases and summarise what changed.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "There is real merit here: CLAUDE.md loads in every session, it needs no tooling, and an SME can start immediately with a plain-language request. It fails R2. The procedure produces a narrative summary, not a mechanical assertion, so nothing guarantees that all 200 outputs still carry a valid verdict enum value before the change ships — and CLAUDE.md is context rather than enforced configuration, so a session can simply not follow it. It also loads the full procedure into every unrelated session.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Move the rubric text into CLAUDE.md so the SMEs edit it there, and have the production service read the same file at startup to keep one copy of the rules.",
+          "correct": false,
+          "explanation": "CLAUDE.md is a Claude Code memory file, not a production configuration artifact, and wiring a running service to it couples the deployed rubric to a developer-tooling convention. Keep the rubric in a versioned data file that both the service and the harness read, and let CLAUDE.md hold the short standing rules about how to change it.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS1-11",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D4", "D5"],
+      "question": "Marbrook now wants a nightly re-review of 60,000 auto-declined transactions, reusing the same evidence retrieval and the same recommendation record. Analysts continue working the interactive queue the following morning. How should the second workload be built?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Drop the schema constraint on the nightly path to save output tokens, since no analyst reads those records directly and the case-management system can be taught to tolerate looser input for the batch feed.",
+          "correct": false,
+          "explanation": "This trades away R2 for a marginal token saving and creates two output contracts where there was one. The case-management system is the system of record for both workloads, and a second, looser ingestion path is a permanent maintenance cost plus a permanent source of records that cannot be compared with the interactive ones.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Reuse the interactive orchestrator unchanged and run the nightly job at high concurrency against the same capacity, finishing the 60,000 records well before the morning shift begins.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "One code path for both workloads is a genuinely attractive property — no second deployment, no divergence between what analysts see and what the batch produces — so this is the defensible alternative. It fails R1. A high-concurrency overnight job draws on the same rate-limited capacity as the interactive queue, and any overrun into the morning shift, or any retry backlog, competes directly with analysts waiting at the screen on an 8-second p95. The two workloads need separated capacity, not shared.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep the interactive orchestrator for analysts and run the nightly composition through the Message Batches API, reusing the same retrieval workers, the same rubric and the same output schema.",
+          "correct": true,
+          "explanation": "The nightly job has no waiting human, so R1 simply does not apply to it and the asynchronous batch path is a better fit: it runs on separate capacity rather than competing with the morning queue, and its discount is what keeps 60,000 additional records inside the R5 economics. Reusing the retrieval workers, rubric and schema means R2 holds identically on both paths. Option B's shared-capacity approach is simpler to deploy but puts the batch and the analysts in contention for the same throughput.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Swap the composition model to Haiku 4.5 for the nightly path on cost grounds and ship it, monitoring the verdict distribution afterwards to see whether quality held up.",
+          "correct": false,
+          "explanation": "Choosing a cheaper model for a less latency-sensitive workload is reasonable, but committing to it before running the 200-case regression corpus inverts the order the team already established. Model changes are eval decisions first and cost decisions second, and the harness that would answer the question already exists.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,555 @@
+{
+  "examId": "ccar-f-exam4",
+  "caseId": "CS3",
+  "caseTitle": "Larkfield Veterinary Partners — multi-site triage and patient-records assistant",
+  "caseScenario": "Larkfield Veterinary Partners operates thirty-eight general practices and two 24-hour emergency hospitals across four regions, sharing a single practice-management system that holds 1.1 million animal patient records going back twelve years. Two pieces of work are being automated. The first is phone triage: a client service representative takes a call, describes the presenting signs, and needs an urgency band and a next step while the caller is still on the line. Larkfield handles about 26,000 such calls a month. The second is records summarisation: before a referral or a complex consult, a veterinarian asks for a chronological summary of a patient's history, which for an older animal can run to four hundred visit notes across a dozen clinicians and several clinics. That happens about 9,000 times a month.\n\nThe two workloads have almost nothing in common operationally. Triage is short, extremely latency-sensitive, and is performed by non-clinical staff who must not be handed anything that reads like a clinical decision. Records summarisation is longer-running, is read by a veterinarian, and its failure mode is omission rather than delay. Larkfield's protocol committee publishes a single triage rubric with five urgency bands, but each practice layers local variation on top: which cases the practice will see same-day, which it refers to the nearest emergency hospital, and which items its dispensary actually stocks.\n\nThe build team is five engineers plus one veterinary informaticist who owns the rubric and the clinic-level variations and does not write application code. They work in Claude Code against a repository holding the rubric, the generated per-clinic delta files, the prompt templates and a triage evaluation set. The practice-management vendor ships its own MCP server exposing about sixty tools covering lookups, scheduling, invoicing, discharge and dispensing. Larkfield has modelled the programme on Claude Haiku 4.5 for the triage path and Claude Sonnet 5 for records work, and the annual budget is fixed.",
+  "caseRequirements": [
+    "R1: The triage path must return an urgency band and a next step in under 3 seconds at p95, while the caller is on the line.",
+    "R2: Every triage result must carry one of the five published urgency bands in a form the phone system renders directly, with no free-text parsing anywhere in the path.",
+    "R3: The triage agent must never state a diagnosis or a drug dose, and must not write to the practice-management system; it may only surface protocol text and route to a clinician.",
+    "R4: Per-clinic protocol and formulary variation across all thirty-eight practices must be honoured without maintaining a separate agent or prompt definition per clinic.",
+    "R5: A records summary must be built from the complete visit history of the single identified patient — up to 400 notes over 12 years — with no visit silently dropped and no visit belonging to another patient included.",
+    "R6: Blended annual model spend must stay within $180,000 at 26,000 triage calls and 9,000 records summaries per month."
+  ],
+  "questions": [
+    {
+      "id": "F4-CS3-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D4", "D5"],
+      "question": "The triage path has a hard interactive budget because the caller is waiting. The model needs the patient's species, age and recent visit flags, plus the calling practice's protocol delta, before it can band the case. How should that path be assembled?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Give the triage agent a patient-lookup tool and a protocol-lookup tool and let it call whichever it decides it needs before producing the band.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is the ordinary agentic shape and it would band cases correctly, but it fails R1: letting the model decide adds at least one and possibly two extra model turns to a path measured in single-digit seconds, and it makes the p95 depend on a routing choice that varies call to call. The inputs here are already known from the call context, so there is nothing for the model to discover by asking.",
+          "citation": {
+            "title": "Reduce latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run a triage panel of three specialised agents — species, presenting signs and practice capability — and combine their bands into a final recommendation.",
+          "correct": false,
+          "explanation": "Multi-agent structures earn their cost when a task decomposes into genuinely parallel investigations with substantial work in each branch. Banding one phone call against a five-band rubric is a single small judgement, so a panel multiplies both latency and spend to arrive at the answer one constrained call already produces.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Queue triage requests and process them through the Message Batches API to hold spend down, returning the band to the representative as soon as the batch entry completes.",
+          "correct": false,
+          "explanation": "Batch processing is asynchronous and is designed for work with no waiting human, which is the opposite of a caller on the line. The discount is real but irrelevant here; the correct place for Larkfield to spend batch economics is offline evaluation runs, not the interactive path.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have the application fetch the patient context and the practice delta deterministically before calling the model, then make a single constrained call that emits the band and next step.",
+          "correct": true,
+          "explanation": "When every input is known from the call context, retrieval belongs in the application rather than in a tool loop: the fetches run concurrently and off the model's clock, so the interactive budget pays for exactly one model turn. That is what makes R1 achievable with headroom rather than by luck. Option A is the defensible agentic alternative, but it spends the same budget on round trips whose outcome was never in doubt.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-02",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "In pilot testing the triage assistant occasionally wrote sentences a client service representative could read as clinical advice — naming a likely condition, or suggesting an over-the-counter product and an amount. How should the team make that outcome structurally unavailable?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Rely on Claude's safety training, which already avoids giving veterinary medical advice to non-clinicians in most phrasings, and monitor pilot transcripts for exceptions.",
+          "correct": false,
+          "explanation": "Model training shapes default behaviour but is not a product boundary, and the phrasings that slip through are precisely the ones nobody anticipated. A requirement expressed as 'never' has to be met by the system's structure rather than by the base rate of a behaviour.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Prefill the assistant's response with the opening of the band statement so the reply always begins with the urgency band rather than with a clinical observation.",
+          "correct": false,
+          "explanation": "Assistant prefill is no longer a valid technique on current Claude models, so this cannot be relied on at all. Even historically it only fixed the first few tokens and left everything after them unconstrained, which is where a stray dose or condition name would have appeared anyway.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Constrain the response to a schema with an urgency band enum, a next-step enum, and one text field that must be a verbatim quotation from the retrieved protocol — with no field in which a condition or a dose could be written.",
+          "correct": true,
+          "explanation": "The cleanest way to guarantee that something is never said is to leave nowhere to say it. Constrained decoding means the response can only contain the enumerated band, the enumerated next step, and protocol text the committee already approved, so a diagnosis or a dose is not filtered out — it is unrepresentable, which is what R3's 'never' requires. It also satisfies R2 in the same stroke. Option D catches most of the same output but only after the model has produced it.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep the free-text response, add explicit system-prompt instructions never to name a condition or state a dose, and run the output through a classifier that blocks anything containing dose-like or diagnostic language before it reaches the representative.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Instruction plus an output filter is genuine defence in depth and would catch the great majority of cases, so a careful team could ship it. It fails R3. A blocklist or classifier over free text is best-effort by construction — it cannot enumerate every phrasing of a dose or a condition, and every miss reaches a non-clinician. It also inserts a second inference into a 3-second budget. Option C removes the affordance instead of policing it.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-03",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D3"],
+      "question": "The vendor MCP server exposes about sixty tools spanning lookups, scheduling, invoicing, discharge and dispensing. Both the triage assistant and the veterinarian-facing records assistant need to reach that server. How should the tool surfaces be arranged?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Register the vendor's full sixty-tool surface for both assistants so neither is ever missing a capability, and let each one's system prompt describe which tools are appropriate for its role.",
+          "correct": false,
+          "explanation": "Sixty definitions in every request is both a cost the triage path cannot afford in its latency budget and a selection problem, since tool choice accuracy is known to degrade well before that count. Describing appropriate use in a prompt also leaves dispensing and invoicing tools genuinely reachable from a path that must never touch them.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Give each assistant its own explicit allow-list — the triage assistant gets only the read lookups it needs, while formulary, scheduling and discharge tools are registered solely for the clinician-facing records assistant.",
+          "correct": true,
+          "explanation": "Role-scoped tool surfaces make R3 a property of the configuration rather than of the model's judgement: the triage assistant cannot write to the practice-management system or reach dispensing data because those tools do not exist in its session. The smaller surface also keeps the triage prefix short, which matters directly against R1. Option C keeps one surface and enforces the split at call time, which means the boundary depends on an argument the model fills in.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Register one shared tool surface for both assistants and add a caller-role argument that every tool requires, with the server rejecting any operation not permitted for the role the agent supplied on that call.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Server-side authorisation on a single surface is a normal and respectable design — one server to maintain, the policy lives in one place, and the server has the final say. It fails R3. The role is a value the model supplies, so the boundary is only as reliable as the model's argument construction, and the write tools remain visible and callable in a session that R3 says must hold no write capability. The rejection also arrives as a tool error mid-call rather than as an absence.",
+          "citation": {
+            "title": "MCP server concepts",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Wrap the vendor server in a proxy that strips dangerous tool results before they reach either assistant, leaving the registered tool list untouched.",
+          "correct": false,
+          "explanation": "Filtering results addresses the wrong direction of travel. The risk with dispensing and discharge tools is what invoking them does, not what they return, and a proxy that lets the call through and edits the response has already allowed the side effect. Scope the tools that can be invoked, not the text that comes back.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-04",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "A twelve-year-old patient can have four hundred visit notes written by a dozen clinicians across several practices. Veterinarians complain that summaries lean heavily on the last two years and quietly skip early history. How should the records assistant be built?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Summarise the history in chronological sections, emit a structured per-section summary for each, then merge the sections into the final chronology so every section is represented.",
+          "correct": true,
+          "explanation": "Sectioning is the parallelisation pattern applied to a corpus: each slice gets the model's full attention on a small input, and the merge step works from summaries rather than from four hundred raw notes. Because every section must produce a summary before the merge runs, coverage becomes a structural property instead of something the model has to remember to do — which is what R5's 'no visit silently dropped' actually needs. Option B keeps everything in one pass and lets recency win.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Put the entire twelve-year history into a single long-context call and apply Anthropic's long-context prompting guidance — history at the top, the request at the end, and an instruction to quote relevant notes before summarising them.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a legitimate technique and the guidance it cites is real, so it is a reasonable first attempt and would improve on today's behaviour. It fails R6. Four hundred notes is a very large input paid on every one of 9,000 monthly summaries, and one long pass over a fixed annual budget is where the money goes. It also only mitigates the recency skew that R5 forbids rather than removing it, because nothing forces the early years to be represented.",
+          "citation": {
+            "title": "Long context prompting tips",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/long-context-tips"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Summarise only the most recent thirty visits, on the basis that older history is rarely clinically relevant and this keeps both latency and spend predictable.",
+          "correct": false,
+          "explanation": "A fixed recency window is exactly the behaviour the veterinarians are objecting to, formalised. Chronic disease, prior adverse reactions and old surgical history are frequently the most decision-relevant items in a referral summary, and a window that drops them produces a summary that is confidently incomplete.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Feed the notes into the model turn by turn and enable compaction so older notes are summarised away automatically as the context fills.",
+          "correct": false,
+          "explanation": "Compaction manages a growing conversation in a long-running agentic session; this is a one-shot summarisation over a fixed corpus. Using it here means the earliest notes are compressed by a general-purpose summariser with no knowledge of what the veterinarian asked for, which reintroduces the omission problem through a different door.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-05",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The phone system is built against the five-band contract. A rubric edit last month shipped a sixth band label and the phone integration failed in two practices before it was rolled back. The team wants a release control in their Claude Code workflow. What should they put in place?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask the informaticist to review every rubric change with an engineer before it merges.",
+          "correct": false,
+          "explanation": "Pairing on the change is good practice but it is a process, not a control, and the failure mode here is one a reviewer is especially likely to miss: a new band label reads perfectly sensibly to a human and only breaks at the integration boundary. The check needs to be mechanical because the contract it protects is mechanical.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have the phone system fall back to a default band whenever it receives a label it does not recognise, so an unexpected rubric change degrades gracefully instead of failing.",
+          "correct": false,
+          "explanation": "Silently substituting a default urgency band for one the system did not understand is worse than the outage it replaces: a case the rubric marked urgent would be delivered to the representative as something else entirely, with nothing on screen to indicate a substitution happened.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Record in the project CLAUDE.md that any rubric change must be validated against the five published bands and the triage evaluation set before it is merged, so the rule is loaded into every session automatically.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Writing the rule where every session sees it is worth doing and costs nothing, so this belongs in the answer — just not as the whole of it. It fails R2. The documentation is explicit that CLAUDE.md is treated as context rather than enforced configuration, so a session can merge a rubric change without running anything, which is how the sixth band reached production in the first place. R2 is a contract the phone system depends on and needs a check that can refuse.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add a hook that fires on the rubric file and blocks the change unless the eval skill has been run, and package that eval as a slash command the informaticist can invoke.",
+          "correct": true,
+          "explanation": "Hooks execute automatically at defined points in the Claude Code lifecycle and return a decision, so the gate holds regardless of what any given session decides to do — which is the property a contract like R2 requires. Packaging the evaluation as a skill gives the informaticist a one-word way to run it and keeps the procedure versioned with the repository rather than living in someone's habits. Option C states the same rule but has no way to enforce it.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-06",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "When triage lands in the two most urgent bands, the case is handed to the on-call clinician's records assistant so a veterinarian gets context before the animal arrives. What should cross that hand-off boundary?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Re-run the triage assistant's inputs through the records assistant so it reaches its own conclusion independently and is not anchored by the first assistant's judgement.",
+          "correct": false,
+          "explanation": "Independent re-derivation guarantees the two systems can disagree about how urgent the same call was, which is the one outcome a hand-off exists to prevent. It also spends a second full triage inference on every urgent case and leaves the clinician with two bands and no rule for which one governs.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Hand over only the patient identifier and let the records assistant retrieve everything else itself, keeping the boundary as thin as possible.",
+          "correct": false,
+          "explanation": "An identifier alone discards the part that cannot be recovered from the record: what the caller actually described on the phone and which protocol rule produced the band. The records assistant would rebuild a plausible picture from history and miss the presenting signs entirely, so the hand-off loses precisely the information it existed to carry.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A bounded structured record carrying the band enum value already given to the caller, the protocol references that produced it, and the representative's verbatim description of the presenting signs.",
+          "correct": true,
+          "explanation": "A hand-off is an interface, and the useful shape is a small record with a fixed contract rather than a replay of everything that happened. Carrying the band as the enum value the caller was actually given means the clinician sees the same band the phone system rendered, so R2's single contract holds across the boundary instead of being re-derived. The verbatim description preserves what only the call contained. Option D carries more but in a form the receiver has to interpret.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Pass the complete triage conversation transcript to the records assistant so nothing at all is lost in translation and the clinician can see exactly how the representative described the case as it unfolded.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Losing nothing is a reasonable instinct for a clinical hand-off and this is genuinely the safest-feeling option, which is what makes it the tempting one. It fails R2. A transcript is free text, so the records assistant has to infer the urgency band by reading it rather than receiving it, and any inference that differs from what the caller was told puts two different bands on the same case. R2 exists to keep one band value authoritative end to end.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-07",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "The protocol committee's rubric is shared, but each of the thirty-eight practices has its own same-day list, referral pathway and dispensary stock. The triage prompt has to reflect the calling practice. How should the per-clinic variation be handled?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep one system prompt holding the shared rubric as a stable prefix, and append the calling practice's delta as a clearly delimited block after it.",
+          "correct": true,
+          "explanation": "This keeps a single rubric definition, so a committee change propagates to all thirty-eight practices at once as R4 intends, and delimiting the delta gives the model an unambiguous signal about which rules are local. Putting the shared, unchanging material first and the small variable block after it also means the large part of the prefix is identical across every practice, which is what keeps 26,000 monthly calls inside the R6 budget. Option B gets the behaviour right but forks the rubric to do it.",
+          "citation": {
+            "title": "Use XML tags to structure your prompts",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/use-xml-tags"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Generate thirty-eight complete system prompts from a template, one per practice, each already containing that practice's same-day list, referral pathway and dispensary stock baked into a single self-contained document.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Generated-from-a-template is a real pattern, it produces exactly correct behaviour per practice, and the generation step means nobody hand-edits thirty-eight files — so this deserves consideration. It fails R4, which asks for the variation to be honoured without a separate prompt definition per clinic, and thirty-eight generated documents are thirty-eight definitions regardless of how they were produced. Thirty-eight distinct prefixes also fragment prefix reuse, which pushes on R6 for the smaller practices.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Load all thirty-eight practices' deltas into every request and instruct the model to apply only the section matching the calling practice.",
+          "correct": false,
+          "explanation": "This pays for thirty-seven irrelevant blocks on every call and asks the model to do a selection job the application already knows the answer to. Irrelevant context degrades focus as well as costing tokens, and a misapplied section would route a caller according to another practice's referral pathway.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Drop the per-practice variation from the prompt and have the model call a protocol tool at run time to ask what the calling practice does.",
+          "correct": false,
+          "explanation": "The practice is known before the call reaches the model, so turning a known input into a tool round trip adds a turn to a three-second budget for information the application could simply have supplied. Tool calls are for things that must be discovered, not for things already in hand.",
+          "citation": {
+            "title": "Reduce latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-08",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D3"],
+      "question": "A veterinarian found a records summary that mixed two animals: a household with two cats both called Mabel, seen at different practices. Partway through the summary the assistant switched to the other patient's visits. What should the team change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a disambiguation step at the start that asks the requesting veterinarian to confirm which patient is meant when more than one match is found.",
+          "correct": false,
+          "explanation": "Resolving the ambiguity up front is necessary and worth doing, but on its own it only fixes the first moment of the run. Nothing in this option prevents a later retrieval from matching on the name again and pulling the other Mabel's visits into a summary that was correctly identified at the start.",
+          "citation": {
+            "title": "MCP client concepts",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Resolve the patient to a single identifier before the run begins and give the assistant only tools that require that identifier, with no name-based lookup available to it at all.",
+          "correct": true,
+          "explanation": "Identity drift happens because the run has two ways to say which animal it means, and one of them is ambiguous. Removing name-based lookup from the tool surface leaves exactly one, so every retrieval in the run is bound to the identifier resolved at the start and there is no path by which another patient's visits can enter. That is what R5 needs, because R5 forbids foreign visits as firmly as it forbids missing ones. Option C asks the model to police the same boundary on every call instead.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Instruct the assistant to check that the patient identifier on every retrieved record matches the one it started with, and to discard any record that does not match before including it in the summary.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "As a validation rule this is exactly right, and an assistant that follows it reliably would produce clean summaries — so it is a fair answer rather than a careless one. It fails R5. The check has to hold across four hundred notes and many turns, and a per-record instruction is the kind of bookkeeping that degrades as context grows, so a single missed comparison lets a foreign visit through. Discarding after retrieval also means the wrong record already occupied context and displaced attention.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have the assistant summarise both matching patients and label each section so the veterinarian can tell them apart.",
+          "correct": false,
+          "explanation": "Producing a document about two animals when one was requested moves the disambiguation to the reader at the point of highest risk, just before a referral or a complex consult. R5 is explicit that a summary covers a single identified patient, and a labelled merge is still a merge.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-09",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "In the vendor's vocabulary a 'client' is the owner and a 'patient' is the animal. Traces show the triage assistant calling the owner-history tool when it wanted the animal's history, roughly once in twenty calls, then spending a turn recovering. What is the right fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Retry with the other tool automatically in the application layer whenever the first result looks like the wrong entity type.",
+          "correct": false,
+          "explanation": "Inferring intent from the shape of a result and silently calling something else is guesswork dressed as robustness, and it still costs the round trip it was meant to save. It also masks the confusion from the telemetry that would otherwise show the tool surface needs work.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Remove the owner-history tool from the triage surface so the confusion cannot arise.",
+          "correct": false,
+          "explanation": "Owner history genuinely matters in triage — prior no-shows, other animals in the household, whether this caller has phoned twice today — so deleting it to avoid a naming problem trades a capability for a fix that belongs in the naming. Scope tool surfaces by role, not by which tools the model currently confuses.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add a paragraph to the triage system prompt explaining the vendor's client-versus-patient distinction in detail and reminding the model which tool applies to the animal and which to the owner, with worked examples of each.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Explaining domain vocabulary in the prompt is normal practice and would reduce the error rate meaningfully, which is why it is the natural first move. It fails R1 twice over. The explanation is paid on every one of 26,000 monthly calls inside a three-second budget, and because it lowers rather than eliminates the confusion, the recovery turns that were the original latency problem still happen. Anthropic's guidance is to fix the tool surface rather than describe around it.",
+          "citation": {
+            "title": "Claude prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Rename the tools to namespace them by resource — animal versus owner — and rewrite each description to state plainly when it applies, then re-run the triage evaluation set.",
+          "correct": true,
+          "explanation": "Anthropic's tool-writing guidance treats naming and namespacing by resource as a first-class lever, and notes that the choice has measurable effects on tool-use evaluations, which is why the change is paired with a re-run of the eval set rather than assumed to work. Fixing the names removes the ambiguity at source, so no recovery turns are spent and no prefix tokens are added — both of which matter directly to R1. Option C describes the distinction instead of removing it.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-10",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The informaticist regenerates the thirty-eight per-clinic delta files from the committee's source protocol spreadsheet whenever a practice changes its same-day list. She currently re-explains the multi-step procedure to Claude Code every time. How should this be packaged?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Define a subagent whose system prompt contains the regeneration procedure so it can be delegated to whenever the informaticist mentions a protocol change.",
+          "correct": false,
+          "explanation": "Subagents are for work that would otherwise flood the main conversation with intermediate output and that benefits from its own context window and tool restrictions. This is a short deterministic procedure the informaticist invokes deliberately, so a subagent adds a delegation decision and a description competing for context without buying isolation anyone needs.",
+          "citation": {
+            "title": "Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add a hook on the source spreadsheet that regenerates all thirty-eight delta files automatically whenever the file changes.",
+          "correct": false,
+          "explanation": "Regeneration is something the informaticist chooses to do after she has finished editing, not something that should fire on every intermediate save. Hooks are the right mechanism when a control must hold regardless of intent — such as the release gate on the rubric — rather than for a procedure a person deliberately triggers.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Package the procedure as a project skill invoked as a slash command, so its body loads only when she runs it and the steps are versioned with the repository.",
+          "correct": true,
+          "explanation": "This is the documented case for a skill: a section of instructions that has grown into a procedure belongs in a skill rather than in memory, because a skill's body loads only when it is used and so costs nothing until then. It also gives the informaticist a single invocation with no code, and puts the steps under version control alongside the deltas they produce. Option D makes the same procedure available but at the cost of loading it, and much else, into every session.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/slash-commands"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Write the regeneration steps into the project CLAUDE.md along with a table of all thirty-eight practices and their current same-day lists, so any session already has both the procedure and the clinic detail available without being asked.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "CLAUDE.md loads automatically in every session, needs no new files, and putting the procedure somewhere Claude always sees it is a reasonable instinct — this is the option most teams reach for first. It fails R4. A thirty-eight-row table of per-practice lists inside CLAUDE.md is a second hand-maintained copy of exactly the per-clinic detail R4 says must not be duplicated, and it will drift from the generated deltas. It also loads that table into every unrelated session.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS3-11",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D4", "D5"],
+      "question": "Larkfield acquires eleven practices running a different practice-management system with its own MCP server and a different record model. Both estates must be served by triage within a quarter, and the protocol committee's rubric stays common across all forty-nine practices. What should the team build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put an adapter behind the existing tool contract that normalises both vendors' record models, leaving the agent's tool surface, rubric and delta mechanism unchanged.",
+          "correct": true,
+          "explanation": "The vendor difference is a data-shape problem, so it belongs in the layer that produces tool results rather than in the agent. Normalising behind an unchanged contract means one agent, one rubric and one delta mechanism still cover forty-nine practices, which is exactly what R4 asks for as the estate grows. It also preserves the single band contract R2 depends on, because both estates emit through the same constrained output. Option C ships faster but forks everything the adapter would have kept common.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Register both vendors' MCP servers on the triage agent and let it choose the right tools for whichever practice is calling.",
+          "correct": false,
+          "explanation": "This roughly doubles the registered tool count on the latency-critical path and asks the model to hold two overlapping vocabularies for the same concepts, which is precisely the selection problem that tool naming guidance warns about. It also spreads vendor-specific knowledge into the prompt, where it is hardest to test and change.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Stand up a second triage agent for the acquired estate with its own tool surface and its own copy of the rubric, keeping the two systems fully independent so neither migration can destabilise the other during the quarter.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Isolation is a defensible integration strategy under a tight deadline: the acquired estate ships without touching a working system, and a problem in one estate cannot take down the other. It fails R4. A second agent with its own rubric copy is a second definition to maintain, so every committee change now has to be applied twice and the two estates will diverge in exactly the per-practice detail R4 was written to keep unified. The isolation is temporary; the fork is not.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Migrate the eleven acquired practices onto the incumbent practice-management system before extending triage to them.",
+          "correct": false,
+          "explanation": "A practice-management migration across eleven sites is a multi-quarter clinical-systems programme, so this answers an agent-architecture question by deferring it past the deadline. The adapter exists precisely so the agent does not have to wait for the estate to become uniform.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

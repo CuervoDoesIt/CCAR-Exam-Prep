@@ -1,0 +1,555 @@
+{
+  "examId": "ccar-f-exam3",
+  "caseId": "CS2",
+  "caseTitle": "Amberline Energy — \"Feeder\" grid outage-triage and crew-dispatch agent",
+  "caseScenario": "Amberline Energy is an investor-owned electric utility serving 1.9 million meters across 41,000 kilometres of distribution line. Its Distribution Operations Centre (DOC) is staffed around the clock by nine dispatchers, and during a major storm the centre absorbs roughly 900 outage events an hour: meter-out pings from the AMI head end, fault-indicator trips reported through SCADA, and customer calls landing in the outage management system (OMS).\n\nSix engineers, two of them power-systems subject-matter experts, are building Feeder — three related capabilities rather than one. Triage correlates the incoming signal into a probable fault location on a specific line section. A dispatch advisor turns a confirmed fault into a crew recommendation, weighing crew skill, current location and outstanding restoration work. A nightly forecast narrator summarises day-ahead load against weather for the planning group. Triage must return a candidate fault location within twenty seconds of an event arriving, and it must hold that at storm volume, not just on a quiet Tuesday.\n\nThe DOC is a safety-critical room. Crews work on de-energised conductors on the strength of what the OMS says, so Feeder recommends and never acts: no agent has, or will ever be given, a switching or energization capability. Circuit topology is not static either — crews open and close sectionalizing devices several times an hour during restoration, so a fault location computed against a stale connectivity model can send a crew to the wrong span. The engineers maintain a 120-case triage regression suite drawn from three previous storms, and the DOC has a documented rule-based correlator, written before Feeder existed, that still runs today.",
+  "caseRequirements": [
+    "R1: During storm surge the triage path must return a candidate fault location within 20 seconds of event arrival, sustained at 900 events per hour.",
+    "R2: No agent may ever issue a switching or energization command; field actions are recommendations that a named dispatcher accepts in the OMS, and the capability must be absent from every agent's tool surface.",
+    "R3: Every crew-dispatch recommendation must state the evidence it used — device identifiers, meter-out counts, GIS span — and must be reproducible: the same inputs must yield the same recommendation.",
+    "R4: Feeder must not act on distribution topology it read more than 5 minutes ago.",
+    "R5: If the model or a required tool is unavailable, the triage path must degrade to the documented rule-based correlator automatically, without dispatcher intervention.",
+    "R6: Any change to the triage prompt or correlation logic must pass the 120-case regression suite before it reaches the operations desk, with no manual step an engineer can skip."
+  ],
+  "questions": [
+    {
+      "id": "F3-CS2-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Feeder's triage path must produce a candidate fault location within twenty seconds of each event, sustained at 900 events an hour, while the DOC's existing rule-based correlator already resolves the majority of simple single-device trips. How should the triage path be structured?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Give every distribution feeder its own persistent agent that watches its circuit continuously and reasons about each new event in the light of everything it has seen on that feeder tonight.",
+          "correct": false,
+          "explanation": "Thousands of persistent agents each accumulating a night's history is a large amount of orchestration for a decision that is essentially a correlation over a fixed evidence set. Anthropic's guidance is to reach for agentic complexity only when it measurably improves outcomes, and a growing per-feeder history also makes the recommendation depend on what happened earlier, which works against reproducibility.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run the existing rule-based correlator first and call the model once over a pre-assembled evidence bundle; only events the correlator cannot resolve enter a bounded agentic loop.",
+          "correct": true,
+          "explanation": "This is the workflow-before-agent principle applied at the right seam: the deterministic correlator disposes of the easy majority at no model cost, and the remainder gets a single predictable call whose latency is one round trip rather than a variable number of them. That is what makes R1 achievable at 900 events an hour. Keeping the rule-based correlator in the live path also means R5's fallback is a component that runs every day rather than an untested branch. Option D is bounded but is a worst case of four round trips on a twenty-second budget.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Send every event straight to a full agentic loop, choosing the fastest available model so that the per-iteration cost stays low enough to absorb the storm volume.",
+          "correct": false,
+          "explanation": "A faster model reduces the cost of each iteration but not the number of iterations, and the tail is what a p95-style budget is made of. It also puts the model in the critical path for events the existing correlator already resolves deterministically, spending both latency and money to reproduce an answer the DOC already has.",
+          "citation": {
+            "title": "Reduce latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Give every event an agentic loop with a hard cap of four tool-calling iterations, which bounds the worst case, handles simple and complex events through one uniform code path, and avoids maintaining a second correlation implementation.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "One uniform path is a legitimate simplification and a four-iteration cap is genuine bounding, so this is a defensible design that many teams would ship. It does not meet R1: four sequential model round trips plus their tool calls will not reliably complete inside twenty seconds, and at 900 events an hour every event pays that worst case rather than only the hard ones. Letting the deterministic correlator absorb the easy majority is what buys the headroom the loop needs.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-02",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D3", "D4"],
+      "question": "Triage, the dispatch advisor and the nightly forecast narrator have very different cadences and very different reliability expectations. How should the three be arranged relative to one another?",
+      "options": [
+        {
+          "key": "A",
+          "text": "One long-lived session per storm shift that handles all three jobs in sequence as work arrives, so accumulated storm context is available to every task and the large static prefix stays warm in cache across the whole night.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The reasoning behind this is real: continuity across a storm genuinely helps a dispatch advisor, and a long-lived session keeps a cached prefix warm, which is a meaningful cost lever over a fourteen-hour night. It fails R3, because a recommendation produced inside an accumulating session is a function of everything that happened earlier in that session, so replaying the same inputs later cannot be guaranteed to yield the same recommendation. It also puts a growing history in front of every twenty-second triage call.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A single agent holding all three jobs' tools, with a job argument on each incoming request telling it which of the three it is currently performing.",
+          "correct": false,
+          "explanation": "A job argument does not separate the three concerns; it only labels them. The agent still carries every job's tool definitions on a twenty-second path, and — more seriously — the crew-scheduling write tool remains in the same tool surface as triage, which is exactly the kind of capability breadth R2 is designed to eliminate.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A single orchestrator that receives all work and delegates to a triage subagent, an advisor subagent and a narrator subagent, keeping each subagent's results in the orchestrator's supervisory context.",
+          "correct": false,
+          "explanation": "The three jobs do not need coordinating — they are separate products that happen to share data sources — so a supervisory layer adds a model hop to a latency-critical path and buys nothing. Anthropic's multi-agent guidance is that orchestration overhead is justified by tasks needing parallel exploration and coordination, not by tasks that merely coexist.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Three separately deployed agents with their own contexts and tool sets: stateless triage per event, a short-lived dispatch advisor per incident, and a nightly forecast narrator.",
+          "correct": true,
+          "explanation": "Separation lets each job take the shape its constraints demand. Stateless triage is what makes R3's reproducibility claim meaningful, since the only inputs are the evidence bundle and the pinned prompt, and it keeps the twenty-second path free of accumulated history. Independent tool sets also let the triage agent be built with no write capability at all, which is how R2 becomes a structural property rather than an instruction. Option A buys context continuity and cache warmth, but at the cost of the reproducibility R3 requires.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-03",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "The DOC needs an answer to \"what happens at 02:00 during a storm when the model API or the GIS service is unreachable?\" Dispatchers cannot be the ones who notice. Which degradation design fits the case?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put a circuit breaker in the orchestration layer: when the model or a required tool fails, triage falls through to the documented rule-based correlator and the result is labelled as degraded output.",
+          "correct": true,
+          "explanation": "R5 asks for automatic degradation to a specific named component, and a circuit breaker in the orchestration layer is what makes the switch happen without anyone deciding to make it. Because the fallback is the correlator that already runs in front of the model in the normal path, it is exercised continuously rather than being a cold branch discovered during a storm. Labelling the output as degraded preserves R3's evidence obligation by telling the dispatcher which system produced the recommendation. Option C covers model outages well but leaves tool outages uncovered.",
+          "citation": {
+            "title": "Stop reasons and fallback",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Queue failed events for retry and replay them once the dependency recovers, so no event is lost and every one eventually receives a model-generated fault location.",
+          "correct": false,
+          "explanation": "Eventual completeness is the wrong objective for this path. An outage event whose fault location arrives after the dependency recovers has missed the twenty-second window that made it useful, and during a storm the queue grows faster than it drains. Losing timeliness is a worse failure than degrading quality.",
+          "citation": {
+            "title": "Reduce latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        },
+        {
+          "key": "C",
+          "text": "On failure, retry the request on a second model, then in a second region, and escalate to the operations desk only if both alternatives also fail, so quality is preserved wherever possible.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Model and region fallback is standard resilience engineering and it genuinely preserves output quality through the most common class of outage, which makes it a reasonable choice. It does not satisfy R5 on two counts: it addresses model unavailability but not an unreachable GIS or OMS tool, where every model in every region will fail identically; and its terminal state is escalation to the desk, which is the dispatcher intervention R5 explicitly rules out.",
+          "citation": {
+            "title": "Stop reasons and fallback",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Display a banner in the DOC telling dispatchers that Feeder is unavailable and that they should revert to the manual paper restoration process until it returns.",
+          "correct": false,
+          "explanation": "This makes the dispatcher the failover mechanism during the busiest hour of a storm, which is precisely what R5 forbids. It also discards a working automated fallback: the rule-based correlator is still running and still able to produce candidate locations without the model.",
+          "citation": {
+            "title": "Stop reasons and fallback",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-04",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "Crews open and close sectionalizing devices several times an hour, so connectivity changes underneath Feeder while it works. The team must design the topology tool so that no fault location is computed on connectivity older than five minutes. Which design does that?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Instruct the model in the system prompt to call the topology tool again whenever it suspects the connectivity it was given may have changed since the request began.",
+          "correct": false,
+          "explanation": "The model has no way to observe that a crew threw a switch, so \"suspect staleness\" is not a judgement it can make from the evidence in front of it. R4 is a hard data-freshness bound and belongs in the layer that knows the clock, not in a prompt instruction the model may or may not act on.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Load the full network topology once at the start of each shift and place it in the cached system prompt, so every triage call reads it at prompt-cache rates rather than paying for a tool call.",
+          "correct": false,
+          "explanation": "This optimises exactly the wrong variable. A shift-long snapshot in a cached prefix is guaranteed to be stale within the first hour of restoration switching, and because it lives in the cached prefix, refreshing it invalidates the cache for every subsequent call. Data that changes several times an hour does not belong in a prefix designed to stay stable.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have the topology tool return the as-of time of the connectivity it is reporting, and have the evidence-bundle builder refuse to assemble a bundle from anything older than five minutes, forcing a re-fetch.",
+          "correct": true,
+          "explanation": "Returning provenance with the data lets the calling layer enforce R4 deterministically: freshness is checked by a clock comparison in code, not inferred by a model. It also strengthens R3, because the as-of time becomes part of the evidence a recommendation cites, so a later replay can tell whether it is looking at the same connectivity. Option D is the close call — it is cheaper and correct whenever notification works — but it makes correctness depend on a delivery guarantee nobody controls.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Cache topology in the application and invalidate the cache whenever the ADMS publishes a switching event, which avoids a topology fetch on each of 900 hourly events while still reflecting every change crews make.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Event-driven invalidation is a well-established pattern and it is materially cheaper than re-fetching per event, so it is a sensible engineering choice under storm load. It fails R4 because the requirement is a bound on data age, not on notification: a delayed, dropped or out-of-order switching event leaves the cache confidently serving connectivity that is older than five minutes with nothing in the system able to detect it. An as-of timestamp checked on use fails safe; an invalidation signal fails silently.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-05",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D4", "D3"],
+      "question": "The dispatch advisor has to get a crew recommendation into the OMS where a dispatcher can act on it. The OMS API can also open and close switches. How should the advisor's write path be designed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Give the advisor the OMS action tool but state clearly and repeatedly in the system prompt that it must never invoke switching or energization operations under any circumstances.",
+          "correct": false,
+          "explanation": "A system-prompt prohibition is guidance, not a control, and it is defeated by exactly the situation a utility must plan for: instruction-like text arriving inside a tool result from an upstream system. Anthropic's guidance on prompt injection is explicit that prompt-level instructions alone are not a sufficient defence when a capability is genuinely dangerous.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Give no agent any switching tool at all; the advisor's only write is a propose_crew_assignment tool that appends a recommendation record to the OMS queue for a named dispatcher to accept.",
+          "correct": true,
+          "explanation": "R2 says the capability must be absent from the tool surface, and the only way to deliver that is to not define the tool. Narrowing the write path to a single append-only recommendation tool also makes the advisor's output structurally a recommendation rather than an action, so a dispatcher's acceptance stays the point where anything reaches the field. Option D keeps a human in the loop, which is a real control, but it leaves the dangerous capability defined and reachable, which is the thing R2 rules out.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Expose one oms_action tool with an action argument, and reject any switching or energization action server-side so the operation cannot complete even if the model attempts it.",
+          "correct": false,
+          "explanation": "Server-side rejection does stop the operation, but it leaves a tool in the agent's surface whose description advertises switching, which invites attempts and turns a safety boundary into a stream of rejected calls that must be monitored. It also blurs the schema: a single action argument cannot describe the required inputs for each operation precisely.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Expose the switching tool to the advisor but require an explicit human confirmation in the dispatcher UI before any call executes, so no switching operation can reach the field without a person approving it first.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Human-in-the-loop confirmation is a genuine and widely accepted control, and in most domains this would be the right answer — the field action really does require a person. It fails R2 as written, which requires that no agent ever issue a switching command and that the capability be absent from the tool surface. A confirmation dialogue relocates the risk to a tired dispatcher clicking through prompts at 03:00 during a storm, which is a weaker guarantee than a tool that does not exist.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-06",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "Amberline runs three internal MCP servers — OMS, GIS and crew scheduling — exposing about 70 tools between them, most of them GIS query variants the triage path never touches. How should the agents consume them?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Merge the three servers into one so that every agent has a single connection to manage and a single place to look when a tool misbehaves.",
+          "correct": false,
+          "explanation": "Merging solves an operational inconvenience by making the architectural problem worse: it removes the natural boundary that lets an agent be granted OMS access without crew-scheduling access, which is what keeps the write capability out of triage. It also couples three systems' release cycles into one deployment.",
+          "citation": {
+            "title": "Understanding MCP servers",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Write one meta-tool that accepts a target server, a tool name and an argument object, and proxies the call to whichever of the 70 tools was named.",
+          "correct": false,
+          "explanation": "A proxy tool collapses 70 typed schemas into one untyped envelope, so the model must recall names and argument shapes from the prompt and nothing can be validated at the boundary. It also destroys per-agent scoping, since a single tool now reaches every capability on every server including the crew-scheduling writes.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Connect all three servers to every agent and rely on a carefully written system prompt describing when to use each of the 70 tools, so one uniform configuration serves triage, the advisor and the narrator alike.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A single uniform configuration is easy to reason about and prompt-level selection guidance does help, so this is a defensible starting position for a small tool catalogue. It fails R1 at this scale: every triage call pays the definition tokens for 70 tools before it reads a single event, and tool-selection accuracy is documented to degrade once a model has more than roughly 30 to 50 tools available — so the twenty-second path gets slower and less accurate at the same time.",
+          "citation": {
+            "title": "Tool search tool",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Scope each agent to only the servers and tools its job needs — triage gets OMS and GIS reads, the advisor adds crew scheduling — and enable tool search for the long tail of GIS queries.",
+          "correct": true,
+          "explanation": "Scoping is doing two jobs here. It keeps the triage context small, which protects R1's twenty-second budget, and it keeps crew-scheduling writes out of the triage agent entirely, which is how R2's absent-capability requirement is met per agent rather than per prompt. Tool search then handles the residual GIS catalogue by loading only the few queries a request needs. Option C is the plausible alternative but pays 70 tool definitions on every event and lands in the range where selection accuracy is known to fall off.",
+          "citation": {
+            "title": "Tool search tool",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-07",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The six engineers develop Feeder's prompts in Claude Code. Amberline requires that no triage prompt or correlation change reach the operations desk without passing the 120-case regression suite, and that the check cannot be skipped. How should this be wired into their Claude Code setup?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use hooks: a PostToolUse hook fires the 120-case suite whenever a prompt file is written, and a Stop hook keeps the session from ending clean while failures remain outstanding.",
+          "correct": true,
+          "explanation": "Hooks are shell, HTTP or prompt handlers that Claude Code executes at defined lifecycle points, so they run whether or not the model or the engineer remembers them — which is the property R6's \"no manual step an engineer can skip\" is asking for. PostToolUse ties the check to the edit itself and Stop prevents a session closing over red results. Option C is the pragmatic alternative and is what most teams do, but it puts a human decision back in front of the gate.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add an instruction to CLAUDE.md stating that Claude must run the 120-case suite after any edit to a prompt file and report the results before continuing.",
+          "correct": false,
+          "explanation": "CLAUDE.md is loaded as context, not enforced as configuration; the documented advice is that when an action must happen regardless of what Claude decides, a hook is the mechanism, not a memory file. An instruction improves the odds and does nothing for the case where the engineer edits the file outside a Claude Code session.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Publish a regression skill the engineer invokes as a slash command before opening a pull request, referenced in CLAUDE.md and repeated as a checklist item in the pull-request template so reviewers can confirm it was run.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a well-constructed workflow — the procedure is versioned in the repository, invocable in one keystroke, and cross-checked at review — and for most teams it would be entirely adequate. It fails R6 on the one clause that matters: invoking a skill is a manual step, and a pull-request checkbox is confirmation that someone said they ran it, not that it ran. R6 asks for a gate that does not depend on an engineer's discipline during a storm week.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Run the 120-case suite on a nightly schedule against the current main branch and alert the team when a regression appears.",
+          "correct": false,
+          "explanation": "A nightly run detects regressions after the fact, so a change can sit in main — and potentially reach the desk — for most of a day before anyone knows. Scheduled suites are valuable for drift, but they do not constitute the pre-release gate R6 describes.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-08",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "While developing the dispatch advisor, engineers connect the OMS MCP server to their own Claude Code sessions so they can exercise real tool schemas. The production OMS server exposes switching operations. How should development sessions be configured?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Let engineers connect to the production OMS server; the OMS keeps a full audit log, so any accidental operation can be identified and reversed afterwards.",
+          "correct": false,
+          "explanation": "An audit log is a detection control, not a prevention control, and on a distribution network the thing being detected is a switching operation that has already happened to a live conductor. Anthropic's Claude Code security guidance is to limit what a session can reach, not to rely on reconstructing what it did.",
+          "citation": {
+            "title": "Claude Code security",
+            "url": "https://code.claude.com/docs/en/security"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Disconnect MCP from development sessions entirely and have engineers work against recorded fixtures, removing any possibility of touching a real system.",
+          "correct": false,
+          "explanation": "Fixtures are valuable but cannot be the whole story: the advisor's behaviour depends on the live tool schemas and their error shapes, and a fixture set drifts from the server it imitates. Removing the integration also removes the ability to catch a schema change before it reaches the desk. The goal is a safe connection, not no connection.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Point development sessions at a read-only OMS endpoint and add deny rules for the write tools in the project's checked-in Claude Code settings, so R2's prohibition applies in development as well as production.",
+          "correct": true,
+          "explanation": "This gives engineers real schemas and real error behaviour while making the dangerous operations unreachable from a development session, so R2's guarantee holds in the environment where careless experimentation actually happens. Putting the deny rules in the project's checked-in settings means every engineer inherits them by cloning rather than by configuring. Option D keeps a person in the decision, but an approval prompt in a debugging session is exactly the prompt an engineer clicks through without reading.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Connect the production OMS server but leave Claude Code's per-call permission prompts enabled, so the engineer sees and explicitly approves every write before it executes and nothing happens without a deliberate human decision.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Interactive approval is a real control and it is exactly why the prompts exist, so relying on them is a defensible choice for most tools. It fails R2, which requires that no agent ever issue a switching command and that the capability be absent from the surface: an approval prompt during a long debugging loop is a control an engineer becomes numb to, and the tool remains defined, callable and one click from a live conductor.",
+          "citation": {
+            "title": "Claude Code security",
+            "url": "https://code.claude.com/docs/en/security"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "Every triage result becomes a fault-location record that a dispatcher reads and that the regression suite scores. It must state the device identifiers and meter-out counts behind it, and it has twenty seconds. How should the record's shape be pinned down?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask for a short natural-language summary written to a documented heading convention, and have the DOC user interface render the headings as sections for the dispatcher.",
+          "correct": false,
+          "explanation": "A heading convention is a request, not a guarantee, so a record can arrive with the evidence section missing or reworded, and the regression suite then has to score free text. R3 requires evidence to be present in every recommendation, which needs a constraint on the output rather than a convention about it.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Constrain the triage response to a JSON schema that requires an evidence array of device identifiers and meter-out counts, so a record without its evidence cannot be produced at all.",
+          "correct": true,
+          "explanation": "Structured outputs constrain decoding to the schema, which turns R3's evidence obligation into something the model cannot omit rather than something the application checks afterwards. That also removes the validate-and-retry cycle, so each triage call is a single predictable round trip inside R1's twenty seconds, and it gives the 120-case regression suite a stable shape to assert against. Option D reaches the same record most of the time, but its retry loop is where the latency budget goes.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Prefill the start of the assistant turn with the opening of the JSON record so the model is committed to the format from its first token.",
+          "correct": false,
+          "explanation": "Assistant prefill is no longer a valid technique on current models, so this design rests on a capability that has been withdrawn; the documented replacements are structured outputs, an output format configuration, system-prompt instructions and XML output tags. Prefill also never constrained anything past the opening characters, so a missing evidence array would have slipped through regardless.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Instruct the model in the system prompt to always include the evidence array, and have a validator in the application layer reject and re-prompt any record that arrives without one, logging each rejection for the team to review.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Instruct-then-validate is a sound and observable pattern — the rejection log even gives the team a drift signal — and on a relaxed latency budget it would be a fine answer. It does not meet R1: a re-prompt is a second full round trip inside a twenty-second window, and at 900 events an hour the retries land during exactly the surge when the budget is tightest. Constraining decoding removes the failure the retry exists to catch.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-10",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D5", "D3"],
+      "question": "A dispatcher escalates a crew recommendation, and the engineers cannot reproduce it a day later: the same fault now yields a different crew. What should the team change so that a recommendation can be reproduced from its inputs?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add an instruction to the advisor's prompt telling it to be consistent and to prefer the same crew it would have chosen for an equivalent fault in the past.",
+          "correct": false,
+          "explanation": "The model has no access to what it chose before, so the instruction asks for something unobservable. Reproducibility is a property of the inputs and the pipeline — the evidence, its ordering, the prompt version and the model version — not something a prompt can request of the model at generation time.",
+          "citation": {
+            "title": "Claude prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Sample the advisor three times per fault and return the crew that appears most often, so isolated variation is averaged away before a dispatcher sees it.",
+          "correct": false,
+          "explanation": "Majority voting narrows the spread but does not make the result a function of the inputs — a different set of three samples can produce a different majority — so a replay a day later still has no guarantee. It also triples the cost of every recommendation to obscure a problem rather than remove it.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Build the prompt from a canonically ordered evidence bundle with explicit tie-breaking rules, and stamp each record with the prompt version, model version and a hash of the bundle so a replay can be checked against identical inputs.",
+          "correct": true,
+          "explanation": "This makes reproducibility checkable rather than hoped for. Canonical ordering removes the variation that comes from crews and devices arriving in a different sequence, explicit tie-breaking removes the coin-flip between two equally good crews, and the stamped versions and bundle hash let an engineer prove a replay is comparing like with like — which is what R3 means by reproducible. Option D produces byte-identical replays but ignores R4.",
+          "citation": {
+            "title": "Claude prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Cache each recommendation keyed by outage event identifier and serve the cached record on any repeat, which guarantees a byte-identical answer on replay and costs nothing extra for the second and later reads.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a real guarantee — a cache keyed by event identifier does make replay exact, and it is cheap — so it is a tempting answer to a reproducibility question. It fails R4: an outage event lives for hours while crews switch the circuit underneath it, so a cached recommendation is served against topology that may be far older than five minutes. It also confuses replay determinism with input determinism, since it never addresses why two fresh runs differed in the first place.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS2-11",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "A major storm keeps the DOC busy for fourteen hours. The team must decide what conversational state, if any, persists across that shift. Which arrangement fits Feeder's requirements?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the shift session to a model with a larger context window and let it grow for the full fourteen hours without any pruning or summarisation.",
+          "correct": false,
+          "explanation": "A larger window changes when the ceiling is hit, not the fact that response quality degrades as context grows — which is why Anthropic treats context as something to curate rather than fill. It also leaves every twenty-second triage call reading a history that grows all night, so latency rises steadily through the storm.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Keep one shift-long session but clear all tool results every hour while retaining the assistant's own turns, so the narrative thread survives and the bulk of the tokens are removed.",
+          "correct": false,
+          "explanation": "Clearing tool results removes the evidence while keeping the conclusions drawn from it, which is the worst of both: the session still carries hours of prior reasoning about other outages, but the underlying device data a recommendation must cite is gone, undermining R3's evidence obligation.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Run one long-lived session per dispatcher across the whole shift with server-side compaction enabled, so continuity is preserved automatically as the window fills and the cached prefix is reused all night.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Compaction is the documented answer for long-running conversations and this would be a good design for the advisor — continuity genuinely helps someone working one incident over hours. It fails R3 for the triage path: a compacted summary is a lossy, model-generated input, so two runs of the same event against differently compacted histories are not guaranteed to agree, and the record can no longer be reproduced from its stated evidence alone.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep triage stateless — one fresh request per event built from a durable evidence bundle — and reserve a compacted long-lived conversation for the dispatch advisor, where continuity within one incident actually matters.",
+          "correct": true,
+          "explanation": "The two paths have different needs and should get different treatment. Stateless triage has no history to manage, so its latency stays flat through hour fourteen and its output is a pure function of the bundle, which is what R3 requires and what makes a regression suite meaningful. The advisor, where a single incident really does unfold over hours, is the one place a compacted long-lived conversation earns its keep. Option C applies that continuity everywhere and gives up reproducibility to get it.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,260 @@
+{
+  "examId": "ccar-f-exam4",
+  "caseId": "CS6",
+  "caseTitle": "Kestrel Bay FC — Touchline performance-analytics agent",
+  "caseScenario": "Kestrel Bay FC's performance analytics group is four people: one data engineer, two match analysts and a sports scientist. They are building Touchline, an agent that sits between three data estates the group already owns. Player workload comes from GPS vests sampling at 10 Hz across a 26-player squad, landing roughly ninety million rows a week in a tracking warehouse. Scouting comes from about 11,000 free-text notes filed by forty contracted scouts, each note carrying an ID and an author. Match context comes from an event-data feed and a tagged video-clip index. A fourth system, the club's medical availability register, is read-only to everything the analytics group builds.\n\nTouchline is an Agent SDK orchestrator with an MCP server over each estate. The two analysts are not engineers; they drive the tooling through Claude Code in the group's repository, which the data engineer maintains. Two workloads dominate. The first is an interactive analyst chat used all week — \"what was the accumulated high-speed running load on the right side over the last three matches, and who is trending into the red\" — where a reply that does not start inside about three seconds gets abandoned. The second is the Friday opposition brief: Touchline reads the coming opponent's last forty competitive matches, issues more than three hundred tool calls, and must land on the manager's tablet within twenty minutes of being requested, on the day before a fixture.\n\nBoth outputs feed the club's analysis app, which rejects any record failing its schema and has no fallback rendering. The group's standing rule, set by the head of performance after an earlier tool overstated a player's readiness, is that Touchline informs selection but never makes it.",
+  "caseRequirements": [
+    "R1: Analyst chat replies must begin streaming within 3 seconds, and the Friday opposition brief must complete within 20 minutes of request.",
+    "R2: Every workload or availability claim must cite its source — the tracking session ID for telemetry, or the note ID and scout name for a scouting claim — and medical availability may never be inferred.",
+    "R3: Player reports and opposition briefs must validate against the analysis app's schema on every emission; the app rejects malformed records and has no fallback path.",
+    "R4: Touchline must never write to the medical availability register, and squad-selection output must be presented as options with stated evidence, never as a single ranked recommendation.",
+    "R5: A Friday brief reads about 40 matches across more than 300 tool calls and must not lose findings recorded for earlier matches as it proceeds."
+  ],
+  "questions": [
+    {
+      "id": "F4-CS6-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D5", "D2"],
+      "question": "The Friday opposition brief covers forty of the opponent's matches, each needing event-data queries, clip lookups and set-piece checks — more than three hundred tool calls in total — and must be delivered within twenty minutes. How should the run be decomposed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Collapse the work into one large warehouse query that pre-aggregates all forty matches, and pass the aggregate to a single model call that writes the brief from it.",
+          "correct": false,
+          "explanation": "Pre-aggregation throws away the per-match session and clip identifiers a claim has to cite, so the brief becomes assertions about averages with nothing behind them. It also fixes the questions in advance, in SQL, when the point of the agent is to follow what a given opponent actually does.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run an orchestrator that dispatches one worker per match in parallel, each analysing its match in its own context and returning a compact findings record keyed by match ID.",
+          "correct": true,
+          "explanation": "The matches are independent, so this is textbook orchestrator-workers: parallelism is what turns three hundred-plus tool calls into a twenty-minute job rather than an afternoon (R1), and each worker's own context absorbs the bulk of its event data so the orchestrator holds forty small records instead of forty transcripts. Those records keep their match IDs, so findings from match three are still citable when the brief is assembled (R5, R2). Option C keeps the context bounded too, but only by working through the matches one at a time.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have a single agent work through the forty matches in sequence, enabling tool-result clearing so that once a match has been analysed its event data is dropped from the conversation and the window stays bounded.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a legitimate use of context editing and it does keep a long tool-heavy run inside the window, with none of the coordination overhead a fan-out design carries. It fails R1. One agent means one tool call in flight at a time, and more than three hundred round trips executed in sequence will not finish inside twenty minutes however efficiently the context is managed. The constraint here is wall-clock concurrency, which only independent workers provide.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Let the agent delegate to subagents recursively, spawning further subagents whenever it judges a line of analysis deep enough to warrant one, with no fixed depth or breadth limit.",
+          "correct": false,
+          "explanation": "Unbounded self-delegation makes the run's cost and duration unpredictable on the one day of the week where the deadline is fixed. Fan-out for a job like this should be bounded by something known in advance, such as the match list, rather than by the model's in-flight judgement.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS6-02",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D4", "D5"],
+      "question": "The scouting-notes MCP server sits over 11,000 free-text notes from forty scouts; a well-watched player may have sixty notes running to some thirty thousand tokens. Analysts query it constantly from the interactive chat. How should the server's tools be designed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expose one tool that accepts a query against the notes database so analysts and the agent can retrieve exactly the fields and filters they want on any given question.",
+          "correct": false,
+          "explanation": "An arbitrary query interface gives the model an unconstrained surface with no guarantee that the note ID or scout name is ever selected, and it shifts schema knowledge into generated text that nothing validates. Narrow typed tools are what Anthropic recommends over general-purpose escape hatches.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have the server run its own summarisation pass over a player's notes and return one synthesised paragraph describing the scouting consensus, so the result is compact and immediately usable in chat.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Shaping results at the tool boundary is good practice and this version is genuinely token-efficient — thirty thousand tokens become a paragraph, which is exactly the kind of high-signal result the guidance asks for. It fails R2. A synthesised consensus has no note IDs and no scout names in it, so a claim drawn from it cannot be attributed to anything, and two scouts who disagreed are flattened into one voice. Summarisation at the boundary has to preserve identifiers, not replace them.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Load every note for the squad and the coming opponent into the system prompt at session start so the agent can reason across all of them without any retrieval step at all.",
+          "correct": false,
+          "explanation": "Eleven thousand notes will not fit, and the subset that would still loads material for players nobody asks about, paying for it on every turn against a three-second first-token budget. Retrieval exists so the agent reads what the current question needs.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Provide a search tool returning bounded, ranked excerpts that each carry a note ID, scout name and date, plus a separate tool that fetches one full note by its ID.",
+          "correct": true,
+          "explanation": "This is just-in-time retrieval with provenance preserved: the excerpt payload stays small enough to keep first-token latency inside three seconds (R1), and because every excerpt arrives with its note ID and author, any scouting claim the agent makes is attributable as R2 requires. The fetch-by-ID tool keeps the full note reachable for the rare deep read without taxing routine queries. Option B is more compact still, but strips the identifiers on the way through.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS6-03",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D4", "D5"],
+      "question": "The two analysts run the same four-step procedure most weeks — rebuild a player's report, diff it against last month's, flag regressions — and keep asking the data engineer for the steps. Separately, the analysis app's field-naming conventions must be respected in every report the repository produces. How should these be set up?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Publish the four-step procedure as a committed project skill the analysts invoke by name, and keep the field-naming conventions in the project CLAUDE.md as standing facts.",
+          "correct": true,
+          "explanation": "These are two different kinds of knowledge and Claude Code has a mechanism for each. A procedure is a sequence someone invokes, so it belongs in a skill whose body loads only when it runs — costing nothing in the weeks nobody rebuilds a report, and shared with both analysts through version control. Conventions are always-true facts that should be in context whenever the repository is touched, which is what CLAUDE.md is for. Option B puts both in one file and pays for the procedure in every session.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Write both the four-step procedure and the field-naming conventions into the project CLAUDE.md, so there is a single reviewed, version-controlled file and neither analyst has to remember what a command is called.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "One committed file is easy to review and discoverable to a newcomer, and it is true that the analysts never have to recall an invocation. It fails R3 by the mechanism the documentation warns about: CLAUDE.md loads into context at the start of every session, and longer files consume more context and are followed less consistently. Growing the file with a procedure most sessions do not need is exactly how the naming conventions R3 depends on start getting missed.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have each analyst keep both the procedure and the conventions in their own user-level CLAUDE.md so the guidance follows them across every repository they open.",
+          "correct": false,
+          "explanation": "User-scope memory is private to one machine and is not shared through version control, so the two analysts drift apart immediately and the data engineer's changes reach neither of them. Team-shared guidance belongs in the project so it travels with the repository.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Configure a hook on prompt submission that injects both the procedure and the conventions into every prompt the analysts send.",
+          "correct": false,
+          "explanation": "This reproduces the always-loaded cost of putting everything in CLAUDE.md, and adds it to unrelated prompts as well. Hooks are for firing deterministic actions at lifecycle points, not for standing in as a delivery mechanism for guidance that already has one.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS6-04",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "The manager asks the group for a Friday output naming who should start. The head of performance's rule is that Touchline informs selection but never makes it, and the analysis app renders whatever record it validates. How should the output be specified?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Produce a single recommended starting eleven, but require a rationale string for each selected player citing the tracking sessions and scouting notes behind the pick, so the manager can audit every choice.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The evidence discipline here is exactly right, and rationale strings would satisfy R2 comfortably — this is close to what the manager literally asked for. It fails R4. A single ranked eleven is a recommendation whatever text accompanies it: the app renders one lineup, the manager reads one lineup, and the rationale is read afterwards if at all. R4 constrains the shape of the output, not the quality of its justification, so the alternatives have to remain visible in the record itself.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Prefill the assistant turn with the opening of the selection object so the model is forced to continue in the app's format, then parse what follows.",
+          "correct": false,
+          "explanation": "Assistant prefill is no longer a supported technique on current Claude models; structured outputs, output-format configuration and XML output tags are the documented replacements. It also never guaranteed that the remainder of the object closed or matched the schema.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Emit an options array in which each option carries its evidence references and trade-off, with availability drawn only from the medical register and marked unknown when that lookup returns nothing.",
+          "correct": true,
+          "explanation": "The schema itself enforces the rule the head of performance set: an array of options with stated trade-offs cannot be read as a single recommendation, so R4 is a property of the record rather than of a caveat somebody might skip. Requiring availability to come from the register — and to be emitted as unknown when it does not — keeps R2's prohibition on inferred availability structural, and the whole record still validates for the app under R3. Option A justifies a recommendation well but is still a recommendation.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Let the model choose its own output shape for each request and validate whatever it returns against the app's schema afterwards, retrying when validation fails.",
+          "correct": false,
+          "explanation": "Validate-and-retry cannot manufacture a guarantee, and on the Friday path a retry costs time the twenty-minute window does not have. Leaving the shape to the model also leaves the selection framing to the model, which is the decision the club specifically removed from it.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS6-05",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D3"],
+      "question": "Fourteen minutes into a Friday brief, with thirty-one of forty match workers finished, the video-clip index times out and three workers fail. The brief is due on the manager's tablet in six minutes. How should the run be built to handle this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep every worker's findings in the orchestrator's context as they return, relying on the largest available context window so that a failure never costs work already completed in the run.",
+          "correct": false,
+          "explanation": "Holding findings in context protects them only while the process lives; an orchestrator that dies takes all forty matches with it. It also grows the active context throughout the run, degrading the synthesis step at the exact moment the brief is being written.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have the orchestrator abandon the run when any worker fails and start the whole brief again from the first match under an idempotency key, so the delivered brief is always built from one clean pass over the full match set.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A single clean pass is easy to reason about and removes any question about mixing results from different attempts, which is a real virtue when the output goes to the manager unreviewed. It fails R1. Fourteen of twenty minutes are already spent and a restart re-executes more than three hundred tool calls from zero, so the brief arrives after the deadline or not at all. Resuming the three failed matches costs a fraction of that and keeps thirty-one matches of completed work.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have each worker return its full transcript to the orchestrator rather than a findings record, so nothing a worker discovered is ever lost in condensing and the orchestrator can re-derive anything it needs.",
+          "correct": false,
+          "explanation": "Forty raw transcripts reproduce in the orchestrator precisely the volume the workers were introduced to contain, and they are no more durable than a condensed record — a crash loses them identically. Condensation is the point of the hand-off, not a risk to be engineered around.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Persist each worker's findings record to a durable store keyed by match ID as it completes, assemble the brief from that store, and re-run only the matches whose records are missing.",
+          "correct": true,
+          "explanation": "Externalising findings as they are produced is what makes a long agentic run recoverable: the thirty-one completed matches are already durable, so R5's guarantee that earlier findings survive holds even through an orchestrator crash, and the retry surface shrinks to three matches that comfortably fit the remaining six minutes (R1). Assembling from the store rather than from conversation also keeps the synthesis context small and current. Option B guarantees a uniform pass but pays for it with the whole run.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

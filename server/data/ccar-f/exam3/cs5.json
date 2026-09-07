@@ -1,0 +1,588 @@
+{
+  "examId": "ccar-f-exam3",
+  "caseId": "CS5",
+  "caseTitle": "Trellis Talent Network — screening packets and interview scheduling agent",
+  "caseScenario": "Trellis Talent Network is a contract-staffing marketplace connecting 1.4 million candidates with 11,000 employers across engineering, design and data roles. It takes in about 240,000 applications a week, with a Monday-morning spike of roughly 62,000 inside four hours. Every employer publishes a requirement rubric for a role — a numbered list of must-haves and nice-to-haves averaging 900 tokens — and Trellis's 180 recruiters work a queue of candidates against that rubric.\n\nTwo agent-shaped features are being built. The first is a screening pass: it reads an application — CV, cover note, portfolio links and the answers to the employer's four screening questions — and produces an evidence packet that maps each rubric line to what the application actually says. Packets are precomputed at ingest, and a recruiter opening a candidate expects the packet on screen almost immediately. The second is a scheduling agent: once a recruiter marks a candidate for interview, it negotiates a slot across the candidate's stated availability, the hiring manager's calendar and a two-person interview panel, sending messages and holding calendar slots as it goes. A hard scheduling run can take twenty minutes and forty tool calls.\n\nThe platform team is six engineers, two of them full-time on this, working in a TypeScript monorepo with Claude Code. They maintain a regression corpus of 900 labelled applications that is re-run nightly. The annual Claude budget is $260,000. Two operational facts dominate the design. Trellis's recruiters, not the agent, decide who advances — the agent's job is to make the evidence checkable in seconds, not to render a verdict. And a hiring manager double-booked by a retried scheduling run is the single complaint that has cost Trellis employer accounts.",
+  "caseRequirements": [
+    "R1: The screening agent must never emit an advance or reject decision; it returns an evidence packet keyed line by line to the employer's published rubric, and a recruiter records the decision.",
+    "R2: Every claim in an evidence packet must carry the verbatim span of the application it came from, so a recruiter can check it without opening the source document.",
+    "R3: A precomputed evidence packet must be on the recruiter's screen within 3 seconds p95 of the recruiter opening the candidate.",
+    "R4: A scheduling run must never double-book a hiring manager, including when the run is retried after a failure, a timeout or a deploy.",
+    "R5: Combined annual Claude spend must stay within $260,000, counted across screening, scheduling and the nightly regression run over the 900-application corpus.",
+    "R6: A scheduling run may last up to 20 minutes and 40 tool calls, and when it reports the agent must hold an accurate view of the current status of every slot it has touched."
+  ],
+  "questions": [
+    {
+      "id": "F3-CS5-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": [
+        "D5",
+        "D4"
+      ],
+      "question": "Screening and scheduling are being designed in the same sprint. Screening is a fixed transformation of one application against one rubric; scheduling is open-ended negotiation across three parties. What shape should each take?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Build one agent that handles both, holding the rubric tools and the calendar tools in a single loop so there is one code path and one set of prompts to maintain.",
+          "correct": false,
+          "explanation": "Anthropic's guidance is to reach for the simplest thing that works and add agentic complexity only where it earns its place. A single loop over both jobs means the fixed transformation pays for tool round trips it never needs, and the two very different failure modes — an unsupported claim and a double-booked calendar — end up entangled in one prompt.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Make screening a single-pass workflow run in bulk at ingest, and scheduling an agentic loop with tools and an explicit stopping condition, sharing nothing but the candidate record.",
+          "correct": true,
+          "explanation": "This matches the workflow-versus-agent distinction directly: screening has a known path through a known transformation, so a single pass at ingest is enough, and precomputing is what makes R3 a rendering problem rather than an inference problem. Scheduling genuinely cannot be planned in advance, which is where an agentic loop earns its cost. Option C keeps one framework but pays loop overhead on every one of 240,000 weekly applications.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Make both agentic loops for consistency, giving the screening loop a tight maximum-turn cap and a small tool set so that in the ordinary case it settles in a single turn anyway.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "One framework, one deployment shape and one debugging story is a real engineering argument, and a capped loop does degrade gracefully toward a single pass. It fails R5. An agentic loop pays for a tool-use round trip and at least one extra model turn on applications that never needed either, and at 240,000 a week that overhead is charged against the same budget that also has to cover scheduling and the nightly corpus. Option B spends the loop only where the work is genuinely open-ended.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Make both single-pass workflows and route any scheduling conflict to a recruiter to resolve by hand once the first proposal is declined.",
+          "correct": false,
+          "explanation": "Scheduling across a candidate, a manager and a two-person panel is a negotiation, and a single pass cannot revise a proposal after a decline. Handing every conflict to a recruiter removes the feature's value, since two or three rounds of proposals is the normal case rather than the exception.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-02",
+      "primaryDomain": "D4",
+      "secondaryDomains": [
+        "D2",
+        "D1"
+      ],
+      "question": "The evidence packet renders directly in the recruiter UI, one row per rubric line, with the supporting text highlighted in the source document beside it. What is the right way to pin the packet's shape down?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask for markdown with a fixed heading for each rubric line and a blockquote holding the supporting text, then parse the markdown in the UI layer to build the packet rows, re-requesting any response whose headings do not line up with the employer's published rubric.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Markdown is readable, easy to eyeball during development and trivially reviewable in a pull request, so this is a fair first design. It fails R2. Nothing in a blockquote convention forces the quoted text to be verbatim rather than a tidied paraphrase, and nothing forces it to be present at all — so a rubric row can reach a recruiter with a claim they cannot check against the application, which is exactly what R2 exists to prevent.",
+          "citation": {
+            "title": "Use XML tags to structure your prompts",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/use-xml-tags"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Prefill the assistant turn with the packet's opening JSON so the model has to continue the structure from there.",
+          "correct": false,
+          "explanation": "Assistant prefill is not a supported technique on current Claude models. The documented ways to control output shape are structured outputs, the output format configuration, system-prompt instructions and XML output tags; building the recruiter UI on prefill would rest on behaviour the platform no longer provides.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use the API's structured JSON output with a schema requiring, per rubric line, a rubric id, an evidence object holding a verbatim quote and its character offsets, and a status enum that has no advance or reject value.",
+          "correct": true,
+          "explanation": "Constrained decoding makes both product rules properties of the schema rather than hopes about the prompt. R2 holds because a rubric line cannot be emitted without a quote and offsets, which is also what lets the UI highlight the source span. R1 holds because a verdict is not a value the enum admits, so the model has no way to express one. Option A's markdown convention guarantees neither.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Let the model answer in free text and run a regular-expression extractor over the response in the UI layer to pull out the rubric lines and their supporting text.",
+          "correct": false,
+          "explanation": "Regular expressions over free-form prose break on the first phrasing the author did not anticipate, and character offsets into the source document cannot be recovered after the fact at all. The schema-level guarantee is available in the same API call.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-03",
+      "primaryDomain": "D2",
+      "secondaryDomains": [
+        "D1",
+        "D5"
+      ],
+      "question": "The scheduling agent's calendar tools are list_free_slots, hold_slot and confirm_hold. Runs that time out mid-negotiation are retried from the beginning by the job scheduler. Which tool design keeps R4 safe?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a cancel_hold tool and instruct the agent to release every hold it created before it finishes, so an abandoned run leaves nothing behind on anyone's calendar.",
+          "correct": false,
+          "explanation": "A run that times out or crashes never reaches its cleanup turn, which is precisely the case that produces the double-booking. Correctness cannot rest on the agent's last step executing, because the failure being defended against is the last step not executing.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Make hold_slot idempotent on a run-scoped key: the tool takes the run identifier together with the slot, and a repeated call for the same run and slot returns the existing hold rather than creating a second one.",
+          "correct": true,
+          "explanation": "Idempotency moves the guarantee into the tool, where it holds regardless of what the model does or how the run died. A retry replays the same calls and converges on the same single hold, which is what R4 requires — never, not usually. Option C's fresh listing narrows the race window but leaves the check and the act as two separate operations.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have the agent call list_free_slots again immediately before every hold_slot and only take a slot the fresh listing still shows as free, so a slot another run has taken is never held twice.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Re-reading state immediately before acting is the natural fix and it would remove most collisions in practice, which makes this genuinely defensible. It fails R4. Check-then-act is a race: the retried run and the original run can both read the slot as free in the gap between the listing and the hold, and the gap here spans a model turn. R4 forbids the double-book outright, including on retry, so a design that only shrinks the window does not satisfy it.",
+          "citation": {
+            "title": "Handle tool calls in your application",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Give each scheduling run its own calendar service account so that runs cannot see or disturb one another's holds while they negotiate.",
+          "correct": false,
+          "explanation": "Isolating the runs from each other hides the conflict rather than preventing it. The hiring manager's calendar is still a single shared resource, so two isolated runs simply place two holds on it and neither one notices.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-04",
+      "primaryDomain": "D4",
+      "secondaryDomains": [
+        "D5",
+        "D2"
+      ],
+      "question": "In the pilot, a rubric line asking for 'production experience with Kubernetes' produced packets asserting partial experience, quoting a line about Docker. Recruiters called this the most damaging failure mode they saw. What should change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a system-prompt rule that the model must not infer beyond what the application literally says, supported by four worked examples of near-miss evidence being declined rather than stretched.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Explicit instruction plus multishot examples is a documented and effective lever on exactly this behaviour, so this would move the numbers. It fails R2. The schema still requires a quote on every rubric line, so a line with no supporting evidence has no legal shape to take; the model must supply the nearest quote it can find, and a Docker line offered against a Kubernetes requirement is unverifiable evidence of the kind R2 forbids. Option D removes the contradiction rather than instructing around it.",
+          "citation": {
+            "title": "Use examples (multishot prompting)",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/multishot-prompting"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Ask the model to attach a confidence score to each rubric line and have the UI hide any line scoring below a tuned threshold.",
+          "correct": false,
+          "explanation": "Hiding the row is worse for the recruiter than reporting it as unsupported, because an absent row is indistinguishable from a rubric line nobody assessed. Self-reported confidence is also poorly calibrated and makes a poor gate for something the product treats as a hard rule.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Send every finished packet through a second model call that checks whether each quote genuinely supports the rubric line it was attached to, drops the lines that fail the check, and returns the trimmed packet to the recruiter queue.",
+          "correct": false,
+          "explanation": "The checker inherits the same missing affordance: with no representation for an unsupported line it can only delete rows, producing the same gap the hidden-row option creates. It also adds a second full pass over 240,000 applications a week, spending R5 budget to work around a schema problem.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add a no_evidence value to the status enum, make the evidence object optional exactly when the status is no_evidence, and instruct the model to use it when the rubric line's terms do not appear in the application.",
+          "correct": true,
+          "explanation": "The pilot failure is a schema failure: the model was required to produce a quote and so it produced the closest one. Giving abstention a first-class value makes 'this is not evidenced' expressible and checkable, which is what keeps R2 honest, and the recruiter still sees the rubric line rather than losing it. Option A pushes against a schema that keeps demanding a quote.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-05",
+      "primaryDomain": "D3",
+      "secondaryDomains": [
+        "D4",
+        "D1"
+      ],
+      "question": "Trellis wants every change to the screening prompt or schema checked against the 900-application labelled corpus before it merges, specifically for packets whose quotes do not appear verbatim in the source application. Where should that check run?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run it in continuous integration as a headless Claude Code invocation of a fixed skill, with the merge gated on the verbatim-quote result.",
+          "correct": true,
+          "explanation": "Claude Code's non-interactive mode is designed for exactly this: a scripted, repeatable invocation whose exit status a pipeline can act on. Putting the gate in CI means the guarantee R2 depends on is checked on every change by construction, not when someone remembers. Option B relies on a CLAUDE.md reminder, which the documentation describes as context rather than enforced configuration.",
+          "citation": {
+            "title": "Claude Code in non-interactive mode",
+            "url": "https://code.claude.com/docs/en/headless"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Ask engineers to run the corpus check in their own Claude Code session before opening a pull request, with a CLAUDE.md instruction reminding them that prompt changes require it.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Fast local feedback is genuinely valuable, it costs nothing in CI minutes, and 'always do X' project facts are precisely what CLAUDE.md is documented for — a reasonable setup. It fails R2. CLAUDE.md is loaded as context rather than enforced configuration, so a change that breaks the verbatim-quote guarantee merges cleanly on any day the reminder is not followed, and R2 is a property of what ships rather than of what the team intends.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Register a PreToolUse hook on every edit under the screening prompt directory that runs the full 900-application corpus before the edit is allowed through.",
+          "correct": false,
+          "explanation": "PreToolUse runs on every matching tool call, so a 900-application model run would block the session for minutes on each individual edit and burn corpus cost on drafts that will be rewritten seconds later. Hooks are for fast deterministic checks; a long evaluation belongs at the merge boundary.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Leave the check out of the build and have the recruiter UI flag packets whose quotes fail to match the source, so regressions are caught from production traffic.",
+          "correct": false,
+          "explanation": "Detecting the failure in production means recruiters have already been shown unverifiable packets and have possibly acted on them. Production monitoring is a useful backstop but it cannot substitute for a pre-merge gate on a guarantee the product makes.",
+          "citation": {
+            "title": "Create strong empirical evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-06",
+      "primaryDomain": "D2",
+      "secondaryDomains": [
+        "D3",
+        "D4"
+      ],
+      "question": "Scheduling touches three MCP servers — the applicant tracking system, a calendar server and a messaging server — exposing 74 tools between them. Transcripts show the agent calling get_manager, then get_manager_calendar_id, then list_free_slots for the same manager on nearly every run. What should the team change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Consolidate the recurring chain into one get_manager_availability tool taking a manager id and a date range and returning free slots directly, and namespace the remaining tools by server so their boundaries are unambiguous.",
+          "correct": true,
+          "explanation": "Anthropic's tool-writing guidance treats a chain the agent always performs as a signal that the tools are drawn at the wrong granularity, and recommends consolidating it and namespacing to keep boundaries clear. Collapsing three round trips into one directly protects the 40-call ceiling in R6 and removes two model turns from every run. Option B teaches the chain rather than removing it.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Leave the tool surface alone and add worked examples to the system prompt showing the correct three-call sequence, so the agent stops wandering between servers and follows the intended path every time.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Prompting is the cheapest lever available and the sequence is plainly learnable, so this would work in the narrow sense of making the agent call the right tools in the right order. It fails R6. Even when followed perfectly the chain costs three tool calls per manager, and a hard run touching a manager and a two-person panel spends a large share of the 40-call budget on lookups before any negotiation begins. Option A returns those calls to the negotiation.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Expose the calendar server's underlying request endpoint as a single generic tool so the agent can invoke whichever method it needs without waiting for new tool definitions.",
+          "correct": false,
+          "explanation": "A generic passthrough removes every schema boundary the tool layer exists to provide: the model has to construct method names and payloads with nothing validating them, and a malformed call reaches the calendar rather than being rejected. It also makes the write surface unbounded.",
+          "citation": {
+            "title": "Understanding MCP servers",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Put all three MCP servers behind one aggregating server so the agent sees a single connection and a single tool list.",
+          "correct": false,
+          "explanation": "Aggregating the connections leaves the number of tool definitions and the length of the lookup chain exactly as they were. The agent's problem is how many tools compete for each choice and how many calls a run needs, neither of which is a function of connection count.",
+          "citation": {
+            "title": "Understanding MCP architecture",
+            "url": "https://modelcontextprotocol.io/docs/learn/architecture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-07",
+      "primaryDomain": "D1",
+      "secondaryDomains": [
+        "D2",
+        "D5"
+      ],
+      "question": "A scheduling run has to satisfy the candidate, the hiring manager and two panel interviewers, each with different availability and different response latency. How should the team decompose the negotiation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Give each party its own subagent that negotiates that party's availability in its own context window, and have an orchestrator merge the four answers into a single agreed slot at the end.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Per-party subagents are an appealing decomposition — clean separation of concerns, four small contexts instead of one large one, and the parties can be worked in parallel. It fails R4. Each subagent holds slots on its own party's calendar independently, so two subagents converging on overlapping times place both holds before the orchestrator ever compares them, and the manager is double-booked by the time the merge step notices. Option B keeps a single owner of hold state.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Keep one agent as the sole owner of calendar state: it reads each party's availability through stateless tools, computes candidate slots itself, and issues every hold from that one place through the idempotent hold_slot tool.",
+          "correct": true,
+          "explanation": "Concentrating the mutating operations in a single owner is what makes R4 provable rather than probable — there is exactly one path to a hold, and it is the idempotent one. Reads stay stateless and can still be parallelised, so little throughput is lost. Option A's per-party subagents distribute hold-placing authority, which is the specific thing this design refuses to do.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Run the negotiation as a fixed prompt chain — candidate first, then the hiring manager, then the panel, then the room — with each stage settling on a time before the next begins and no revisiting of a stage once it has settled.",
+          "correct": false,
+          "explanation": "Prompt chaining suits tasks that decompose into ordered steps with no backtracking, which scheduling is not. A panel conflict discovered at the last stage has no route back to re-propose to the candidate, so the run fails rather than converging.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have the agent propose a single slot and hand the whole run to a recruiter as soon as any of the four parties declines it.",
+          "correct": false,
+          "explanation": "Two or three rounds of proposals is the normal path, not an exception, so this would route the majority of runs to a human and leave the feature doing very little. The iteration is the work.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-08",
+      "primaryDomain": "D5",
+      "secondaryDomains": [
+        "D1",
+        "D2"
+      ],
+      "question": "By tool call 30 in a hard run, the agent's context is mostly stale availability listings from proposals that were already declined, and it has begun re-proposing slots it ruled out twenty minutes earlier. What should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Enable server-side compaction so the run is summarised automatically as it approaches the context window limit, keeping the whole negotiation as one continuous conversation from the first availability call through to the final confirmation.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Compaction is the recommended default for long-running agentic conversations and would keep the run alive, so it is a reasonable choice. It fails R6. A summary of forty tool calls preserves the shape of the negotiation but not a reliable per-slot ledger, and since compaction replaces older content with a concise summary, nothing guarantees that which specific holds are still live survives that compression. R6 asks for an accurate status for every slot touched, which a prose summary cannot guarantee.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Cap every run at fifteen tool calls so the context never grows large enough for the re-proposal behaviour to appear.",
+          "correct": false,
+          "explanation": "The cap treats the symptom and breaks the feature: hard runs genuinely need more than fifteen calls, so they would simply terminate unscheduled. R6 explicitly allows forty calls, so the design has to work at that length rather than avoid it.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Re-send the full negotiation history as a user message on every turn so that nothing from earlier in the run can fall out of view.",
+          "correct": false,
+          "explanation": "This is the opposite of context management: input grows on every turn, so latency and cost climb through the run, and the stale listings that caused the re-proposals are amplified rather than removed. The problem is too much low-signal context, not too little.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Clear the superseded availability results from the conversation and maintain a compact slot ledger — slot, party, status, hold id — that the agent rewrites as a structured note after each round of proposals.",
+          "correct": true,
+          "explanation": "This pairs the two techniques Anthropic recommends for long-horizon work: tool result clearing removes the bulk that has stopped earning its place, and structured note-taking keeps the durable facts in a compact, deliberately maintained form. The ledger is what makes R6 satisfiable, because slot status is written down explicitly rather than inferred from a summary as in option A.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": [
+        "D5",
+        "D1"
+      ],
+      "question": "Each of the 11,000 employers has its own rubric of about 900 tokens, and the shared screening instruction block with its output rules runs to roughly 6,000 tokens. Monday brings 62,000 applications in four hours, spread unevenly across employers. How should the screening prompt be assembled?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the shared 6,000-token instruction block and output rules at the front of the system prompt as a stable cacheable prefix, and place the employer's rubric after it so only the rubric varies between requests.",
+          "correct": true,
+          "explanation": "Prompt caching matches on a prefix, so putting the invariant block first and the variable rubric second means every employer's request reuses the same cached 6,000 tokens. That is what keeps a 62,000-application Monday inside R5. Option B's interleaving is better prose but makes each employer's prompt diverge from the first token, so nothing is ever reused.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Build one system prompt per employer that interleaves the rubric with the instruction block, placing each output rule immediately beside the rubric criterion it governs so the model reads instruction and data together.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Colocating an instruction with the data it governs genuinely does help adherence, and per-employer prompts are easy to reason about, so this is a defensible design. It fails R5. Interleaving makes every employer's prompt diverge from the very first token, so the 6,000-token shared block can never be a cache hit and Trellis pays full input price on it 240,000 times a week. Option A keeps the adherence benefit for the rubric while preserving the shared prefix.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Move both the instruction block and the rubric into the user message and leave the system prompt empty, so the whole prompt is assembled in one place per application.",
+          "correct": false,
+          "explanation": "The cacheable prefix runs tools, then system, then messages, so a large stable block placed downstream of volatile per-application content almost never matches across requests. The block would be re-read at full price on every application.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Concatenate all 11,000 rubrics into one very large system prompt and tell the model which employer the current application belongs to.",
+          "correct": false,
+          "explanation": "Roughly ten million tokens of rubric is far beyond any request, and even a fraction of it would fill the context with criteria that are irrelevant to this application, competing for the model's attention budget against the one rubric that matters.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-10",
+      "primaryDomain": "D3",
+      "secondaryDomains": [
+        "D1",
+        "D5"
+      ],
+      "question": "The nightly regression run over the 900 labelled applications is triaged inside Claude Code. Today an engineer pastes the whole diff into a session on the team's default model and works through it by hand. The team wants triage to become a standing part of their setup.",
+      "options": [
+        {
+          "key": "A",
+          "text": "Write the triage steps into the project CLAUDE.md so that any session already knows how to work through a nightly diff without further setup.",
+          "correct": false,
+          "explanation": "CLAUDE.md is loaded into the context window of every session whether or not triage is happening, and Anthropic advises keeping it to standing facts and moving multi-step procedures into a skill. A triage routine there is paid for in every unrelated session and dilutes the instructions that do apply.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Define the triage as a skill invoked with /triage-corpus, holding the steps in its body and using allowed-tools to pre-approve the diff commands, run in the engineer's main session as it is today.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A skill is the documented home for a repeatable procedure, its body loads only when invoked, and pre-approving the diff commands removes the permission prompts — a sound setup on its own terms. It falls short on R5. Run in the main session, the full corpus diff enters that session's context and is re-processed on every subsequent turn at the session's default model rate, and R5 counts the nightly corpus against the same budget as screening and scheduling. Option D moves that bulk off the expensive path.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/slash-commands"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Raise the session's effort level so the model reasons more thoroughly through the diff in a single pass and the engineer has less to follow up.",
+          "correct": false,
+          "explanation": "Effort governs how much reasoning the model spends, not where the diff lives or how many tokens it occupies. A higher effort level increases both latency and token spend without touching the context pressure that is actually causing the problem.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Define a project subagent in .claude/agents/ for triage, with the steps as its system prompt, a read-only tool list and a cheaper model, so the diff stays in the subagent's own context and only a summary returns.",
+          "correct": true,
+          "explanation": "This is the documented purpose of a subagent: a side task that would otherwise flood the main conversation runs in its own context window and returns only what the engineer will actually use. The model field is the lever that matters for R5, since routing a high-volume mechanical task to a faster, cheaper model is exactly what Anthropic recommends. Option B keeps the same bulk on the main session's model.",
+          "citation": {
+            "title": "Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS5-11",
+      "primaryDomain": "D5",
+      "secondaryDomains": [
+        "D2",
+        "D1"
+      ],
+      "question": "A deploy restarts the scheduling service mid-run and forty runs are retried from the beginning. The idempotent hold_slot keyed on run id is already in place, but the job scheduler issues each retry a fresh run id. What is the right correction?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Widen the idempotency key to the slot alone, so any second hold on a slot returns the first regardless of which run asked for it.",
+          "correct": false,
+          "explanation": "That key is too coarse: two genuinely different interview requests for the same manager would silently share one hold, and the second candidate's interview would never be booked. The key has to scope to the unit of work, not to the shared resource.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have every retried run start by listing the manager's existing holds and adopting any it recognises as its own from the description text the earlier attempt wrote into the hold, before it proposes anything new.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Start-up reconciliation is a real pattern, it needs no change to the job scheduler, and it would recover most orphaned holds — a defensible fix under deploy pressure. It fails R4. Recognition from free-text description is a heuristic, and any hold the retried run does not recognise becomes a second hold on the same manager, which is precisely the double-book R4 forbids on retry. Option C makes the match exact rather than inferred.",
+          "citation": {
+            "title": "Handle tool calls in your application",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Derive the run id from the interview request rather than from the scheduler's attempt, so a retry reuses the same idempotency key, and persist the slot ledger under that key.",
+          "correct": true,
+          "explanation": "The bug is that the identity of the work was tied to the attempt instead of the request, so re-keying on the request restores the guarantee the idempotent tool was meant to provide and satisfies R4 across deploys, timeouts and crashes alike. Persisting the ledger under the same key also restores R6, because the retry resumes knowing the status of every slot the earlier attempt touched instead of guessing at it as option B does.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have deploys drain in-flight scheduling runs and refuse to restart the service until every run has finished.",
+          "correct": false,
+          "explanation": "A twenty-minute drain blocks every deploy on the slowest run, and it still leaves the failure uncovered: crashes, timeouts and the scheduler's own retries all produce the same orphaned state without any deploy being involved.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

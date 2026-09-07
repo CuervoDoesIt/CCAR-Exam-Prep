@@ -1,0 +1,555 @@
+{
+  "examId": "ccar-f-exam4",
+  "caseId": "CS2",
+  "caseTitle": "Tessarion Semiconductor — Fab 7 yield excursion investigation agent",
+  "caseScenario": "Tessarion Semiconductor runs Fab 7, a 300mm logic fab with fourteen process modules and roughly 640 process tools. When a wafer lot fails electrical test, the yield engineering team opens an excursion investigation: they pull the defect classification records for the affected lots, the equipment event and sensor history for every chamber the lots passed through, the process recipe change log, the statistical process control charts for the implicated steps, and the write-ups from prior excursions that looked similar. Fab 7 sees about forty excursions a week and an experienced engineer spends five to six hours on each one. The team is nine yield engineers and two data engineers who own the fab data lake.\n\nThe agent Tessarion wants is an investigation assistant, not a classifier. It should work an excursion the way an engineer does — form a candidate cause, query for evidence, eliminate it or keep it, and move on — and finish with a ranked hypothesis list that a yield engineer can act on the next morning. Runs are long: instrumented prototypes issued between sixty and a hundred and twenty tool calls and stayed open for half an hour before producing anything useful. The intended operating mode is unattended, launched from the overnight scheduler after the shift's test data lands, with the output written into the yield-tracking database that the fab's morning meeting is driven from.\n\nThe data volumes are the hard constraint. A single chamber-day of raw sensor trace is a median of 180 MB, and a lot can touch forty chambers. Everything reaches the agent through an internal MCP server the data engineers maintain over the fab data lake. Cost matters too: the programme was approved on a per-investigation budget that assumes Claude Sonnet 5 for the orchestration and hypothesis work and Claude Haiku 4.5 for triage and classification, and the yield-tracking database enforces a fixed failure-mode taxonomy of twenty-six codes that has been in use since the fab opened.",
+  "caseRequirements": [
+    "R1: Every hypothesis in the ranked output must carry at least one traceable evidence reference — a lot id, a chamber id, or a recipe revision — that a yield engineer can reproduce.",
+    "R2: Raw sensor traces must never enter the model's context, and any single tool result that does enter context must be at most 4,000 tokens.",
+    "R3: A run may span up to 120 tool calls and must not lose the hypotheses it has already eliminated, or re-investigate them.",
+    "R4: Runs execute unattended from the overnight scheduler; no step may block on a human answering a question mid-run.",
+    "R5: The output must validate against the yield-tracking database schema, including the fixed 26-code failure-mode taxonomy.",
+    "R6: A single investigation must finish within 45 minutes of wall clock and $6 of model spend."
+  ],
+  "questions": [
+    {
+      "id": "F4-CS2-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Before building anything, the team must decide whether an excursion investigation is a workflow or an agent. The queries an engineer runs on excursion two are determined by what excursion one's queries revealed, and no two excursions follow the same path. Which shape should Tessarion build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A routing workflow that classifies the excursion into one of the twenty-six taxonomy codes up front and then runs the fixed evidence-gathering script associated with that code.",
+          "correct": false,
+          "explanation": "Routing presupposes that the answer is already known well enough to pick a script, which inverts the problem: the taxonomy code is the conclusion of the investigation, not its input. Classifying first would bias every subsequent query toward confirming the initial guess and would never discover a failure mode outside the code it picked.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run five independent investigations of the same excursion in parallel and emit whichever ranked hypothesis list the majority of the five agree on.",
+          "correct": false,
+          "explanation": "Voting-style parallelisation works when the output is a discrete judgement that runs can agree or disagree on. A ranked list of causes with evidence references is open-ended, so five runs produce five differently-worded lists with no meaningful majority, while multiplying spend fivefold against a fixed per-investigation budget.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "An agent that plans its own queries against a bounded tool set, keeps a record of what it has eliminated, and stops on an explicit termination condition rather than a fixed number of stages.",
+          "correct": true,
+          "explanation": "Anthropic's guidance draws the line at predictability: use a workflow when the steps are known in advance, and an agent when the path depends on what earlier steps discover. Excursion investigation is squarely the second case, and only an agent can issue the follow-up query that R1's evidence chain requires when a hypothesis survives its first test. The bounded tool set and explicit stopping condition are what keep that freedom inside R6. Option D is the disciplined alternative but cannot express a follow-up it did not anticipate.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A three-stage prompt chain — gather all evidence for the affected lots, analyse it, then rank the causes — giving the team a predictable cost per run and a fixed, auditable set of steps every single time.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a genuinely reasonable first build: prompt chaining is cheap, its cost and latency are predictable, and Anthropic advises reaching for the simplest structure that works before adding agentic complexity. It fails R1. A fixed chain can only gather the evidence its first stage was written to anticipate, so when an excursion turns out to hinge on a chamber the script never queried, the ranked list contains a hypothesis with no reproducible reference behind it — which is exactly what R1 forbids.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-02",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "The data engineers must decide what the MCP server's sensor-history tools return, given that a single chamber-day of raw trace is a median of 180 MB and a run may touch forty chambers. Which tool surface should they build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Tools that perform the windowing, excursion detection and chamber-to-chamber comparison inside the data layer and return a bounded structured result carrying the lot, chamber and recipe-revision identifiers.",
+          "correct": true,
+          "explanation": "The computation the agent needs from a sensor trace is a comparison, not the trace itself, so doing it where the data lives means the trace never has to cross into context at all — satisfying R2 by construction rather than by cleanup. Returning the identifiers alongside the derived statistics is what lets every resulting hypothesis carry a reproducible reference under R1. Option C, the runner-up, reaches the same steady-state context size but only after the traces have already been read.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A single flexible query tool over the data lake that accepts an arbitrary expression and returns whatever rows it produces, capped at a fixed row count on the server side.",
+          "correct": false,
+          "explanation": "A row cap bounds the payload but not its meaning: the agent cannot tell whether it saw the whole excursion window or the first slice of it, so a hypothesis may cite a chamber-day that the truncated result never actually covered. Purpose-built tools that return complete answers to well-defined questions are more reliable than one general tool with a guillotine on the end.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A trace-fetch tool that returns the raw sensor history for a chamber-day, paired with server-side tool-result clearing so older traces are dropped from the conversation once the agent has processed them and moved on.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Tool result clearing is a documented and well-aimed strategy for agentic workflows with heavy tool use, and over a 120-call run it really would hold the context flat, so an experienced architect could defend this. It fails R2. Clearing removes a result from the transcript after it has been read by the model, and R2 forbids raw traces entering context at all — not merely lingering there. A 180 MB trace also blows straight past R2's 4,000-token ceiling on the way in.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have the tool write each raw trace to a file and return the file path, letting the agent read whichever portions it decides are relevant using a file-reading tool.",
+          "correct": false,
+          "explanation": "This defers the problem without solving it. The moment the agent reads a portion of the file, that content enters context, and the agent has no basis for choosing which portion matters before it has analysed the trace. Just-in-time retrieval is a sound principle, but it works when the retrieved unit is already small enough to reason over.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-03",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "Fab 7 has fourteen process modules, each with its own tools, failure signatures and vocabulary. The team wants module expertise in the agent without one enormous prompt. How should the multi-component design be arranged?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Spawn all fourteen module specialists on every excursion so no module is ever overlooked, and have the orchestrator rank whatever findings come back from the full set.",
+          "correct": false,
+          "explanation": "Exhaustive fan-out buys coverage at a price the per-investigation budget cannot pay: fourteen workers each running their own retrieval loop is roughly an order of magnitude more tokens than a targeted subset, and most of them return no findings. Coverage is better handled by letting the orchestrator decide which modules the lot route implicates.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Keep one agent and load all fourteen modules' failure-signature references into its system prompt, letting the model select the relevant sections as it works.",
+          "correct": false,
+          "explanation": "A single prompt containing fourteen modules' reference material is paid on every one of a hundred-plus turns and steadily crowds out the run's actual findings. Anthropic's context guidance is that irrelevant content degrades focus, so bundling thirteen modules the lot never touched into every request is a direct cost on both spend and reasoning quality.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Run the fourteen module specialists as peers with no orchestrator, each writing its findings and eliminations directly into one shared hypothesis document that all of them read from and append to as the investigation proceeds.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A shared blackboard with no central bottleneck is a real architecture with real advantages: specialists see each other's eliminations, there is no orchestrator to become a serialisation point, and adding a fifteenth module is trivial. It fails R3. With fourteen concurrent writers and no single owner of the elimination record, one specialist's append overwrites or interleaves with another's, so an eliminated hypothesis can reappear and be investigated a second time — precisely the state loss R3 rules out.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "D",
+          "text": "One orchestrator that owns the hypothesis record and dispatches only the module specialists the lot route implicates, each with a scoped tool subset and a fixed structured return contract.",
+          "correct": true,
+          "explanation": "This is the orchestrator-workers pattern with the two properties this case needs. A single owner of the hypothesis and elimination record means R3's state has exactly one writer, so nothing an earlier step established can be silently overwritten. Scoped tool subsets and a fixed return contract keep each worker's bulk in its own context window and keep the orchestrator reading briefs rather than raw findings, which is what holds R6 within reach. Option C removes the orchestrator and with it the single owner of the elimination record.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-04",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D3", "D4"],
+      "question": "Besides the data queries, the agent needs the 26-code failure-mode taxonomy and Fab 7's standard excursion-investigation procedure. The yield-tracking database owns the taxonomy and revises it about twice a year. How should these be exposed through the MCP server?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a tool the agent calls to fetch the taxonomy and another to fetch the procedure, so both arrive as tool results during the run like any other data.",
+          "correct": false,
+          "explanation": "Modelling reference material as a tool call means the agent has to decide to fetch it, may not, and spends a turn when it does. MCP separates its primitives precisely so that read-only context does not have to be requested as an action; reserving tools for operations with side effects or real computation keeps the tool surface honest.",
+          "citation": {
+            "title": "MCP server concepts",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Serve the taxonomy as an MCP resource sourced from the yield database, the standard investigation procedure as an MCP prompt, and keep the data queries as tools.",
+          "correct": true,
+          "explanation": "This uses each MCP primitive for what it is: resources expose read-only context, prompts package a reusable procedure, and tools perform actions. The decisive property is that the taxonomy resource reads from the yield-tracking database, so the codes the agent can emit and the codes the database accepts are the same list by construction — which is what keeps R5 true across the twice-yearly revisions rather than only on the day the system was built. Option D keeps a copy instead, and copies drift.",
+          "citation": {
+            "title": "MCP server concepts",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have the agent ask the on-call yield engineer to confirm the current taxonomy version at the start of each run using MCP elicitation, guaranteeing the codes are always current.",
+          "correct": false,
+          "explanation": "Elicitation is a legitimate MCP client feature for gathering input during an interaction, but this is the one thing the deployment cannot tolerate: runs launch from the overnight scheduler with nobody watching, so any step that waits for a human answer stalls the investigation until morning. R4 rules this out regardless of how correct the taxonomy would end up being.",
+          "citation": {
+            "title": "MCP client concepts",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Write the twenty-six codes and the standard procedure directly into the agent's system prompt, where they sit in the cached prefix, cost nothing extra per turn and cannot fail to be available mid-run.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a perfectly sensible default and has real advantages — a stable cached prefix, no dependency on the server being reachable, no primitive design work. It fails R5 over time. A prompt copy of a taxonomy the yield database owns is a fork, and at the next revision the agent begins emitting a retired code that the database rejects, or omits a new one, with nothing in the system to surface the divergence. R5 is a contract with the database, so the database has to be the source.",
+          "citation": {
+            "title": "MCP server concepts",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-05",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "The nine yield engineers also want to run ad-hoc investigations from their own terminals against the same fab data lake, using the same investigation behaviour as the overnight job. How should the team set that up in Claude Code?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have each engineer paste the investigation system prompt into a session at the start of the day and connect to the MCP server themselves.",
+          "correct": false,
+          "explanation": "Nine hand-pasted copies of a prompt is nine slowly diverging agents, and it puts the burden of remembering the correct tool configuration on each engineer every morning. Reusable agent configurations exist exactly so that a definition can be written once, versioned, and shared across the project.",
+          "citation": {
+            "title": "Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run terminal investigations with permission prompting bypassed so engineers are not interrupted, relying on the fact that the data lake tools are read-only anyway.",
+          "correct": false,
+          "explanation": "Bypassing permissions removes the one checkpoint that would catch a tool the engineer did not intend to invoke, and 'read-only anyway' is an assumption about a surface that grows over time. Convenience during interactive work is not a reason to remove the control that decides which tools a session can reach.",
+          "citation": {
+            "title": "Claude Code security",
+            "url": "https://code.claude.com/docs/en/security"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Define the investigator as a project subagent with its own system prompt and an explicit tool allow-list, configure the MCP server at project scope, and have both the scheduler and the terminal sessions use that definition.",
+          "correct": true,
+          "explanation": "A project subagent carries its own system prompt, its own tool access and its own context window, and lives in the repository, so the overnight job and an engineer's terminal run genuinely share one definition rather than resembling each other. The explicit allow-list is what makes R2 hold in interactive use: a trace-fetching tool that is not on the list cannot be called at all, whereas option D leaves that entirely to whether the engineer's session chooses to follow written advice.",
+          "citation": {
+            "title": "Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Document the investigation approach and the rule about never pulling raw traces in the project CLAUDE.md, so every engineer's session loads the same guidance automatically at the start of every conversation and stays consistent with the overnight job.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "CLAUDE.md is the right home for standing project conventions, it loads in every session with no setup, and writing the rule down is genuinely worth doing — so this is a defensible answer rather than a wrong one. It fails R2. Claude Code's documentation is explicit that CLAUDE.md is treated as context, not enforced configuration, so nothing stops an engineer's session from calling a trace-fetch tool anyway. A capability limit has to come from the tool allow-list, not from a paragraph.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-06",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D3"],
+      "question": "In a soak test, an investigation that ran to about seventy tool calls began re-querying chambers it had already cleared thirty calls earlier, and finished with a hypothesis it had explicitly eliminated at call twelve sitting second in the ranking. What is the right structural fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have the agent maintain an eliminated-hypothesis ledger through a write-and-read tool outside the conversation, and require it to consult that ledger before opening any new line of inquiry.",
+          "correct": true,
+          "explanation": "This is structured note-taking: the run's durable state lives outside the context window, so it is unaffected by how long the transcript grows or what gets summarised away. Because the ledger is read before each new line of inquiry, an elimination made at call twelve still binds at call seventy — which is what R3 actually asks for. Option D keeps the state inside the transcript and merely hopes the summary preserves it, and a summary is lossy by design.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Enable tool-result clearing so the oldest results are dropped as the run grows, freeing context for the later stages of the investigation.",
+          "correct": false,
+          "explanation": "This makes the reported failure worse rather than better. The results being cleared are the very query outputs that recorded why a chamber was cleared, so removing them removes the agent's only evidence that it already looked. Clearing is a sound cost and context lever for results the agent will not need again — it is the wrong tool for state the run depends on.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Cap investigations at forty tool calls so the run never reaches the length at which the agent starts to lose track of what it has already examined.",
+          "correct": false,
+          "explanation": "Shortening the run to avoid the symptom sacrifices the investigations that genuinely need the depth, and R3 explicitly anticipates runs of up to a hundred and twenty calls. A cap also does nothing about the underlying cause, which is that the run's state is stored only as a growing conversation rather than as a record.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Turn on server-side compaction with a custom summarisation instruction that tells the summary to carry forward every hypothesis the agent has eliminated so far along with the reason each one was ruled out.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Compaction is the recommended strategy for long-running conversations, custom summarisation instructions are genuinely supported, and directing the summary at the eliminations is exactly the right instinct — a good architect would try this. It still fails R3. A summary is a lossy, model-generated artefact with no guarantee that any particular elimination survives it, and the guarantee is what R3 demands. Compaction remains worth enabling for context length; it is just not a system of record.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-07",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "The yield-tracking database rejected 6% of overnight submissions because the failure-mode field held a code outside the 26-code taxonomy — usually a plausible-sounding variant of a real code. How should the team guarantee the field is always valid?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Map any unrecognised code to the nearest taxonomy entry by string similarity before submission, so nothing is ever rejected by the database.",
+          "correct": false,
+          "explanation": "Nearest-match repair converts a visible rejection into an invisible misclassification, and in a taxonomy where codes are deliberately similar the nearest string is frequently the wrong failure mode. The fab's morning meeting is driven from this field, so a silently wrong code is considerably more damaging than a submission that fails loudly.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "List the twenty-six codes in the prompt with instructions to use only those values, validate the submission afterwards, and re-prompt the agent to regenerate its hypothesis list whenever a code falls outside the set.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is portable, easy to reason about, and would drive the 6% down a long way, so it is a fair choice. It does not meet R5 or R6. R5 asks for output that validates, and a validate-then-retry loop offers a probability rather than a guarantee — it can still exhaust without producing a valid code. Each retry also regenerates the entire ranked list at the very end of a run that has already spent most of its 45-minute and $6 allowance.",
+          "citation": {
+            "title": "Claude prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Prefill the beginning of the assistant's final message with the opening of the submission record so the model continues in the required format.",
+          "correct": false,
+          "explanation": "Assistant prefill is no longer a valid technique on current Claude models, so this cannot be the basis of a production guarantee. Even historically it only shaped the first tokens of a response and never constrained a field deep inside the structure to stay within an enumerated set.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Constrain generation with a schema in which the failure-mode field is an enum built from the taxonomy resource, so an out-of-taxonomy code cannot be produced at all.",
+          "correct": true,
+          "explanation": "Structured outputs use constrained decoding, which means an invalid code is not an error to be detected but a token the model cannot emit — that is the difference between a 6% rejection rate and R5's guarantee. Generating the enum from the same taxonomy resource the database owns also means the twice-yearly revisions propagate without a code change. Option B, the runner-up, reaches for the same goal through detection and repair, which costs run budget and still admits failure.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-08",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "Yield engineers report that the top-ranked hypothesis often reads authoritatively but rests on evidence that does not actually distinguish it from the second and third entries, and the agent rarely uses the taxonomy's 'cause not established' code. How should the output prompt be restructured?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Include thirty complete historical excursion write-ups as examples so the agent learns the house style of a well-argued ranking.",
+          "correct": false,
+          "explanation": "Examples are effective for shaping form, but the complaint here is about grounding rather than form, and the agent is already producing well-formed prose. Thirty full write-ups is also a very large permanent addition to a prefix paid across a hundred-plus turns per run, which pushes on the per-investigation budget for a benefit aimed at the wrong problem.",
+          "citation": {
+            "title": "Use examples (multishot prompting)",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/multishot-prompting"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Require the agent to emit, for each hypothesis, the evidence references and the observations that would rule it out before any ranking is produced, and define the 'cause not established' code as the required outcome when nothing discriminates.",
+          "correct": true,
+          "explanation": "Both symptoms come from the same defect: the ranking is being written first and justified afterwards. Ordering the output so discriminating evidence must be stated before the rank is assigned makes the ranking a consequence of what was found, and naming the conditions under which 'cause not established' is required stops it from being the code the agent avoids. This is one generation, so it costs nothing against R6 — unlike option D, which buys the same discipline through repeated passes.",
+          "citation": {
+            "title": "Claude prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have the agent attach a numeric confidence to each hypothesis and demote anything under a fixed threshold to 'cause not established'.",
+          "correct": false,
+          "explanation": "Self-reported confidence is not calibrated, so a threshold on top of it adds arithmetic rather than evidence, and it is exactly the overconfident hypotheses that will score highest. The reliable signal is whether an evidence reference actually discriminates between the candidates, which is a structural property of the output rather than a number the model volunteers.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add an evaluator pass that reviews the ranked list, rejects any hypothesis whose evidence does not discriminate it from its neighbours, and sends the list back for revision, looping until the evaluator returns no objections at all.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Evaluator-optimizer is a documented pattern and a well-chosen one for exactly this failure mode, since the evaluation criterion is crisp and machine-checkable. It fails R6. The loop has no bound, it runs at the end of a 120-call investigation that has already consumed most of its 45-minute and $6 allowance, and an evaluator with a strict criterion can decline to converge on a genuinely ambiguous excursion. Bounded to a single pass it would be a fine addition to option B, not a replacement for it.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-09",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "Five more sources come online — the manufacturing execution system, SPC charts, supplier lot genealogy, maintenance tickets and layer geometry — taking the agent's registered tool count from twenty-six to seventy-four. Investigation quality drops and per-run spend rises. What should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Merge related tools into a smaller number of general-purpose tools that take a source name and a query, cutting the registered count back to about a dozen.",
+          "correct": false,
+          "explanation": "Collapsing distinct operations behind a source parameter shrinks the definition list but moves the ambiguity into the arguments, where the model gets less help and the schema can express less. Anthropic's tool guidance favours a small number of clearly-scoped tools over a few overloaded ones; the fix for too many tools is not fewer, vaguer tools.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Drop the three sources the team judges least useful so the registered count falls back under thirty.",
+          "correct": false,
+          "explanation": "Discarding evidence sources to manage a context problem trades away investigation quality to fix a mechanism problem. Supplier lot genealogy and maintenance tickets are among the most discriminating signals in a materials-related excursion, and R1's traceability is better served by more sources reachable on demand, not fewer.",
+          "citation": {
+            "title": "Tool search tool",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Adopt tool search so the agent discovers and loads only the handful of tool definitions relevant to the excursion in front of it rather than carrying all seventy-four.",
+          "correct": true,
+          "explanation": "Tool search is designed for exactly this inflection: instead of every request paying for the full catalogue, the agent searches names and descriptions and loads the few tools it needs, which is documented to cut definition tokens by a large margin. That addresses both reported symptoms at once, because selection accuracy is known to degrade once a model is choosing among more than about thirty to fifty tools. Option D keeps all seventy-four loaded and so keeps paying that cost on every one of a hundred-plus turns.",
+          "citation": {
+            "title": "Tool search tool",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep all seventy-four registered but namespace them by source system and rewrite every description to state precisely when the tool applies, so the agent has clearer grounds for choosing among them on each turn.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Namespacing by service and resource is explicit Anthropic guidance and better descriptions genuinely improve selection, so this is real engineering rather than a distractor. It fails R6. Seventy-four definitions remain in the prefix of every turn of a 120-call run, which is where the spend increase came from, and clearer descriptions do not lift selection accuracy back to where it was below the thirty-to-fifty-tool range. Namespacing is worth doing alongside option C, not instead of it.",
+          "citation": {
+            "title": "Writing tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-10",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D4", "D5"],
+      "question": "The overnight scheduler launches investigations headlessly at 23:00 with nobody watching. Two runs stalled overnight and produced nothing by morning. The team needs runs that never wait on a person while still honouring the raw-trace prohibition. What should they configure?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Pre-declare the permitted tool set in project settings so the headless run never reaches an interactive prompt, and add a PreToolUse hook that denies any call outside that set.",
+          "correct": true,
+          "explanation": "The stall is a permission prompt with no human to answer it, so the fix is to decide the tool set ahead of time rather than at run time — that is what satisfies R4. The PreToolUse hook then supplies the other half: it runs before the call executes and returns a deterministic denial, so a trace-fetch attempt is refused rather than merely unapproved, keeping R2 true without anyone present. Option B removes the stall too, but by removing the check entirely.",
+          "citation": {
+            "title": "Claude Code settings",
+            "url": "https://code.claude.com/docs/en/settings"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Launch the scheduled runs with permission prompting skipped entirely, on the grounds that the batch host is an isolated sandbox and there is nobody available to approve anything at 23:00 in any case.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The reasoning is sound as far as it goes: an isolated batch host is the environment where bypassing prompts is least dangerous, and it does deliver R4 by guaranteeing nothing ever waits for a person. It fails R2. Skipping prompts removes the check without replacing it, so the only thing standing between the run and a 180 MB trace fetch is the model's own judgement. R4 asks for no human in the loop, not for no control in the loop.",
+          "citation": {
+            "title": "Claude Code security",
+            "url": "https://code.claude.com/docs/en/security"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Put a yield engineer on call overnight to approve tool requests as they arrive so the runs never stall.",
+          "correct": false,
+          "explanation": "This directly contradicts the deployment model. R4 exists because the value of the overnight job is that it finishes before the morning meeting without occupying anybody, and a rota of engineers approving tool calls at 02:00 is a larger cost than the investigation time being saved.",
+          "citation": {
+            "title": "Claude Code permissions",
+            "url": "https://code.claude.com/docs/en/permissions"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have the agent use MCP elicitation to request approval whenever it wants a tool outside the usual set, and treat a timeout as a denial.",
+          "correct": false,
+          "explanation": "Elicitation is a client feature for asking a user for input mid-interaction, so it presupposes the very user R4 says will not be there. Waiting for a timeout on every out-of-set call also burns wall clock against the 45-minute budget to reach a decision the configuration could have made instantly.",
+          "citation": {
+            "title": "MCP client concepts",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F4-CS2-11",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D4", "D5"],
+      "question": "A new node ramp triples excursion volume to about 120 a week, but the overnight window between test data landing and the morning meeting stays at eight hours. Roughly 60% of the new excursions match a signature the fab has seen and resolved before. How should the team absorb the load?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Submit all 120 investigations through the Message Batches API to take advantage of asynchronous processing and its discount across the whole overnight window.",
+          "correct": false,
+          "explanation": "The Batches API processes independent requests asynchronously, which suits a large set of one-shot calls. An investigation is not one call: it is an agent loop of up to a hundred and twenty tool calls whose next request depends on the previous result, so it cannot be expressed as a batch entry. The batch path fits the classifier, not the investigator.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Move the orchestration work to Haiku 4.5 across the board so each investigation costs and takes about a third of what it does now, and review quality after a month of production data.",
+          "correct": false,
+          "explanation": "A model change on the reasoning-heaviest component is an evaluation decision, and taking it on cost grounds alone before running the archived excursions through it inverts that order. Haiku 4.5 is well suited to triage and classification in this system; using it for the hypothesis loop is a different claim that needs evidence first.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Raise overnight concurrency and shorten each investigation by lowering the tool-call ceiling from a hundred and twenty to forty, so three times as many runs fit inside the same eight-hour window without any new components to build.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Trading depth for throughput is a real lever and this needs no new architecture, so it is the tempting answer under schedule pressure. It fails R1. An investigation truncated at forty calls stops partway through its evidence gathering, and the ranked list it emits contains hypotheses the agent never got to test — so they arrive without a reproducible lot, chamber or recipe reference. Cutting the ceiling makes the output cheaper and unusable at the same time.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add a Haiku 4.5 triage step that matches each excursion against known signatures, resolve matches through a deterministic lookup path, and send only the unmatched ones into the full agent loop.",
+          "correct": true,
+          "explanation": "Routing is the right response to a workload where most items are cheap and a minority are expensive: a fast, inexpensive classifier separates the two, the 60% with known signatures resolve without an agent run at all, and the remaining 40% get the undiminished 120-call investigation that R1's evidence chain depends on. Peak agent load lands close to today's, so the eight-hour window and the per-investigation budget both hold. Option C fits the window by shortening every run instead, including the ones that most need the depth.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    }
+  ]
+}
