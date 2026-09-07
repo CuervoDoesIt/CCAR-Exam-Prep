@@ -1,8 +1,8 @@
 # CCAR Exam Prep
 
-An interactive study app for the **CCAR-F (Foundations)** and **CCAR-P (Professional)** Claude Certified Architect exams.
+An interactive study app for the Claude Certified **Architect** exams — CCAR-F (Foundations) and CCAR-P (Professional) — and the Claude Certified **Developer** exam, CCDV-F (Foundations).
 
-Six full-length mock exams — 372 questions total — each answer option explained and cited against Anthropic's official documentation.
+Ten full-length mock exams — 584 questions total — each answer option explained and cited against Anthropic's official documentation.
 
 ## Two study modes
 
@@ -17,14 +17,20 @@ Six full-length mock exams — 372 questions total — each answer option explai
 | CCAR-F Mock 1 & 2 | 5 domains | 60 | 120 min | 720 / 1000 |
 | CCAR-P Mock 1 & 2 | 7 domains | 63 | 120 min | 720 / 1000 |
 | CCAR-P Mock 3 & 4 | Case studies · **hard** | 63 | 120 min | 720 / 1000 |
+| CCDV-F Mock 1 & 2 | 8 domains | 53 | 120 min | 720 / 1000 |
+| CCDV-F Mock 3 & 4 | Case studies · **hard** | 53 | 120 min | 720 / 1000 |
+
+The two tracks deliberately test different things. CCAR asks *which architecture fits*; CCDV-F asks *which call, parameter, or code change produces this result* — request and response shapes, `stop_reason` handling, streaming, prompt-caching mechanics, tool round trips, retry behaviour. Topics CCAR-F lists as out of scope are core CCDV-F material, so the banks barely overlap.
+
+The CCDV-F exams also include **multiple-response** items ("Which TWO…"), as the real one does. They are scored all-or-nothing: one right pick earns zero.
 
 ### Case-study exams (hard mode)
 
-Mock 3 and 4 mirror the harder shape of the real CCAR-P: a detailed client scenario with numbered requirements (`R1`–`R6`), followed by twelve questions that each require reasoning across several exam domains at once.
+CCAR-P Mock 3 & 4 and CCDV-F Mock 3 & 4 mirror the harder shape of the real professional exam: a detailed client scenario with numbered requirements (`R1`–`R6`), followed by twelve questions that each require reasoning across several exam domains at once.
 
 Their defining feature is the **close second**. On every question two options are defensible, but one is stronger because it satisfies *all* the stated requirements while the other quietly drops one. The runner-up is tracked separately, so your results tell you not just what you got wrong but where you chose a sound design that missed a requirement — usually the most useful thing to re-read.
 
-Twelve client scenarios span healthcare, finance, e-commerce, legal, field service, developer tooling, public sector, media, telecom, education, insurance, and biotech.
+Twenty-two client scenarios, no two in the same vertical: healthcare, finance, e-commerce, legal, field service, developer tooling, public sector, media, telecom, education, insurance, biotech, freight, airline, gaming, agritech, proptech, music streaming, construction, hospitality, philanthropy, and automotive.
 
 ## Running it
 
@@ -48,7 +54,8 @@ npm run build         # production client build
 
 - **`client/`** — Vite + React. `views/` holds the four screens (Home, LearningMode, RealMode, Results); `progress.js` handles localStorage persistence; `CasePanel.jsx` renders the collapsible client scenario on case exams.
 - **`server/`** — Express. Loads question banks from `data/`, grades submissions, and persists attempt history to `store/`.
-- **`server/data/{ccar-f,ccar-p}/exam*/`** — the question banks. Domain exams use one file per domain (`d1.json`…); case exams use one file per case study (`cs1.json`…).
+- **`server/data/{ccar-f,ccar-p,ccdv-f}/exam*/`** — the question banks. Domain exams use one file per domain (`d1.json`…); case exams use one file per case study (`cs1.json`…).
+- **`client/src/answers.js`** — the one place that knows how an answer is shaped, so single-choice and multiple-response items are handled identically everywhere else.
 - **`CONTENT_SPEC.md`** / **`CASE_SPEC.md`** — the authoring contracts for each format. `server/validate.js` enforces them.
 
 Real Mode payloads are stripped server-side — options are reduced to key and text before they leave the API, so answers and explanations can't be read out of the network tab. Grading happens on the server.
@@ -57,6 +64,8 @@ Real Mode payloads are stripped server-side — options are reduced to key and t
 
 Every question was reviewed a second time against live Anthropic documentation, checking answer keys, technical claims, numeric figures, and citation links. `npm run validate` additionally enforces the structural contract and guards against the ways multiple-choice banks tend to leak answers — the correct option being consistently longest, or the answer letters falling into a predictable pattern.
 
-Citations point to `docs.claude.com`, `platform.claude.com`, `code.claude.com`, `modelcontextprotocol.io`, and `anthropic.com`.
+Citations point to `platform.claude.com`, `code.claude.com`, `modelcontextprotocol.io`, `anthropic.com`, and — in the older CCAR banks — `docs.claude.com`, which now redirects to the first two.
+
+Anthropic's docs move quickly, and several facts changed recently enough that memory is an unreliable guide. `CONTENT_SPEC.md` carries a **Volatile facts** section listing the ones most likely to be stale; check it before authoring or trusting a question in those areas.
 
 > Unofficial study material, not affiliated with or endorsed by Anthropic. Verify against the official documentation.

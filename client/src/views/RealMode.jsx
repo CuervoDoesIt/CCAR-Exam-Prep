@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { loadProgress, saveProgress, clearProgress } from '../progress.js';
+import { toKeys, selectCount, isAnswered, toggleKey } from '../answers.js';
 import CasePanel from '../components/CasePanel.jsx';
 
 function fmtClock(totalSec) {
@@ -98,8 +99,10 @@ export default function RealMode({ examId, onExit, onFinished }) {
   if (submitting) return <div className="panel">Grading your exam…</div>;
 
   const q = exam.questions[idx];
-  const answeredCount = Object.keys(answers).length;
+  const answeredCount = exam.questions.filter((qq) => isAnswered(qq, answers[qq.id])).length;
   const low = remaining <= 300;
+  const want = selectCount(q);
+  const chosenKeys = toKeys(answers[q.id]);
   const activeCase = exam.cases?.find((c) => c.caseId === q.caseId);
   const numberInCase = activeCase
     ? exam.questions.filter((qq) => qq.caseId === q.caseId).findIndex((qq) => qq.id === q.id) + 1
@@ -141,16 +144,22 @@ export default function RealMode({ examId, onExit, onFinished }) {
           </button>
         </div>
         <h3 className="q-text">{q.question}</h3>
+        {want > 1 && (
+          <div className="select-hint">
+            Select {want} — {chosenKeys.length} of {want} chosen
+          </div>
+        )}
         <div className="options">
           {q.options.map((o) => (
-            <div key={o.key} className={`option ${answers[q.id] === o.key ? 'selected' : ''}`}>
+            <div key={o.key} className={`option ${chosenKeys.includes(o.key) ? 'selected' : ''}`}>
               <button
                 className="option-btn"
                 onClick={() =>
                   setAnswers((a) => {
                     const next = { ...a };
-                    if (next[q.id] === o.key) delete next[q.id];
-                    else next[q.id] = o.key;
+                    const v = toggleKey(q, a[q.id], o.key);
+                    if (v === undefined) delete next[q.id];
+                    else next[q.id] = v;
                     return next;
                   })
                 }
@@ -168,7 +177,8 @@ export default function RealMode({ examId, onExit, onFinished }) {
         <div className="palette">
           {exam.questions.map((qq, i) => {
             let cls = 'pal';
-            if (answers[qq.id]) cls += ' pal-answered';
+            if (isAnswered(qq, answers[qq.id])) cls += ' pal-answered';
+            else if (toKeys(answers[qq.id]).length > 0) cls += ' pal-partial';
             if (flagged[qq.id]) cls += ' pal-flagged';
             if (i === idx) cls += ' pal-current';
             if (i > 0 && qq.caseId && qq.caseId !== exam.questions[i - 1].caseId) cls += ' pal-case-start';
@@ -197,6 +207,9 @@ export default function RealMode({ examId, onExit, onFinished }) {
             <p>
               You have answered {answeredCount} of {exam.questions.length} questions.
               {answeredCount < exam.questions.length && ' Unanswered questions will be marked incorrect.'}
+              {exam.questions.some(
+                (qq) => !isAnswered(qq, answers[qq.id]) && toKeys(answers[qq.id]).length > 0,
+              ) && ' Select-two questions without both picks count as unanswered.'}
             </p>
             <div className="modal-buttons">
               <button className="btn ghost" onClick={() => setConfirmSubmit(false)}>Keep working</button>

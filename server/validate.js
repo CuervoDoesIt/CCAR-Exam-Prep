@@ -11,6 +11,9 @@ const EXPECTED = {
   "ccar-f/exam2": { D1: 14, D2: 13, D3: 11, D4: 12, D5: 10 },
   "ccar-p/exam1": { D1: 11, D2: 11, D3: 17, D4: 11, D5: 7, D6: 4, D7: 2 },
   "ccar-p/exam2": { D1: 11, D2: 11, D3: 17, D4: 11, D5: 7, D6: 4, D7: 2 },
+  // CCDV-F blueprint (Exam Guide v1.0, July 2026): 53 items across 8 domains.
+  "ccdv-f/exam1": { D1: 8, D2: 17, D3: 2, D4: 1, D5: 9, D6: 6, D7: 4, D8: 6 },
+  "ccdv-f/exam2": { D1: 8, D2: 17, D3: 2, D4: 1, D5: 9, D6: 6, D7: 4, D8: 6 },
 };
 
 // Hard-mode case exams: per-case primaryDomain allocation (see CASE_SPEC.md).
@@ -22,12 +25,27 @@ const CASE_ALLOCATION = {
   cs5: { D1: 2, D2: 2, D3: 3, D4: 2, D5: 2, D6: 1 },
   cs6: { D3: 1, D4: 1, D7: 1 },
 };
-const EXPECTED_CASES = {
-  "ccar-p/exam3": { prefix: "P3", allocation: CASE_ALLOCATION },
-  "ccar-p/exam4": { prefix: "P4", allocation: CASE_ALLOCATION },
+
+// CCDV-F hard mode deliberately departs from the blueprint: Claude Code (D3)
+// and Eval/Testing (D4) are only 2 and 1 items on the real exam, which is too
+// thin to study from, so they are over-weighted here. Still sums to 53.
+const CCDV_CASE_ALLOCATION = {
+  cs1: { D1: 2, D2: 3, D3: 1, D4: 1, D5: 2, D6: 1, D7: 1, D8: 1 },
+  cs2: { D1: 2, D2: 3, D3: 1, D4: 1, D5: 2, D6: 1, D7: 1, D8: 1 },
+  cs3: { D1: 2, D2: 3, D3: 1, D4: 1, D5: 2, D6: 1, D7: 1, D8: 1 },
+  cs4: { D1: 2, D2: 3, D3: 1, D4: 1, D5: 2, D6: 1, D7: 1, D8: 1 },
+  cs5: { D2: 1, D3: 1, D4: 1, D6: 2 },
 };
 
-const DOMAIN_IDS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7"];
+const CCAR_P_DOMAINS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7"];
+const CCDV_F_DOMAINS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"];
+
+const EXPECTED_CASES = {
+  "ccar-p/exam3": { prefix: "P3", allocation: CASE_ALLOCATION, domainIds: CCAR_P_DOMAINS },
+  "ccar-p/exam4": { prefix: "P4", allocation: CASE_ALLOCATION, domainIds: CCAR_P_DOMAINS },
+  "ccdv-f/exam3": { prefix: "V3", allocation: CCDV_CASE_ALLOCATION, domainIds: CCDV_F_DOMAINS },
+  "ccdv-f/exam4": { prefix: "V4", allocation: CCDV_CASE_ALLOCATION, domainIds: CCDV_F_DOMAINS },
+};
 const CITATION_RE =
   /^https:\/\/(docs\.claude\.com|platform\.claude\.com|code\.claude\.com|www\.anthropic\.com|modelcontextprotocol\.io|docs\.anthropic\.com)\//;
 
@@ -36,19 +54,42 @@ let warnings = 0;
 const err = (m) => { errors++; console.error("ERROR:", m); };
 const warn = (m) => { warnings++; console.warn("warn :", m); };
 
-// Shared per-question structural checks. Returns the correct option's key, or null.
+// Shared per-question structural checks. Single-choice items are 4 options
+// (A-D) with 1 correct; multiple-response items are 5 options (A-E) with
+// exactly selectCount correct. Returns the correct key for single-choice items
+// (for letter-distribution analysis), or null.
 function checkQuestion(file, q, seen) {
   if (!q.id || seen.has(q.id)) err(`${file}: missing/duplicate id ${q.id}`);
   seen.add(q.id);
   if (!q.question) err(`${file} ${q.id}: empty question`);
-  if (!Array.isArray(q.options) || q.options.length !== 4) {
-    err(`${file} ${q.id}: needs exactly 4 options`);
+
+  const isMulti = q.type === "multi";
+  if (q.type !== undefined && q.type !== "single" && q.type !== "multi") {
+    err(`${file} ${q.id}: bad type ${q.type} (expected "single" or "multi")`);
+  }
+  const wantOptions = isMulti ? 5 : 4;
+  const wantKeys = isMulti ? "ABCDE" : "ABCD";
+  const wantCorrect = isMulti ? q.selectCount : 1;
+
+  if (isMulti) {
+    if (q.selectCount !== 2) err(`${file} ${q.id}: multi items must set selectCount: 2`);
+    if (!/\bTWO\b/.test(q.question)) {
+      err(`${file} ${q.id}: multi item stem must tell the candidate how many to select (e.g. "Which TWO...")`);
+    }
+  } else if (q.selectCount !== undefined) {
+    err(`${file} ${q.id}: selectCount is only valid on multi items`);
+  }
+
+  if (!Array.isArray(q.options) || q.options.length !== wantOptions) {
+    err(`${file} ${q.id}: needs exactly ${wantOptions} options`);
     return null;
   }
   const keys = q.options.map((o) => o.key).join("");
-  if (keys !== "ABCD") err(`${file} ${q.id}: option keys ${keys} != ABCD`);
+  if (keys !== wantKeys) err(`${file} ${q.id}: option keys ${keys} != ${wantKeys}`);
   const correct = q.options.filter((o) => o.correct === true);
-  if (correct.length !== 1) err(`${file} ${q.id}: ${correct.length} correct options`);
+  if (correct.length !== wantCorrect) {
+    err(`${file} ${q.id}: ${correct.length} correct options, expected ${wantCorrect}`);
+  }
   for (const o of q.options) {
     if (!o.text) err(`${file} ${q.id}${o.key}: empty text`);
     if (!o.explanation || o.explanation.length < 40) warn(`${file} ${q.id}${o.key}: explanation short/missing`);
@@ -56,7 +97,7 @@ function checkQuestion(file, q, seen) {
       err(`${file} ${q.id}${o.key}: missing or non-approved citation URL (${o.citation && o.citation.url})`);
     }
   }
-  return correct.length === 1 ? correct[0].key : null;
+  return !isMulti && correct.length === 1 ? correct[0].key : null;
 }
 
 function checkLetterDistribution(file, letterDist, total) {
@@ -81,11 +122,13 @@ for (const [rel, domains] of Object.entries(EXPECTED)) {
     if (data.questions.length !== count) err(`${file}: ${data.questions.length} questions, expected ${count}`);
     const seen = new Set();
     const letterDist = { A: 0, B: 0, C: 0, D: 0 };
+    let singles = 0;
     for (const q of data.questions) {
       const k = checkQuestion(file, q, seen);
+      if (q.type !== "multi") singles++;
       if (k) letterDist[k]++;
     }
-    checkLetterDistribution(file, letterDist, data.questions.length);
+    checkLetterDistribution(file, letterDist, singles);
   }
 }
 
@@ -130,8 +173,12 @@ for (const [rel, spec] of Object.entries(EXPECTED_CASES)) {
       const expectedId = `${spec.prefix}-${expectedCaseId}-${String(i + 1).padStart(2, "0")}`;
       if (q.id !== expectedId) err(`${file}: question ${i + 1} id ${q.id} != ${expectedId}`);
 
-      if (!DOMAIN_IDS.includes(q.primaryDomain)) err(`${file} ${q.id}: bad primaryDomain ${q.primaryDomain}`);
+      if (!spec.domainIds.includes(q.primaryDomain)) err(`${file} ${q.id}: bad primaryDomain ${q.primaryDomain}`);
       else domainCounts[q.primaryDomain] = (domainCounts[q.primaryDomain] ?? 0) + 1;
+
+      // The runnerUp mechanic is inherently single-answer: it contrasts one
+      // defensible choice against a stronger one.
+      if (q.type === "multi") err(`${file} ${q.id}: case-study items must be single-choice`);
 
       if (!Array.isArray(q.secondaryDomains) || q.secondaryDomains.length < 1 || q.secondaryDomains.length > 3) {
         err(`${file} ${q.id}: secondaryDomains must be an array of 1-3 domain ids`);
@@ -140,7 +187,7 @@ for (const [rel, spec] of Object.entries(EXPECTED_CASES)) {
         if (uniq.size !== q.secondaryDomains.length) err(`${file} ${q.id}: duplicate secondaryDomains`);
         if (uniq.has(q.primaryDomain)) err(`${file} ${q.id}: primaryDomain repeated in secondaryDomains`);
         for (const d of q.secondaryDomains) {
-          if (!DOMAIN_IDS.includes(d)) err(`${file} ${q.id}: bad secondaryDomain ${d}`);
+          if (!spec.domainIds.includes(d)) err(`${file} ${q.id}: bad secondaryDomain ${d}`);
         }
       }
 
@@ -157,7 +204,7 @@ for (const [rel, spec] of Object.entries(EXPECTED_CASES)) {
       if (correctOpt && (correctOpt.text ?? "").length === maxLen) longestIsCorrect++;
     });
 
-    for (const d of DOMAIN_IDS) {
+    for (const d of spec.domainIds) {
       const want = allocation[d] ?? 0;
       const got = domainCounts[d] ?? 0;
       if (want !== got) err(`${file}: primaryDomain ${d} count ${got}, expected ${want}`);

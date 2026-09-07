@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toKeys, correctKeys, sameSet } from '../answers.js';
 
 function fmtDuration(s) {
   const m = Math.floor(s / 60);
@@ -11,11 +12,7 @@ export default function Results({ attempt, onExit }) {
   const { overall, sections, cases, review } = attempt;
   const runnerUpTraps = (cases ?? []).reduce((n, c) => n + c.runnerUpPicks, 0);
 
-  const shown = review.filter((r) => {
-    if (filter === 'all') return true;
-    const correctKey = r.options.find((o) => o.correct).key;
-    return r.chosen !== correctKey;
-  });
+  const shown = review.filter((r) => (filter === 'all' ? true : !sameSet(r.chosen, correctKeys(r))));
 
   return (
     <div className="results">
@@ -111,8 +108,8 @@ export default function Results({ attempt, onExit }) {
       </div>
 
       {shown.map((r) => {
-        const correctKey = r.options.find((o) => o.correct).key;
-        const isCorrect = r.chosen === correctKey;
+        const chosenKeys = toKeys(r.chosen);
+        const isCorrect = sameSet(chosenKeys, correctKeys(r));
         const open = !!openQ[r.id];
         return (
           <div key={r.id} className={`review-card ${isCorrect ? 'rc-right' : 'rc-wrong'}`}>
@@ -127,14 +124,14 @@ export default function Results({ attempt, onExit }) {
                 {r.options.map((o) => (
                   <div
                     key={o.key}
-                    className={`option ${o.correct ? 'correct' : o.runnerUp ? 'runner-up' : o.key === r.chosen ? 'incorrect' : 'neutral'}`}
+                    className={`option ${o.correct ? 'correct' : o.runnerUp ? 'runner-up' : chosenKeys.includes(o.key) ? 'incorrect' : 'neutral'}`}
                   >
                     <div className="option-btn as-static">
                       <span className="option-key">{o.key}</span>
                       <span>
                         {o.text}
                         {o.runnerUp && <em className="close-second"> — close second</em>}
-                        {o.key === r.chosen && <em className="you-chose"> — your answer</em>}
+                        {chosenKeys.includes(o.key) && <em className="you-chose"> — your answer</em>}
                       </span>
                     </div>
                     <div className="explanation">
@@ -145,7 +142,13 @@ export default function Results({ attempt, onExit }) {
                     </div>
                   </div>
                 ))}
-                {r.chosen === null && <p className="muted">You did not answer this question.</p>}
+                {chosenKeys.length === 0 && <p className="muted">You did not answer this question.</p>}
+                {chosenKeys.length > 0 && chosenKeys.length < correctKeys(r).length && (
+                  <p className="muted">
+                    This was a select-{correctKeys(r).length} question and you chose only{' '}
+                    {chosenKeys.length}. Partial selections score zero.
+                  </p>
+                )}
               </div>
             )}
           </div>

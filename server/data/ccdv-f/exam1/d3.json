@@ -1,0 +1,75 @@
+{
+  "examId": "ccdv-f-exam1",
+  "domainId": "D3",
+  "domainName": "Claude Code",
+  "questions": [
+    {
+      "id": "V1-D3-01",
+      "question": "A developer adds a CI step that runs claude -p \"fix the failing test\" --allowedTools \"Bash(npm test:*)\" \"Edit\". The job hangs, and the transcript shows Claude waiting on a permission prompt for a Read call. A teammate insists --allowedTools controls which tools exist. What is actually happening?",
+      "options": [
+        {
+          "key": "A",
+          "text": "--allowedTools strips every unlisted tool from Claude's context, so Read should never have been callable and the flag must have been parsed incorrectly.",
+          "correct": false,
+          "explanation": "Removing a tool from Claude's context is what a bare deny rule does, for example --disallowedTools \"Edit\". The allow list never shortens the tool set; it only decides which calls skip the prompt.",
+          "citation": { "title": "Claude Code CLI reference", "url": "https://code.claude.com/docs/en/cli-reference" }
+        },
+        {
+          "key": "B",
+          "text": "Print mode implies full autonomy, so a hang can only mean the flag was mistyped and no permission rules were applied at all.",
+          "correct": false,
+          "explanation": "-p only makes the session non-interactive and prints the result; it does not grant blanket approval. Because there is no terminal to answer a prompt, an unapproved tool call is exactly what stalls an automated run.",
+          "citation": { "title": "Claude Code CLI reference", "url": "https://code.claude.com/docs/en/cli-reference" }
+        },
+        {
+          "key": "C",
+          "text": "--allowedTools names the tools that run without prompting; unlisted tools stay available and still ask, so Read must be added or otherwise pre-approved.",
+          "correct": true,
+          "explanation": "The flag is documented as \"tools that execute without prompting for permission\", making it an auto-approval list rather than an availability filter. Anything outside the list still exists and still needs approval, which is why a headless job blocks on Read.",
+          "citation": { "title": "Claude Code CLI reference", "url": "https://code.claude.com/docs/en/cli-reference" }
+        },
+        {
+          "key": "D",
+          "text": "Permissions may only be declared in .claude/settings.json, and command-line permission flags are silently ignored whenever print mode is used.",
+          "correct": false,
+          "explanation": "Permission rules can come from settings files or from CLI flags, and the command line sits above project settings in the precedence order. The stall is caused by an incomplete allow list, not by the flags being ignored.",
+          "citation": { "title": "Claude Code settings", "url": "https://code.claude.com/docs/en/settings" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D3-02",
+      "question": "A developer wants three things committed to a shared repository: guidance that Claude should run make lint before committing, a hard block on Bash(rm *) that applies no matter what Claude decides, and an internal MCP server that every teammate gets automatically on clone. Which mapping of files is correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Guidance in CLAUDE.md; the block as a permissions deny rule in .claude/settings.json; the server in .mcp.json at the project root.",
+          "correct": true,
+          "explanation": "CLAUDE.md is context that shapes behaviour, settings are enforced by the client regardless of what Claude decides, and project-scoped MCP servers live in .mcp.json, the one scope checked into version control and shared with the team. Each artifact is committed, so a clone picks all three up.",
+          "citation": { "title": "How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Guidance in .claude/settings.json; the block in CLAUDE.md; the server registered at user scope in ~/.claude.json.",
+          "correct": false,
+          "explanation": "This inverts the two roles: settings are technical enforcement while CLAUDE.md is behavioural guidance that Claude may not follow strictly. A user-scope MCP entry in ~/.claude.json is private to one machine, so teammates would never receive it.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "C",
+          "text": "All three in CLAUDE.md, since it is the only file guaranteed to load into every session and therefore the only reliable place to configure the project.",
+          "correct": false,
+          "explanation": "CLAUDE.md is loaded as context, not as enforced configuration, so it cannot hard-block a command and cannot register an MCP server. The docs point to a permissions deny rule or a PreToolUse hook when an action must be blocked regardless of Claude's judgement.",
+          "citation": { "title": "How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "D",
+          "text": "Guidance in CLAUDE.md; the block only via a PreToolUse hook, which is the sole mechanism able to stop a command; the server in .claude/settings.local.json.",
+          "correct": false,
+          "explanation": "A PreToolUse hook that exits 2 does block a call, but it is not the only mechanism: a permissions deny rule in settings blocks it declaratively with no script to maintain. settings.local.json is also the personal, gitignored layer, so nothing placed there reaches teammates.",
+          "citation": { "title": "Claude Code settings", "url": "https://code.claude.com/docs/en/settings" }
+        }
+      ]
+    }
+  ]
+}

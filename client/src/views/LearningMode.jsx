@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { loadProgress, saveProgress, clearProgress } from '../progress.js';
+import { toKeys, selectCount, isAnswered, isCorrect, correctKeys, toggleKey } from '../answers.js';
 import CasePanel from '../components/CasePanel.jsx';
 
 export default function LearningMode({ examId, onExit }) {
@@ -49,14 +50,15 @@ export default function LearningMode({ examId, onExit }) {
   const safeIdx = Math.min(idx, Math.max(0, questions.length - 1));
   const q = questions[safeIdx];
   if (!q) return <div className="panel">No questions in this section.</div>;
-  const chosen = picked[q.id];
-  const revealed = chosen !== undefined;
-  const correctKey = q.options.find((o) => o.correct).key;
-  const answeredCount = questions.filter((qq) => picked[qq.id] !== undefined).length;
-  const correctCount = questions.filter((qq) => {
-    const p = picked[qq.id];
-    return p !== undefined && qq.options.find((o) => o.key === p)?.correct;
-  }).length;
+  const chosenKeys = toKeys(picked[q.id]);
+  const want = selectCount(q);
+  // Select-two items only reveal once both picks are in, so the first click
+  // doesn't give the answer away.
+  const revealed = isAnswered(q, picked[q.id]);
+  const keysCorrect = correctKeys(q);
+  const gotIt = isCorrect(q, picked[q.id]);
+  const answeredCount = questions.filter((qq) => isAnswered(qq, picked[qq.id])).length;
+  const correctCount = questions.filter((qq) => isCorrect(qq, picked[qq.id])).length;
   const activeCase = exam.cases?.find((c) => c.caseId === q.caseId);
   const numberInCase = activeCase
     ? exam.questions.filter((qq) => qq.caseId === q.caseId).findIndex((qq) => qq.id === q.id) + 1
@@ -122,21 +124,37 @@ export default function LearningMode({ examId, onExit }) {
           )}
         </div>
         <h3 className="q-text">{q.question}</h3>
+        {want > 1 && !revealed && (
+          <div className="select-hint">
+            Select {want} — {chosenKeys.length} of {want} chosen
+          </div>
+        )}
         <div className="options">
           {q.options.map((o) => {
+            const mine = chosenKeys.includes(o.key);
             let cls = 'option';
             if (revealed) {
               if (o.correct) cls += ' correct';
               else if (o.runnerUp) cls += ' runner-up';
-              else if (o.key === chosen) cls += ' incorrect';
+              else if (mine) cls += ' incorrect';
               else cls += ' neutral';
+            } else if (mine) {
+              cls += ' selected';
             }
             return (
               <div key={o.key} className={cls}>
                 <button
                   className="option-btn"
                   disabled={revealed}
-                  onClick={() => setPicked((p) => ({ ...p, [q.id]: o.key }))}
+                  onClick={() =>
+                    setPicked((p) => {
+                      const next = { ...p };
+                      const v = toggleKey(q, p[q.id], o.key);
+                      if (v === undefined) delete next[q.id];
+                      else next[q.id] = v;
+                      return next;
+                    })
+                  }
                 >
                   <span className="option-key">{o.key}</span>
                   <span>{o.text}</span>
@@ -145,10 +163,10 @@ export default function LearningMode({ examId, onExit }) {
                   <div className="explanation">
                     <div className="expl-verdict">
                       {o.correct
-                        ? '✔ Correct answer'
+                        ? `✔ Correct answer${mine ? ' — you picked this' : ''}`
                         : o.runnerUp
-                          ? `◆ Close second${o.key === chosen ? ' — your choice' : ''} — defensible, but not the strongest fit`
-                          : o.key === chosen
+                          ? `◆ Close second${mine ? ' — your choice' : ''} — defensible, but not the strongest fit`
+                          : mine
                             ? '✘ Your choice — incorrect'
                             : '✘ Incorrect'}
                     </div>
@@ -163,12 +181,14 @@ export default function LearningMode({ examId, onExit }) {
           })}
         </div>
         {revealed && (
-          <div className={`verdict-banner ${chosen === correctKey ? 'pass' : 'fail'}`}>
-            {chosen === correctKey
+          <div className={`verdict-banner ${gotIt ? 'pass' : 'fail'}`}>
+            {gotIt
               ? 'Correct! Review the explanations for the other options to reinforce why they fail.'
-              : q.options.find((o) => o.key === chosen)?.runnerUp
-                ? `Close — ${chosen} is a defensible design, but ${correctKey} is stronger. Read both explanations to see which requirement ${chosen} drops.`
-                : `Incorrect — the right answer is ${correctKey}. Read all four explanations before moving on.`}
+              : want > 1
+                ? `Incorrect — the answer is ${keysCorrect.join(' and ')}. Select-two items are scored all-or-nothing, so one right pick earns nothing. Read every explanation before moving on.`
+                : q.options.find((o) => o.key === chosenKeys[0])?.runnerUp
+                  ? `Close — ${chosenKeys[0]} is a defensible design, but ${keysCorrect[0]} is stronger. Read both explanations to see which requirement ${chosenKeys[0]} drops.`
+                  : `Incorrect — the right answer is ${keysCorrect[0]}. Read all ${q.options.length} explanations before moving on.`}
           </div>
         )}
       </div>
@@ -177,9 +197,8 @@ export default function LearningMode({ examId, onExit }) {
         <button className="btn ghost" disabled={safeIdx === 0} onClick={() => setIdx(safeIdx - 1)}>← Previous</button>
         <div className="palette">
           {questions.map((qq, i) => {
-            const p = picked[qq.id];
             let cls = 'pal';
-            if (p !== undefined) cls += qq.options.find((o) => o.key === p)?.correct ? ' pal-right' : ' pal-wrong';
+            if (isAnswered(qq, picked[qq.id])) cls += isCorrect(qq, picked[qq.id]) ? ' pal-right' : ' pal-wrong';
             if (i === safeIdx) cls += ' pal-current';
             return (
               <button key={qq.id} className={cls} onClick={() => setIdx(i)} title={qq.id}>

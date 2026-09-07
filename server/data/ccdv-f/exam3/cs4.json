@@ -1,0 +1,460 @@
+{
+  "examId": "ccdv-f-exam3",
+  "caseId": "CS4",
+  "caseTitle": "Verdant Ridge Agronomics — precision-farming advisory service",
+  "caseScenario": "Verdant Ridge Agronomics sells a precision-farming platform to 3,400 arable growers across the Netherlands, Germany and Denmark, covering roughly 1.1 million hectares. Its Field Advisor is a Python service built on the official anthropic SDK, running in Google Kubernetes Engine, that answers agronomists' questions in a mobile field app and, overnight, produces a full-season nutrient plan per farm. The advisor has eleven tools, including get_soil_lab_report, get_field_history, get_weather_forecast and apply_recommendation, plus an in-house MCP server that exposes machinery telemetry from the customer's tractor fleet.\n\nTwo paths share the codebase. The interactive path answers single questions from the field app, often with drone orthophoto tiles attached. The overnight path runs a long agent loop across every field on a farm — up to 900 field records and around 40 tool calls — and writes a nutrient plan that the agronomist signs off in the morning. Nitrogen recommendations are regulated: fields inside a nitrate-vulnerable zone have a legal application ceiling, and a pilot run recommended 260 kg N per hectare on a field capped at 170.\n\nThe defect list is long. Overnight runs terminate with stop_reason model_context_window_exceeded around tool call 31, and others stop early with max_tokens. Requests carrying more than twenty drone tiles are rejected with an invalid_request_error. The MCP telemetry server stopped working after the client was upgraded to protocol revision 2026-07-28. Roughly 6% of the source references the advisor writes into its recommendations point at the wrong page, and finance projects peak-season spend well above budget.",
+  "caseRequirements": [
+    "R1: Every nitrogen recommendation must be traceable to the exact soil-lab document and page it was drawn from, verifiable in the agronomist's UI.",
+    "R2: A single overnight season-planning run must complete within one conversation, without exceeding the model's context window, across up to 40 tool calls and 900 field records — the cross-field rotation logic requires all fields in scope at once.",
+    "R3: Peak-season inference spend must stay at or below EUR 46,000 per month across roughly 180,000 advisory runs.",
+    "R4: EU customer data must be processed in the europe-west4 region; no request may be served from a US region, and the constraint must hold for every engineer and for CI, not only for whoever configured it.",
+    "R5: A recommendation exceeding a field's regulated nitrogen ceiling must be blocked by a check that does not depend on the model's own reasoning.",
+    "R6: p95 latency on the interactive field-app path must stay under 6 seconds; the overnight planning path has no latency ceiling."
+  ],
+  "questions": [
+    {
+      "id": "V3-CS4-01",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D5", "D6"],
+      "question": "Agronomists attach up to 36 drone orthophoto tiles at 4096x4096 px to a single interactive advisory request. Those requests are rejected with an invalid_request_error whose message references \"many-image requests\" and states a pixel limit. Requests with a dozen tiles succeed. What is the correct fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Re-encode the tiles as TIFF before base64 encoding, since a lossless container preserves the canopy detail the model needs and avoids the compression artefacts that trigger the rejection.",
+          "correct": false,
+          "explanation": "The supported image media types are JPEG, PNG, GIF and WebP; a TIFF block is rejected outright, so this trades one invalid_request_error for another. The rejection is also about pixel dimensions in a many-image request, not about compression artefacts.",
+          "citation": { "title": "Images and vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "B",
+          "text": "Split the advisory into three sequential requests of twelve tiles each, carrying the previous answer forward as context, so no single request ever crosses the twenty-image threshold and the stricter per-image dimension limit is never applied at all.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The reasoning is correct — the stricter limit only applies above twenty images per request — and this genuinely stops the rejections without touching the imagery. It does not meet R6, though: three sequential model round trips, each processing twelve tiles that are still 4096 px on the long edge, cannot hold a 6-second p95 on the interactive path, and the tiles resent for continuity would count toward the threshold again.",
+          "citation": { "title": "Images and vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "C",
+          "text": "Downsample every tile before encoding so neither dimension exceeds the many-image limit, counting all image blocks — including tiles resent from earlier turns and any nested in tool_result content — toward the threshold.",
+          "correct": true,
+          "explanation": "Above twenty images a stricter per-image dimension limit applies to every image in the request, and the threshold counts all image blocks, not just the newly attached ones — resent tiles and images inside tool_result content both count, which is why a dozen tiles pass and thirty-six do not. Resizing also costs nothing in fidelity: images longer than the model's resolution tier are downsampled anyway, and visual-token cost is ceil(width/28) x ceil(height/28) computed after that resize. Keeping it to one request is what preserves R6, which option B (runner-up) gives up.",
+          "citation": { "title": "Images and vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "D",
+          "text": "Keep the tiles at full resolution but write the field GPS coordinates and capture time into each file's EXIF block so the model can read the location without a separate text block.",
+          "correct": false,
+          "explanation": "Claude does not parse or receive image metadata, so EXIF fields are simply discarded; coordinates have to be supplied as text alongside the image. This also leaves the dimension limit untouched, so the requests keep failing.",
+          "citation": { "title": "Images and vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-02",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "The overnight run terminates with stop_reason model_context_window_exceeded at around tool call 31. Instrumentation shows each get_field_history result is 8,000 to 14,000 tokens and that results from the first ten calls are never referenced again after the model has extracted their yield figures. What should the team change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add context_management with an edit of type clear_tool_uses_20250919, triggered on input_tokens and keeping the most recent results, and record extracted figures in a durable note before older results are cleared.",
+          "correct": true,
+          "explanation": "Server-side context editing clears stale tool results before the prompt reaches the model, which is precisely shaped for an agentic loop whose old file dumps are dead weight. Configuring the input_tokens trigger and a keep count preserves recent results while reclaiming the bulk of the window, so a 40-call run finishes in one conversation as R2 requires. Writing extracted figures out first means the cleared results are not lost, which keeps the document and page pointers R1 depends on. Option D (runner-up) also frees space but destroys those pointers.",
+          "citation": { "title": "Context editing", "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing" }
+        },
+        {
+          "key": "B",
+          "text": "Raise max_tokens on the overnight request so the model is given more room and the context window is no longer exhausted partway through the run.",
+          "correct": false,
+          "explanation": "max_tokens caps how many tokens the model may generate in a response; it has no bearing on how much input the context window can hold. Raising it here changes nothing about the accumulated tool results and would, if anything, let each turn grow larger.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "C",
+          "text": "Set thinking to {\"type\": \"enabled\", \"budget_tokens\": 4000} to bound how much context the model consumes while reasoning across the accumulated field history.",
+          "correct": false,
+          "explanation": "That configuration is the deprecated extended-thinking shape and returns a 400 on current models; the current form is thinking: {\"type\": \"adaptive\"}, with depth controlled through output_config.effort. A thinking budget also governs generated reasoning tokens, not the accumulated tool results that are actually filling the window.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Every ten tool calls, send the whole transcript to a second, cheaper model call that returns a prose summary of what has been established, discard the original messages, and restart the agent loop from that summary as the new baseline.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Rolling summarisation is a legitimate context strategy and is essentially what client-side compaction does, so it would keep the run inside the window. It fails R1: a prose summary collapses each soil-lab result into narrative, discarding the document identity and page number that every nitrogen recommendation must be traceable to, and once the originals are dropped there is nothing left to cite.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-03",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D6"],
+      "question": "With context editing enabled, the overnight run still terminates near 190,000 input tokens. It currently runs on claude-haiku-4-5, chosen when the planner covered only a dozen fields. The interactive field-app path is comfortably served by the same model. What should change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Request the 1M-token context window for claude-haiku-4-5 by adding the long-context beta header, which raises the ceiling without changing the model or the per-token price the team has budgeted for.",
+          "correct": false,
+          "explanation": "Claude Haiku 4.5 has a 200,000-token context window, and there is no header that extends it — the 1M-token window belongs to the Sonnet, Opus, Fable and Mythos 5-generation models. The run is terminating at the model's actual ceiling, so no request-level flag can rescue it.",
+          "citation": { "title": "Models overview", "url": "https://platform.claude.com/docs/en/about-claude/models/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Move the overnight planning path to claude-sonnet-5 for its 1M-token context window, and leave the interactive field-app lookups on claude-haiku-4-5.",
+          "correct": true,
+          "explanation": "The binding constraint is a hard model capability: 190,000 tokens is at Haiku 4.5's 200,000-token ceiling, and no configuration change moves it. Sonnet 5 offers a 1M-token window at $2 per million input tokens, which absorbs 40 tool calls over 900 field records in one conversation as R2 demands, while keeping the far higher-volume interactive path on the cheapest model protects R3 and R6. Option C (runner-up) keeps costs lower still but splits the plan into separate conversations, which R2 rules out.",
+          "citation": { "title": "Choosing the right model", "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model" }
+        },
+        {
+          "key": "C",
+          "text": "Keep claude-haiku-4-5 and shard the season plan into six regional sub-runs of roughly 150 fields each, merging their nutrient plans in application code once every sub-run has finished.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Sharding is a sensible way to fit a large workload into a small window and it holds the overnight path on the cheapest model, which is attractive against R3. It does not meet R2: that requirement is explicit that the plan must complete in one conversation with all fields in scope, because the rotation logic compares fields against each other, and six independent runs cannot see across shard boundaries.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "D",
+          "text": "Add a clear_thinking_20251015 edit alongside the existing tool-result clearing, so reasoning blocks are pruned as well and the remaining input tokens are freed.",
+          "correct": false,
+          "explanation": "Thinking-block clearing only helps when preserved reasoning blocks are a meaningful share of the context, whereas here the bulk is tool results that are already being cleared. It also cannot change the fact that the run is pressing against a 200,000-token model ceiling.",
+          "citation": { "title": "Context editing", "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-04",
+      "primaryDomain": "D8",
+      "secondaryDomains": ["D1", "D7"],
+      "question": "Verdant Ridge's in-house MCP server for tractor telemetry uses a sampling request to have the host's model draft a maintenance note from raw fault codes. After the MCP client was upgraded to protocol revision 2026-07-28, those requests stopped being served. How should the server be reworked?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Replace the sampling request with an elicitation request that asks the agronomist to supply the maintenance note text, since elicitation is the one client feature the current revision still defines.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The protocol reading is right: elicitation is the only client feature listed in revision 2026-07-28, and this is a legitimate, spec-compliant redesign. It fails R6 for the interactive path, though, because it turns an automated drafting step into a blocking prompt for a human being — a field-app turn that waits on someone to type a maintenance note cannot hold a 6-second p95.",
+          "citation": { "title": "MCP specification 2026-07-28", "url": "https://modelcontextprotocol.io/specification/2026-07-28" }
+        },
+        {
+          "key": "B",
+          "text": "Declare roots on the client so the server can resolve the telemetry export directory itself, read the fault codes locally, and generate the maintenance note without involving the host at all.",
+          "correct": false,
+          "explanation": "Roots was deprecated in the same revision as sampling, under the same proposal, so this swaps one deprecated client feature for another. The documented migration for roots is to pass directories or files through tool parameters, resource URIs, or server configuration instead.",
+          "citation": { "title": "MCP deprecated features", "url": "https://modelcontextprotocol.io/specification/2026-07-28/deprecated" }
+        },
+        {
+          "key": "C",
+          "text": "Pin the MCP client back to revision 2025-11-25, where sampling is still a supported client feature, and revisit the design when the team next has capacity for protocol work.",
+          "correct": false,
+          "explanation": "Pinning defers the problem rather than solving it: deprecated features carry a published earliest-removal revision, so the server will break again, and staying behind forfeits every other fix in the current revision. It is also not a code change to the server, which is what the question asks for.",
+          "citation": { "title": "MCP deprecated features", "url": "https://modelcontextprotocol.io/specification/2026-07-28/deprecated" }
+        },
+        {
+          "key": "D",
+          "text": "Have the server call an LLM provider API directly to draft the note, and expose the capability to the host as an ordinary MCP tool, which is the documented migration path for sampling.",
+          "correct": true,
+          "explanation": "Sampling was deprecated in revision 2026-07-28 and its published migration is for the server to integrate directly with an LLM provider API rather than borrowing the host's model. Re-exposing the drafting step as a tool keeps it in the primitive set that is unambiguously current — tools, resources and prompts — so the host agent can invoke it inside its normal loop with no human in the path, which is what preserves R6. Option A (runner-up) is also spec-compliant but blocks the interactive turn on a person.",
+          "citation": { "title": "MCP deprecated features", "url": "https://modelcontextprotocol.io/specification/2026-07-28/deprecated" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-05",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D4", "D6"],
+      "question": "The interactive path runs a single agent loop with all eleven tools attached. Agronomists complain that a question as simple as \"what is the pH on field 12?\" sometimes takes five tool calls and eight seconds. Roughly 70% of field-app questions are single-fact lookups. What should the team implement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a cheap routing step that classifies the question and dispatches single-fact lookups straight to one tool call, reserving the full agent loop for open-ended advisory questions.",
+          "correct": true,
+          "explanation": "Routing is the documented pattern for a workload with distinct, recognisable categories: classify once, then send each class down the cheapest path that can serve it. Seventy percent of traffic collapses to a single deterministic tool call with no exploratory loop, which is what brings the interactive p95 under R6's 6 seconds, and it lowers per-run spend against R3. The full loop remains available for genuinely open-ended work. Option C (runner-up) reduces the loop's depth but adds an orchestration hop to every lookup, so the simple case gets slower.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Change tool_choice from auto to {\"type\": \"any\"} so the model is required to call a tool on every turn instead of deliberating in text first.",
+          "correct": false,
+          "explanation": "tool_choice any forces at least one tool call per turn but places no ceiling on how many the loop makes overall, so the five-call lookups continue. It also removes the model's ability to answer directly from context when it already has the fact, which adds calls rather than removing them.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Split the eleven tools across three specialist subagents — soil, weather and machinery — coordinated by an orchestrator that decides which specialist to invoke and merges their findings into the answer.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Orchestrator-workers is a real pattern and genuinely helps on the open-ended advisory questions, where parallel specialists shorten a long investigation. It does not meet R6 for the traffic that actually dominates: a single-fact pH lookup now pays an orchestrator turn plus a worker turn, so the 70% case gains a full model round trip and gets slower rather than faster.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Add a line to the system prompt instructing Claude to answer with at most one tool call whenever the question names a single field and a single measurement.",
+          "correct": false,
+          "explanation": "This is guidance the model applies probabilistically, so the slow tail remains, and it degrades the advisory questions that legitimately need several tools. A structural routing decision belongs in the application, not in an instruction the model may or may not follow.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-06",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "The overnight planner issues one non-streaming request with max_tokens 64000 and inlines all 900 field records into the first user message. It intermittently fails after roughly ten minutes with a dropped connection, and on the largest farms it returns HTTP 413 request_too_large. How should the request be restructured?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise the HTTP client's read timeout well above ten minutes and keep the request non-streaming, since the API will hold the connection open for as long as generation takes.",
+          "correct": false,
+          "explanation": "The documented guidance is to use streaming or the Message Batches API for long-running requests, particularly those over ten minutes, precisely because a single long non-streaming connection is fragile regardless of the client's timeout. It also does nothing about the 413, which is a request-size limit hit before the request reaches the API servers.",
+          "citation": { "title": "Errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the request non-streaming and retry it from the beginning with exponential backoff whenever the connection drops, so an overnight failure self-heals before the agronomist arrives.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Retrying an idempotent overnight job is reasonable operational hygiene and the window is long enough to absorb it, so this genuinely does deliver a plan by morning. It fails R3: a retry re-bills the entire input prefix plus up to 64,000 output tokens for a run that had nearly finished, and repeated across peak-season farms that recurring waste pushes spend past the EUR 46,000 ceiling. It also leaves the 413 in place.",
+          "citation": { "title": "Errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "C",
+          "text": "Stream the overnight request, as the documentation recommends for calls over ten minutes, and fetch the field records through get_field_history tool calls instead of inlining all 900 in the request body.",
+          "correct": true,
+          "explanation": "These are two distinct defects with one restructuring. Streaming keeps the connection productive for a long generation and is the documented approach above ten minutes, while moving the 900 records out of the initial body and behind on-demand tool calls removes the payload that triggers the 413 and lets context editing prune records once they have been used. Both fixes keep the run in one conversation as R2 requires. Option B (runner-up) delivers a plan but pays for the whole run twice whenever it retries, which R3 cannot absorb.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "D",
+          "text": "Split the farm into 900 single-field requests, each small enough to complete in seconds, and merge the individual nutrient recommendations into a season plan in application code.",
+          "correct": false,
+          "explanation": "This eliminates both symptoms but breaks the requirement the planner exists to satisfy: rotation logic compares fields against one another, and 900 isolated requests cannot see across fields. It is the same failure mode as sharding, at finer granularity.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-07",
+      "primaryDomain": "D7",
+      "secondaryDomains": ["D8", "D4"],
+      "question": "During the pilot the advisor recommended 260 kg N per hectare on a field inside a nitrate-vulnerable zone whose legal ceiling is 170. The zone ceilings live in a regulatory table in Postgres. The recommendation reached the agronomist's sign-off screen unflagged. What should the team implement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Load the zone ceiling table into the system prompt, include each field's applicable ceiling in its soil-lab document block, and instruct the model in explicit terms that it must never propose a rate above the ceiling stated for that field.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Giving the model the ceilings it needs is genuinely worth doing — an advisor that cannot see the constraint will violate it constantly — and it would cut the violation rate sharply. It does not meet R5, which is explicit that the blocking check must not depend on the model's own reasoning; a system-prompt table is exactly that dependency, and one missed instruction still puts an illegal rate in front of an agronomist.",
+          "citation": { "title": "Giving Claude a role with a system prompt", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/system-prompts" }
+        },
+        {
+          "key": "B",
+          "text": "Send each finished recommendation to a second Claude call whose only job is to compare the proposed rate against the zone ceiling and return an approve or reject verdict before the sign-off screen renders.",
+          "correct": false,
+          "explanation": "A reviewer model is still model reasoning, so its false-negative rate is nonzero and R5 is not satisfied. It also adds a full extra round trip to a path that already has a latency budget, and doubles the per-recommendation token cost.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Declare apply_recommendation with strict: true and put a maximum of 170 on the nitrogen_rate property, so grammar-constrained sampling cannot produce an out-of-range value.",
+          "correct": false,
+          "explanation": "Structured outputs and strict tool use do not support numerical constraints such as minimum, maximum or multipleOf; including one returns a 400 error. Even if the keyword were accepted, a single hard-coded ceiling cannot express a per-field regulatory value that varies by zone.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "D",
+          "text": "Validate the proposed rate inside the apply_recommendation handler against the zone ceiling read from the regulatory table, rejecting out-of-range values and returning a tool_result with is_error true so the model can revise.",
+          "correct": true,
+          "explanation": "The check runs in application code against the authoritative table, so it holds regardless of what the model concluded — which is what R5 requires and what neither a prompt nor a reviewer model can offer. Returning the rejection as a tool_result with is_error set to true keeps the agent loop intact: the model sees why the call failed and proposes a compliant rate rather than the run aborting. Option A (runner-up) reduces violations but leaves the final gate inside the model's reasoning.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-08",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The overnight planner now runs on claude-sonnet-5 with output_config set to {\"effort\": \"xhigh\"} for the long-horizon rotation reasoning, and max_tokens left at 8000. Runs routinely return stop_reason max_tokens with the plan half written. What should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Leave max_tokens alone and lower effort to medium, because max_tokens bounds only the visible response text while thinking tokens are governed exclusively by the effort setting.",
+          "correct": false,
+          "explanation": "max_tokens is a hard limit on total output, thinking tokens included, so it is exactly what is truncating these runs. Lowering effort would reduce token consumption as a side effect, but the stated reason is wrong and it sacrifices the reasoning depth the rotation logic was raised to xhigh for.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "B",
+          "text": "Raise max_tokens substantially — the documentation suggests starting around 64k at xhigh and tuning from there — since max_tokens is a hard limit on thinking plus response text combined.",
+          "correct": true,
+          "explanation": "At high effort and above the model is expected to spend a large number of tokens thinking, and those tokens count against the same max_tokens ceiling as the response, which is why an 8,000-token cap truncates a plan mid-write. Raising the ceiling is the documented remedy at xhigh, and the overnight path has no latency ceiling under R6, so the longer generation costs nothing operationally. Thinking spend can then be tracked at usage.output_tokens_details.thinking_tokens. Option D (runner-up) recovers a complete plan but re-bills the whole prefix on every continuation.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "C",
+          "text": "Keep the current settings and read usage.thinking_tokens after each run, raising the thinking budget separately from max_tokens once the true reasoning cost is known.",
+          "correct": false,
+          "explanation": "Thinking tokens are reported at usage.output_tokens_details.thinking_tokens, not at a top-level usage.thinking_tokens field, and on adaptive-thinking models there is no separate thinking budget to raise — depth is controlled through output_config.effort. Measuring is sensible, but neither the field nor the knob described here exists.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Detect stop_reason max_tokens and continue the response with a follow-up request that resends the assistant content so far, repeating until the plan is complete.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Continuation is a documented and correct response to a max_tokens stop, and it does produce a finished plan without touching the effort setting. It fails R3 at this scale: each continuation resends and re-bills the entire accumulated input, and an xhigh run truncated at 8,000 tokens needs many of them, so peak-season spend climbs well past the EUR 46,000 ceiling for no benefit over simply raising the limit once.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/api/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-09",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D7", "D4"],
+      "question": "An integration test run from a laptop hit a US regional endpoint with EU field data because the developer's environment had not been configured. The team works in Claude Code, and the same repository is built in CI. Where should the regional configuration live?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Write the required region and endpoint into the repository's CLAUDE.md so every session loads the instruction and developers are reminded to configure their environment before running integration tests.",
+          "correct": false,
+          "explanation": "CLAUDE.md is context delivered to the model, not configuration applied to a process, so nothing about it sets an environment variable for a test run. It is documentation with extra steps, and R4 asks for a constraint that actually holds.",
+          "citation": { "title": "Manage Claude's memory", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Have each engineer set the region in their own user-level ~/.claude/settings.json, which applies across every project they work on, survives repository changes, and needs no coordination with the rest of the team.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "User settings are a real mechanism and this genuinely fixes the machine of anyone who applies it, which is why it is a tempting answer. It does not meet R4: the requirement is explicit that the constraint must hold for every engineer and for CI, and a per-user file cannot be reviewed, cannot be enforced on a new joiner's first day, and does not exist in the build agent at all.",
+          "citation": { "title": "Claude Code settings", "url": "https://code.claude.com/docs/en/settings" }
+        },
+        {
+          "key": "C",
+          "text": "Commit .claude/settings.json with an env block pinning the regional endpoint and a permissions deny rule for the US host, so every session opened in the repository inherits it and CI can assert the file.",
+          "correct": true,
+          "explanation": "Project settings at .claude/settings.json are the file intended to be committed precisely so that teammates receive the same permissions, hooks and project environment variables, which makes the region a property of the repository rather than of a person's laptop. A deny rule adds a second, independent barrier, and because the file is in version control CI can verify its contents on every build — that combination is what satisfies R4's insistence on covering every engineer and CI. Option B (runner-up) configures the individual, not the repository, so it cannot cover either.",
+          "citation": { "title": "Claude Code settings", "url": "https://code.claude.com/docs/en/settings" }
+        },
+        {
+          "key": "D",
+          "text": "Put the env block in .claude/settings.local.json so it can be tuned per developer without churning the shared configuration in code review.",
+          "correct": false,
+          "explanation": "settings.local.json is the personal per-project override file and Claude Code keeps it out of git, so it propagates to nobody and is absent in CI. It is the correct home for a personal exception, and the wrong home for a compliance constraint.",
+          "citation": { "title": "Claude Code settings", "url": "https://code.claude.com/docs/en/settings" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-10",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D1", "D6"],
+      "question": "About 6% of recommendations reference the wrong page of a soil-lab report, but the defect will not reproduce: each rerun of the same question takes a different tool-call path. The team needs a regression fixture before changing anything. What should they build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Persist the complete request payload for every run — model, system, tools, the full messages array and all parameters — and replay it verbatim as a fixture, asserting on the citation's document_index and start_page_number.",
+          "correct": true,
+          "explanation": "A run is only reproducible if the exact input is captured, and in an agent loop that input is the whole accumulated messages array rather than the user's original question. Replaying it verbatim isolates the failing turn from the loop's variability, and asserting on the structured citation fields rather than on prose gives a machine-checkable statement of the R1 traceability property, so the fixture fails loudly when the page pointer is wrong. Option C (runner-up) captures useful telemetry but not the fields that expose a wrong-page bug.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Set temperature to 0 on the advisory path so generation becomes deterministic, then rerun the failing question until the wrong-page behaviour appears reliably in every execution.",
+          "correct": false,
+          "explanation": "Lowering temperature reduces variation but is not a determinism guarantee, and it is a change to production sampling behaviour made for the sake of a test. It also leaves the loop free to take different tool paths, which is the actual source of the variability here.",
+          "citation": { "title": "Messages API", "url": "https://platform.claude.com/docs/en/api/messages" }
+        },
+        {
+          "key": "C",
+          "text": "Log the fully rendered prompt and the final answer text for every advisory run, then diff the answers across repeated executions of the same question until the point at which the two runs' behaviour diverges can be located.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a genuinely valuable observability baseline and diffing repeated runs does expose where a loop branches. It falls short of R1, though: the answer text alone never states which document and page the model actually relied on, so a citation that points at page 7 instead of page 4 reads as perfectly ordinary prose and the 6% defect stays invisible to the diff.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Have an agronomist re-ask the same question through the field app until the wrong page appears again, then screenshot the session and attach it to the bug report as the reproduction.",
+          "correct": false,
+          "explanation": "A screenshot is an anecdote, not a fixture: it cannot be replayed in CI, cannot be asserted on, and will not tell the team whether a later change fixed or reintroduced the defect. Manual reproduction also scales badly against a 6% failure rate.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-11",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D8", "D4"],
+      "question": "Mid-run, the MCP telemetry server returns 503. The Python executor lets the exception propagate, the loop unwinds, and an overnight run that had completed 28 tool calls aborts and starts again from nothing. What should the executor do instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Skip the tool_result for the failed call and send the next user turn directly, so the loop moves past the outage without waiting on the unavailable telemetry server.",
+          "correct": false,
+          "explanation": "Every tool_use block in the preceding assistant message must be answered by a corresponding tool_result in the following user turn; omitting one produces a 400 invalid_request_error and the run fails anyway. The failure has to be reported, not skipped.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "B",
+          "text": "Catch the failure in the executor and return a tool_result with is_error set to true whose content describes the outage, letting the model continue the plan from the data sources that are still available.",
+          "correct": true,
+          "explanation": "is_error is the documented way to report a tool execution failure back into the loop: the model sees that machinery telemetry is unavailable and why, and can carry on with soil, weather and history data or note the gap in the plan. Crucially the conversation is never torn down, so the 28 calls of accumulated cross-field context survive and R2's single-conversation requirement still holds. Option D (runner-up) protects against total loss but resumes in a new conversation, which R2 forbids.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Return a tool_result whose content is an empty string, so the model receives a well-formed response, sees that no telemetry was available, and proceeds without special handling in the executor.",
+          "correct": false,
+          "explanation": "An empty result is indistinguishable from a legitimate \"no maintenance events recorded\", so the model may confidently base a recommendation on the absence of data rather than flagging that the source was down. Silent failures of this kind are the hardest class of agent defect to detect afterwards.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Wrap the tool call in exponential-backoff retries, abort the run after three consecutive failures, and resume from a checkpoint of the serialized conversation state that the worker writes to durable storage every five tool calls.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Retry-with-checkpointing is careful engineering and it does stop the team from losing an entire night's work to a transient outage, so it is a defensible design. It does not satisfy R2: resuming from a checkpoint starts a fresh conversation seeded with serialized state, and the cross-field comparisons the rotation logic depends on were built up across all 28 prior calls, not just the ones a checkpoint preserves.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS4-12",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D6", "D4"],
+      "question": "Soil-lab reports are passed to the model as plain text and the prompt asks it to append \"[Source: <filename>, p.<n>]\" to each recommendation. An audit found 6% of those references name the wrong page and a handful name a report that was not in the request. How should attribution be produced?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Chunk each report into numbered sections, wrap every chunk in an XML tag carrying its section id, and instruct the model to echo the id of the chunk it relied on for each recommendation.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Tagged chunks with echoed identifiers is a well-established attribution pattern, and it would materially reduce both error classes because the identifiers are now visible in context rather than inferred from prose. It still does not meet R1: the echoed id is ordinary generated text with no mechanism tying it to the chunk actually used, so a smaller but genuinely unbounded share of recommendations would keep pointing at the wrong section.",
+          "citation": { "title": "Use XML tags to structure your prompts", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/use-xml-tags" }
+        },
+        {
+          "key": "B",
+          "text": "Require the page number through output_config.format with a json_schema that types it as an integer and marks it required, so every recommendation carries a well-formed page reference.",
+          "correct": false,
+          "explanation": "Structured outputs guarantee the shape of the field, not the truth of its contents — a schema-conformant integer can still be the wrong page, which is precisely the 6% defect under investigation. Schema constraints solve parsing problems, not grounding problems.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "C",
+          "text": "Enable citations on the single largest soil-lab report per request to keep the token overhead down, and continue letting the model write plain-text references for the smaller reports.",
+          "correct": false,
+          "explanation": "Citations must currently be enabled on all documents in a request or on none of them, so this configuration is not available. It would also leave most reports on the unreliable prose-reference path that is causing the audit findings.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        },
+        {
+          "key": "D",
+          "text": "Send each report as a document content block with citations enabled, and render the citation objects the API returns — document_index, document_title and start_page_number — in the sign-off UI.",
+          "correct": true,
+          "explanation": "With citations enabled the API parses the model's references into structured location objects and extracts cited_text directly from the supplied documents, so a citation is guaranteed to be a valid pointer into content that was actually in the request — the \"report that was not in the request\" failure becomes impossible by construction. That guarantee is what R1 asks for, and cited_text is not billed as output tokens, so it does not work against R3. Option A (runner-up) improves accuracy but leaves the pointer as unverified generated text.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        }
+      ]
+    }
+  ]
+}

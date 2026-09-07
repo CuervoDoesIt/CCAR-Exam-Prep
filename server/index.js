@@ -16,18 +16,50 @@ const EXAM_META = {
   "ccar-p-exam2": { cert: "CCAR-P", title: "CCAR-P Mock Exam 2", dir: ["ccar-p", "exam2"], questionCount: 63, timeLimitMinutes: 120 },
   "ccar-p-exam3": { cert: "CCAR-P", title: "CCAR-P Mock Exam 3 — Case Studies", dir: ["ccar-p", "exam3"], questionCount: 63, timeLimitMinutes: 120, format: "case" },
   "ccar-p-exam4": { cert: "CCAR-P", title: "CCAR-P Mock Exam 4 — Case Studies", dir: ["ccar-p", "exam4"], questionCount: 63, timeLimitMinutes: 120, format: "case" },
+  "ccdv-f-exam1": { cert: "CCDV-F", title: "CCDV-F Mock Exam 1", dir: ["ccdv-f", "exam1"], questionCount: 53, timeLimitMinutes: 120 },
+  "ccdv-f-exam2": { cert: "CCDV-F", title: "CCDV-F Mock Exam 2", dir: ["ccdv-f", "exam2"], questionCount: 53, timeLimitMinutes: 120 },
+  "ccdv-f-exam3": { cert: "CCDV-F", title: "CCDV-F Mock Exam 3 — Case Studies", dir: ["ccdv-f", "exam3"], questionCount: 53, timeLimitMinutes: 120, format: "case" },
+  "ccdv-f-exam4": { cert: "CCDV-F", title: "CCDV-F Mock Exam 4 — Case Studies", dir: ["ccdv-f", "exam4"], questionCount: 53, timeLimitMinutes: 120, format: "case" },
 };
 const PASSING_SCALED = 720;
 
-const CCAR_P_DOMAIN_NAMES = {
-  D1: "Solution Design & Architecture",
-  D2: "Claude Models, Prompting & Context Engineering",
-  D3: "Integration (Tool Use, MCP, Agent SDK)",
-  D4: "Evaluation, Testing & Optimization",
-  D5: "Governance, Safety & Risk Management",
-  D6: "Stakeholder Communication & Lifecycle Management",
-  D7: "Developer Productivity & Operational Enablement",
+// Case exams carry only a primaryDomain id per question; the display name comes
+// from the certification's blueprint.
+const DOMAIN_NAMES = {
+  "CCAR-P": {
+    D1: "Solution Design & Architecture",
+    D2: "Claude Models, Prompting & Context Engineering",
+    D3: "Integration (Tool Use, MCP, Agent SDK)",
+    D4: "Evaluation, Testing & Optimization",
+    D5: "Governance, Safety & Risk Management",
+    D6: "Stakeholder Communication & Lifecycle Management",
+    D7: "Developer Productivity & Operational Enablement",
+  },
+  // Official CCDV-F blueprint (Exam Guide v1.0, effective July 2026).
+  "CCDV-F": {
+    D1: "Agents and Workflows",
+    D2: "Applications and Integration",
+    D3: "Claude Code",
+    D4: "Eval, Testing, and Debugging",
+    D5: "Model Selection and Optimization",
+    D6: "Prompt and Context Engineering",
+    D7: "Security and Safety",
+    D8: "Tools and MCPs",
+  },
 };
+
+// Answers arrive as a key ("B") for single-choice or an array (["B","D"]) for
+// multiple-response items. Normalise to arrays so grading handles both.
+function toKeys(value) {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function sameSet(a, b) {
+  const x = [...a].sort();
+  const y = [...b].sort();
+  return x.length === y.length && x.every((k, i) => k === y[i]);
+}
 
 function readJsonFiles(dir, pattern) {
   const out = [];
@@ -59,12 +91,13 @@ function loadDomainExam(examId, meta, dir) {
 function loadCaseExam(examId, meta, dir) {
   const cases = readJsonFiles(dir, /^cs\d+\.json$/);
   if (cases.length === 0) return null;
+  const names = DOMAIN_NAMES[meta.cert] ?? {};
   cases.sort((a, b) => a.caseId.localeCompare(b.caseId, undefined, { numeric: true }));
   const questions = cases.flatMap((c) =>
     c.questions.map((q) => ({
       ...q,
       domainId: q.primaryDomain,
-      domainName: CCAR_P_DOMAIN_NAMES[q.primaryDomain] ?? q.primaryDomain,
+      domainName: names[q.primaryDomain] ?? q.primaryDomain,
       caseId: c.caseId,
       caseTitle: c.caseTitle,
     }))
@@ -83,7 +116,7 @@ function loadCaseExam(examId, meta, dir) {
     })),
     domains: Object.keys(counts)
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-      .map((id) => ({ domainId: id, domainName: CCAR_P_DOMAIN_NAMES[id] ?? id, count: counts[id] })),
+      .map((id) => ({ domainId: id, domainName: names[id] ?? id, count: counts[id] })),
     questions,
   };
 }
@@ -123,8 +156,10 @@ function gradeAttempt(exam, answers) {
   let correctCount = 0;
   for (const q of exam.questions) {
     const chosen = answers[q.id] ?? null;
-    const correctOpt = q.options.find((o) => o.correct);
-    const isCorrect = chosen === correctOpt.key;
+    const chosenKeys = toKeys(chosen);
+    const correctOptKeys = q.options.filter((o) => o.correct).map((o) => o.key);
+    // Multiple-response items are all-or-nothing, as on the real exam.
+    const isCorrect = chosenKeys.length > 0 && sameSet(chosenKeys, correctOptKeys);
     if (isCorrect) correctCount++;
     if (!byDomain[q.domainId]) {
       byDomain[q.domainId] = { domainId: q.domainId, domainName: q.domainName, correct: 0, total: 0 };
@@ -137,7 +172,10 @@ function gradeAttempt(exam, answers) {
       }
       byCase[q.caseId].total++;
       if (isCorrect) byCase[q.caseId].correct++;
-      else if (chosen && q.options.find((o) => o.key === chosen)?.runnerUp) {
+      else if (
+        chosenKeys.length === 1 &&
+        q.options.find((o) => o.key === chosenKeys[0])?.runnerUp
+      ) {
         byCase[q.caseId].runnerUpPicks++;
       }
     }
@@ -146,7 +184,7 @@ function gradeAttempt(exam, answers) {
       domainId: q.domainId,
       caseId: q.caseId ?? null,
       chosen,
-      correctKey: correctOpt.key,
+      correctKeys: correctOptKeys,
       isCorrect,
     });
   }

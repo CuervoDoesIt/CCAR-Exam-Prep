@@ -1,0 +1,288 @@
+{
+  "examId": "ccdv-f-exam1",
+  "domainId": "D1",
+  "domainName": "Agents and Workflows",
+  "questions": [
+    {
+      "id": "V1-D1-01",
+      "question": "A logistics team's agent loop appends Claude's reply to messages, executes any tools, posts the results, and repeats. The loop exits only when stop_reason is \"end_turn\". Support reports sessions that spin forever after a long, truncated reply. How should the loop's continuation condition be written?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep exiting only on \"end_turn\", and automatically re-send the identical request whenever any other stop_reason comes back.",
+          "correct": false,
+          "explanation": "Re-sending an identical request that returned \"max_tokens\" reproduces the same truncation, which is exactly the infinite spin being reported. The documented response to \"max_tokens\" is to raise the limit or continue the response, not to replay the call unchanged.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/api/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Continue only while stop_reason is \"tool_use\"; exit on every other value, and handle \"max_tokens\" truncation as its own case.",
+          "correct": true,
+          "explanation": "\"tool_use\" is the single value that means Claude is waiting on a tool_result before it can continue, so it is the only condition that should keep the loop running. Every other value ends the turn, and \"max_tokens\" needs deliberate handling because the response is truncated rather than complete.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/api/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "Continue while the assistant message still contains a text block, because emitted text signals that Claude is mid-reasoning and expects another turn.",
+          "correct": false,
+          "explanation": "Assistant turns routinely mix a text block with tool_use blocks, and a completely normal final answer is nothing but text. Loop control belongs to stop_reason, which is the field the API defines for exactly this decision.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Continue while stop_reason is not \"refusal\", treating a refusal as the only outcome from which an agent loop cannot recover.",
+          "correct": false,
+          "explanation": "This keeps looping on \"end_turn\", \"stop_sequence\" and \"max_tokens\", so finished conversations never terminate. \"refusal\" is one documented value among several and is returned on a normal 200 response, not a special loop sentinel.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/api/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D1-02",
+      "question": "A research assistant enables the web_search server tool. On long investigations the response comes back with \"stop_reason\": \"pause_turn\". The developer's handler interprets this as Claude requesting human approval and parks the conversation in a review queue, so those requests never finish. What does pause_turn actually mean here?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude is asking permission before continuing, so the correct handler shows an approval prompt and resumes only after a reviewer accepts.",
+          "correct": false,
+          "explanation": "This is the misconception causing the stuck queue: pause_turn is not a human-in-the-loop interrupt and carries no approval semantics. Human review in an agent is something you build into your own harness, not something stop_reason requests.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/api/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "The reply exceeded the request's max_tokens ceiling, so the fix is to raise max_tokens and resend the original user message.",
+          "correct": false,
+          "explanation": "Output truncation is reported as \"max_tokens\", a separate documented value; pause_turn is unrelated to output length. Resending only the original user message would also throw away the partial work Claude already did.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/api/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "A server tool failed, so the application must answer the paused call with a tool_result block carrying is_error set to true.",
+          "correct": false,
+          "explanation": "Server tools run on Anthropic's infrastructure, and the docs state you do not handle is_error results for them; Claude absorbs those failures itself. is_error belongs to client tools that your own code executes.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "The server-side tool loop hit its iteration limit, so send the returned content back as an assistant message to let Claude continue.",
+          "correct": true,
+          "explanation": "pause_turn is returned when the server-side sampling loop for tools such as web search reaches its iteration cap, and the response may contain incomplete server_tool_use blocks. The documented continuation is to append the returned content as an assistant message and issue another request with the same tools.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/api/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D1-03",
+      "question": "A booking agent's assistant turn returns three tool_use blocks: reserve_slot, charge_card, then send_receipt. The developer runs them sequentially; charge_card raises an exception, so send_receipt is never invoked. The next request fails with a 400. What must the following user message contain?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A tool_result for all three tool_use_ids, with is_error true and a short reason on the failed call and on the one never executed.",
+          "correct": true,
+          "explanation": "Every tool_use block must be answered by a tool_result in the next user message, matched by tool_use_id. The docs are explicit that a call you chose not to run, for example because an earlier sequential call failed, still needs a tool_result with is_error: true and a brief explanation.",
+          "citation": { "title": "Parallel tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "B",
+          "text": "Only the results for calls that actually executed, since an unexecuted call produced no output and therefore has nothing to report.",
+          "correct": false,
+          "explanation": "Leaving a tool_use id unanswered is precisely what produces the 400 about tool_use ids found without tool_result blocks. The protocol requires a result for each id regardless of whether your code ran the underlying operation.",
+          "citation": { "title": "Parallel tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "C",
+          "text": "The reserve_slot result, preceded by a text block that explains the payment failure so Claude reads the context before the data.",
+          "correct": false,
+          "explanation": "Two rules are broken at once: two tool_use ids go unanswered, and text placed before tool_result blocks is rejected. In a user message carrying tool results, every tool_result must come first and any text must follow them.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "A fresh user message restating the booking task, with the assistant turn that contained the failed calls dropped from the history.",
+          "correct": false,
+          "explanation": "Editing the assistant turn out of history discards the reservation Claude already made and hides the failure it needs to reason about. Tool results must immediately follow the assistant tool_use message; no message may be inserted between them.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D1-04",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A developer answers a tool call by appending a message with role \"assistant\" whose content array holds a text block reading \"Here are the results:\" followed by a tool_result block carrying the correct tool_use_id. The API returns 400: \"tool_use ids were found without tool_result blocks immediately after.\" Which TWO changes are required to make the request valid?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add \"is_error\": false to the tool_result block so the API can validate that the call succeeded.",
+          "correct": false,
+          "explanation": "is_error is an optional field whose absence already means success, so adding it changes nothing about validity. It exists to tell Claude that a tool execution failed, not to satisfy a schema requirement.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "B",
+          "text": "Change the message role from \"assistant\" to \"user\".",
+          "correct": true,
+          "explanation": "The Claude API has no separate tool role: assistant messages carry tool_use blocks and user messages carry tool_result blocks. Sending results under the assistant role leaves the preceding tool_use ids unanswered, which is what the 400 is reporting.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Replace tool_use_id with the tool's name, which is how the API matches a result to its call.",
+          "correct": false,
+          "explanation": "Results are matched by the id field from the tool_use block, not by tool name, which is why a single turn can call the same tool twice unambiguously. Substituting the name would break matching entirely.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Drop the tools array from the follow-up request, because the tools have already run.",
+          "correct": false,
+          "explanation": "The tools array must stay on every request in the conversation so Claude can still see the definitions it called and call them again. Removing it changes the prompt Claude sees and does nothing about the malformed message.",
+          "citation": { "title": "Tool use with Claude", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "E",
+          "text": "Move the text block so it comes after every tool_result block in the content array.",
+          "correct": true,
+          "explanation": "The formatting rules state that tool_result blocks must come first in the content array and any text must come after all of them. The docs give a leading text block as the canonical example of a payload that triggers a 400.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D1-05",
+      "question": "A support platform must send billing, technical, and account-security tickets down three paths, each with its own system prompt and tool set. The team wants the cheapest structure that keeps every path specialised. Which implementation matches the routing workflow described in Building Effective Agents?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Concatenate all three specialised system prompts into one call and let the model attend to whichever section fits the ticket in front of it.",
+          "correct": false,
+          "explanation": "This is the single-prompt baseline routing exists to improve on: optimising for one category inside a shared prompt tends to degrade the others. Routing exists so each category gets a prompt tuned for it without that trade-off.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Fire all three specialised calls in parallel for every ticket, then add a fourth call that reads the three drafts and picks the best answer.",
+          "correct": false,
+          "explanation": "Running the same input through several calls and aggregating is parallelization in its voting form, not routing. It also triples spend on every ticket, which conflicts with the stated cost goal.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Make one classification call, then dispatch in code to exactly one specialised prompt for the returned category.",
+          "correct": true,
+          "explanation": "Routing classifies an input and directs it to a specialised follow-up task, which is exactly a classifier call plus a code-path dispatch. Separating classification from handling lets each downstream prompt be tuned independently without hurting the other categories.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Expose all three tool sets in a single agent loop and let it keep calling tools until it decides the ticket is resolved.",
+          "correct": false,
+          "explanation": "A loop where the model directs its own process is an autonomous agent, not a workflow with predefined code paths. Anthropic's guidance is to prefer the predictability of a workflow when the task decomposes into known categories like these.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D1-06",
+      "question": "A code-migration tool makes a lead call that returns a JSON array of file-level subtasks, and the array differs for every repository. The harness spawns one Claude call per subtask, then a final call merges the diffs. A reviewer labels the design \"parallelization (sectioning)\". Which label is correct, and why?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Orchestrator-workers, because the subtasks are decided by the lead call at runtime rather than fixed in advance.",
+          "correct": true,
+          "explanation": "Building Effective Agents defines orchestrator-workers as a central LLM that dynamically breaks down tasks and delegates them to workers. The stated key difference from parallelization is that subtasks are not pre-defined but determined by the orchestrator based on the specific input, which matches a per-repository task list.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Parallelization (sectioning), because any design that runs worker calls concurrently against separate slices of the work is sectioning by definition.",
+          "correct": false,
+          "explanation": "Concurrency is not the distinguishing feature; sectioning breaks a task into fixed subtasks that the code knows in advance. Here the decomposition itself is produced by a model call, which is the orchestrator role.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Evaluator-optimizer, because the final merge call reviews the workers' diffs before the result is emitted.",
+          "correct": false,
+          "explanation": "Evaluator-optimizer is a loop: one call generates, another critiques, and the generator revises against that feedback until criteria are met. A one-pass merge with no revision cycle does not fit that pattern.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Prompt chaining, because each worker call consumes the output of the call that ran before it in the sequence.",
+          "correct": false,
+          "explanation": "Prompt chaining decomposes a task into a fixed sequence of steps where each call processes the previous call's output. The workers here run against independent files and do not consume one another's output, so nothing is chained.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D1-07",
+      "question": "A team converts a single-agent research feature into a lead agent that spawns four subagents. Latency drops sharply, but spend roughly quadruples and two subagents return heavily overlapping findings. Per Anthropic's multi-agent research write-up, what explains the cost, and what is the first fix for the overlap?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Subagents share the lead agent's single context window, so every finding is billed twice; turning off parallel spawning restores the original cost profile and removes the duplication.",
+          "correct": false,
+          "explanation": "Subagents operate in parallel with their own context windows, which is precisely how they compress a large search space. Serialising them would surrender the latency win without addressing why two workers chose the same ground.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "B",
+          "text": "Token consumption is a weak predictor of research quality, so the cheapest correct move is dropping to two subagents and accepting the slower results that follow.",
+          "correct": false,
+          "explanation": "Anthropic found token usage alone explained about 80% of the variance in performance on their browsing evaluations, so tokens are a primary driver rather than incidental. Cutting workers is a cost lever, not a fix for duplicated work.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        },
+        {
+          "key": "C",
+          "text": "The duplicate findings mean the subagents called identical tools, so setting disable_parallel_tool_use inside tool_choice will push each one down a different path.",
+          "correct": false,
+          "explanation": "disable_parallel_tool_use only limits how many tools Claude may call in a single response; it says nothing about which subagent investigates what. The overlap originates in delegation, not in per-turn tool concurrency.",
+          "citation": { "title": "Parallel tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "D",
+          "text": "Each subagent runs in its own context window, so tokens multiply; the overlap traces to vague task descriptions, which need explicit objectives and boundaries.",
+          "correct": true,
+          "explanation": "Multi-agent systems trade cost for capability: Anthropic reports agents using roughly four times the tokens of chat, because each subagent carries its own context. They also report that without detailed task descriptions agents duplicate work or leave gaps, so the lead must give each one a specific objective, output format, and clear boundaries.",
+          "citation": { "title": "How we built our multi-agent research system", "url": "https://www.anthropic.com/engineering/multi-agent-research-system" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D1-08",
+      "question": "An invoice-reconciliation agent occasionally ping-pongs between two tools for 80 or more turns before producing an answer. The team adds \"Never use more than 10 tool calls\" to the system prompt, and long runs still occur. What does Building Effective Agents recommend, and how is it implemented?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise max_tokens so Claude has enough room to finish its reasoning inside a smaller number of turns.",
+          "correct": false,
+          "explanation": "max_tokens caps the length of a single response and has no bearing on how many tool round trips the harness performs. Raising it makes each oscillating turn more expensive rather than fewer in number.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/api/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Enforce a stopping condition in harness code: count iterations, break the loop at the cap, and return the partial state.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is to include stopping conditions such as a maximum number of iterations so you retain control over an autonomous loop. A prompt instruction is advisory, whereas a counter in the code that drives the loop is enforced no matter what the model decides.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Set tool_choice to {\"type\": \"any\"} so Claude commits to a tool immediately on each turn instead of deliberating.",
+          "correct": false,
+          "explanation": "tool_choice \"any\" forces a tool call on every turn, which guarantees the loop can never terminate with a plain text answer. It is the opposite of the control this agent needs.",
+          "citation": { "title": "Tool use with Claude", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Lower temperature to 0 so the agent stops oscillating between the two tools and settles on one deterministic path.",
+          "correct": false,
+          "explanation": "Sampling settings do not bound the number of iterations, and a deterministic policy can still loop deterministically. Anthropic's remedy for runaway autonomy is explicit guardrails and stopping conditions in the surrounding code.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    }
+  ]
+}

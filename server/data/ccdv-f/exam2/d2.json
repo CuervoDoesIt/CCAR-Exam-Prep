@@ -1,0 +1,612 @@
+{
+  "examId": "ccdv-f-exam2",
+  "domainId": "D2",
+  "domainName": "Applications and Integration",
+  "questions": [
+    {
+      "id": "V2-D2-01",
+      "question": "A title insurance firm sends scanned property deeds as PDF document blocks with `citations: {\"enabled\": true}` and asks Claude to summarize encumbrances. The frontend must draw a highlight box on the exact source page for every claim. Which response shape should the developer parse to drive that highlight?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A top-level `citations` array on the message object, parallel to `content`, holding one entry per source document along with its cited page range.",
+          "correct": false,
+          "explanation": "Citations are not returned as a separate message-level array. The API attaches a `citations` list to each individual text block it generates, so a claim can be traced to the specific sentence that made it. Parsing a top-level array would fail because that key does not exist on the response.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        },
+        {
+          "key": "B",
+          "text": "`char_location` objects with `start_char_index` and `end_char_index` offsets into the extracted PDF text.",
+          "correct": false,
+          "explanation": "`char_location` is the citation type emitted for plain-text documents, using 0-indexed character offsets. PDF document blocks are cited by page instead, because the model receives each page as both text and an image. Character offsets are not returned for PDFs.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        },
+        {
+          "key": "C",
+          "text": "Per-text-block `citations` arrays holding `page_location` objects with `document_index` and page numbers.",
+          "correct": true,
+          "explanation": "PDF documents produce `page_location` citations. `document_index` identifies which document block was the source, `start_page_number` is 1-indexed and `end_page_number` is exclusive, and `cited_text` carries the quoted passage — everything the UI needs to highlight the right page. Each citation is nested inside the text block that made the claim.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        },
+        {
+          "key": "D",
+          "text": "`content_block_location` objects, because a PDF is chunked into content blocks before the model reads it.",
+          "correct": false,
+          "explanation": "`content_block_location` is the citation type for custom content documents, where the developer supplies their own pre-chunked list of blocks and controls the granularity. A PDF supplied as a `document` source is cited by page number, not by custom block index.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-02",
+      "question": "A regulatory-reporting team at a bank wants Claude to read policy PDFs and return a strictly typed JSON object of findings, so they set `output_config.format` to their JSON schema and also set `citations: {\"enabled\": true}` on the documents. The request fails immediately. What is the cause?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Citations require a beta header that structured outputs strips from the request.",
+          "correct": false,
+          "explanation": "Citations is a generally available feature and does not require a beta header, so nothing is being stripped. Inventing a header dependency hides the real, documented constraint and would send the team down a dead end.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        },
+        {
+          "key": "B",
+          "text": "Citations and structured outputs are mutually exclusive; combining them returns a 400 validation error.",
+          "correct": true,
+          "explanation": "The API documents citations as incompatible with `output_config.format`, and a request that enables both is rejected with a 400. Citations work by attaching source metadata to generated text blocks, which conflicts with constraining the whole output to a caller-supplied schema. The team must pick one and post-process, or run two calls.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "C",
+          "text": "The PDF exceeds the request size limit, and structured outputs makes that limit smaller.",
+          "correct": false,
+          "explanation": "Structured outputs constrains the shape of the model's output and has no effect on request size limits. A PDF that was too large would fail on its own regardless of `output_config`, and the error would reference the size limit rather than appearing only when both features are enabled.",
+          "citation": { "title": "PDF support", "url": "https://platform.claude.com/docs/en/build-with-claude/pdf-support" }
+        },
+        {
+          "key": "D",
+          "text": "`citations` must be set on the request root rather than on each document block.",
+          "correct": false,
+          "explanation": "`citations.enabled` is correctly configured per document block, and the docs require it to be set consistently across all documents in a request rather than at the root. Moving it would not resolve the conflict with structured outputs.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A logistics SaaS company is migrating from inlining base64 PDFs to the Files API. Customers upload bills of lading through the company's web app, and the backend stores the returned `file_id` alongside each shipment record. Which TWO statements about the Files API should shape their design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Uploaded files are scoped to the workspace of the API key that created them and are not visible to other workspaces.",
+          "correct": true,
+          "explanation": "The Files API scopes every file to the workspace of the uploading key, so a key from another workspace cannot retrieve or reference that `file_id`. A multi-tenant backend must therefore keep workspace boundaries in mind when it decides which key issues the upload and which key later references the file.",
+          "citation": { "title": "Files API", "url": "https://platform.claude.com/docs/en/build-with-claude/files" }
+        },
+        {
+          "key": "B",
+          "text": "Files uploaded through the Files API have `downloadable: false`, and calling the download endpoint on them returns an error.",
+          "correct": true,
+          "explanation": "Only files the API itself generates — such as outputs from code execution — are downloadable. Files uploaded by a developer come back with `downloadable: false`, and requesting their content returns a 400. The company must keep its own copy of each PDF if it needs to serve the original back to customers.",
+          "citation": { "title": "Files API", "url": "https://platform.claude.com/docs/en/build-with-claude/files" }
+        },
+        {
+          "key": "C",
+          "text": "A stored file can be renamed or replaced in place while keeping the same `file_id`, which simplifies document versioning.",
+          "correct": false,
+          "explanation": "Files are immutable once uploaded: the API exposes create, list, retrieve metadata, download, and delete, but no update operation. A new version means a new upload and a new `file_id`, so versioning has to live in the company's own database.",
+          "citation": { "title": "Files API", "url": "https://platform.claude.com/docs/en/build-with-claude/files" }
+        },
+        {
+          "key": "D",
+          "text": "Upload, list, and metadata calls are billed at standard input-token rates, so the team should batch them.",
+          "correct": false,
+          "explanation": "Files API operations themselves are free; you are billed only for the tokens consumed when a file is actually referenced in a Messages request. Batching uploads to save money solves a cost problem that does not exist.",
+          "citation": { "title": "Files API", "url": "https://platform.claude.com/docs/en/build-with-claude/files" }
+        },
+        {
+          "key": "E",
+          "text": "Because file IDs are opaque, unguessable, and already workspace-scoped, it is safe to let end users supply a `file_id` value directly in an API request.",
+          "correct": false,
+          "explanation": "The documentation explicitly warns against accepting file IDs from untrusted sources: a user-supplied ID could point at another tenant's document within the same workspace. The backend must map its own records to file IDs and never pass a client-supplied identifier through.",
+          "citation": { "title": "Files API", "url": "https://platform.claude.com/docs/en/build-with-claude/files" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-04",
+      "question": "An agency runs separate Claude workspaces for each of its clients. A developer creates an API key that is not scoped to any single workspace and calls `/v1/messages` with only `Authorization` and `anthropic-version` headers. Every request returns 400 with a message about a required header. What should the developer add?",
+      "options": [
+        {
+          "key": "A",
+          "text": "`x-api-key`, because `Authorization: Bearer` alone is not accepted by the Messages API.",
+          "correct": false,
+          "explanation": "`Authorization: Bearer <key>` is the primary authentication header for the Claude API; `x-api-key` is a documented legacy fallback that is still supported but not required. Adding it would not resolve a workspace-routing error.",
+          "citation": { "title": "API overview", "url": "https://platform.claude.com/docs/en/api/overview" }
+        },
+        {
+          "key": "B",
+          "text": "`anthropic-beta`, listing the multi-workspace beta feature flag.",
+          "correct": false,
+          "explanation": "Multi-workspace organizations are a generally available feature of the Console, not a beta, so no `anthropic-beta` value applies. Guessing at beta flags is a common source of wasted debugging time — the 400 body names the exact header that is missing.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        },
+        {
+          "key": "C",
+          "text": "A `workspace_id` field in the JSON request body alongside `model` and `messages`.",
+          "correct": false,
+          "explanation": "The Messages request body has no `workspace_id` field, and unknown body fields are rejected. Workspace selection is a transport-level concern handled by a header, not part of the message payload.",
+          "citation": { "title": "Messages", "url": "https://platform.claude.com/docs/en/api/messages/create" }
+        },
+        {
+          "key": "D",
+          "text": "The `anthropic-workspace-id` header naming the target workspace.",
+          "correct": true,
+          "explanation": "A key that is not tied to one workspace cannot infer where usage, rate limits, and prompt caches should be attributed, so the API requires `anthropic-workspace-id` and returns 400 without it. Supplying an unknown or inaccessible workspace instead returns 404 `not_found_error`.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-05",
+      "question": "A market research firm submits 40,000 survey responses through the Message Batches API in one batch. Their result loader zips the downloaded `.jsonl` lines against the original input array by line position, and QA reports that some responses are attached to the wrong survey. What is the defect?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Batch results can be returned in any order, so each line must be matched back using its `custom_id`.",
+          "correct": true,
+          "explanation": "The docs state explicitly that results may not arrive in the order the requests were submitted, which is why every request must carry a unique `custom_id` that is echoed on its result. Positional zipping is unsafe; the loader must build a map keyed on `custom_id`.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "B",
+          "text": "The batch exceeded 100,000 requests, so the API silently truncated and reindexed it.",
+          "correct": false,
+          "explanation": "A batch is capped at 100,000 requests or 256 MB, and 40,000 responses is well under that. Exceeding the limit produces a validation error at creation time rather than silent truncation, so this cannot explain misaligned results.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Errored and expired entries are omitted from the results file, shifting every subsequent line.",
+          "correct": false,
+          "explanation": "Every request in an ended batch gets a result line, including `errored`, `canceled`, and `expired` outcomes, so no lines are dropped. The ordering guarantee is what is missing, not line completeness.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "`custom_id` values longer than 64 characters are truncated, causing collisions in the result map.",
+          "correct": false,
+          "explanation": "`custom_id` must match a pattern of 1–64 characters from `[a-zA-Z0-9_-]`, and a value that violates it is rejected rather than truncated. In any case the described loader ignores `custom_id` entirely and keys on position, which is the actual bug.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-06",
+      "question": "An e-commerce company kicks off a nightly batch of product-description rewrites, then a merchandiser cancels it 20 minutes in. The on-call engineer needs to know what the poller will observe and what data is recoverable. Which description of `processing_status` and cancellation is correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Status moves `in_progress` → `canceled`, and no results are available because the batch never completed.",
+          "correct": false,
+          "explanation": "`canceled` is a per-request result type, not a batch `processing_status`. A canceled batch still reaches `ended`, and requests that already finished before cancellation took effect are preserved and downloadable.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "B",
+          "text": "Cancellation takes effect immediately and synchronously, and the cancel endpoint returns whatever partial results already exist inline in its response body.",
+          "correct": false,
+          "explanation": "Cancellation is best-effort and asynchronous, and the cancel endpoint returns the batch object rather than result data. Results are always retrieved separately from `results_url` once `processing_status` is `ended`.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Status moves `in_progress` → `canceling` → `ended`, and completed requests remain available at `results_url`.",
+          "correct": true,
+          "explanation": "Cancellation puts the batch into `canceling` while in-flight requests wind down, then it settles at `ended`. The poller should key on `ended` rather than on a cancellation-specific state, and requests that succeeded before the cancel are returned normally; those actually canceled come back as `canceled` result entries and are not billed.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "Status stays `in_progress` for the full 24-hour window, and the results file appears only after it expires.",
+          "correct": false,
+          "explanation": "A batch ends as soon as every request reaches a terminal state, which is often far sooner than the 24-hour processing window. Waiting for expiry would needlessly delay recovery of results, which remain downloadable for 29 days after the batch ends.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-07",
+      "question": "A legal-tech product lets users assemble a prompt from selected case documents and shows a live \"estimated tokens\" counter that updates as documents are checked. The team worries about the counter consuming their message throughput budget. Which fact about `/v1/messages/count_tokens` matters most here?",
+      "options": [
+        {
+          "key": "A",
+          "text": "It returns both `input_tokens` and a projected `output_tokens`, so the counter can show a full cost estimate.",
+          "correct": false,
+          "explanation": "The endpoint returns only `input_tokens`. Output length depends on what the model generates and cannot be known before the call, so any output estimate must come from the team's own historical averages.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        },
+        {
+          "key": "B",
+          "text": "It is free to call and has its own rate limits, separate from and independent of the Messages API limits.",
+          "correct": true,
+          "explanation": "Token counting is not billed and is governed by a distinct requests-per-minute limit that does not draw down the Messages API budget. A high-frequency UI counter is therefore a supported pattern, though the team should still throttle to stay inside the token-counting RPM limit for their tier.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        },
+        {
+          "key": "C",
+          "text": "It consumes the same requests-per-minute pool as `/v1/messages`, so the counter must be debounced to avoid 429s on chat traffic.",
+          "correct": false,
+          "explanation": "This is the misconception the docs exist to correct: token counting has separate and independent rate limits. Debouncing is reasonable UX hygiene, but it is not required to protect the Messages API quota.",
+          "citation": { "title": "Rate limits", "url": "https://platform.claude.com/docs/en/api/rate-limits" }
+        },
+        {
+          "key": "D",
+          "text": "It applies prompt caching, so repeated counts of the same document set are cheaper after the first call.",
+          "correct": false,
+          "explanation": "Token counting does not apply prompt caching, and `cache_control` blocks in the payload have no effect on the count returned. There is nothing to make cheaper in any case, because the endpoint is free.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-08",
+      "question": "A dermatology triage app sends 3000x2000 px clinical photographs to a Claude 4.7 model. A developer preemptively downscales every image to 1568 px on the long edge \"because larger images are rejected,\" and clinicians complain that fine lesion detail is lost. What should the developer be told?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Images above 1568 px are rejected with a 400, so the downscale is mandatory; higher fidelity requires splitting the photo into tiles.",
+          "correct": false,
+          "explanation": "Oversized images are not rejected in normal use — the API scales them down for you. Manual tiling adds complexity and breaks the model's view of the whole lesion for no benefit.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "B",
+          "text": "Token cost is a flat per-image charge, so resolution has no effect on price and the downscale saves nothing.",
+          "correct": false,
+          "explanation": "Image cost is not flat: the model divides the image into 28x28 pixel patches and charges roughly the width in patches times the height in patches. Resolution directly drives visual token count, which is exactly why a tier system exists.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "C",
+          "text": "The 10 MB per-image limit is the real constraint; as long as the file is under 10 MB the API preserves the original resolution.",
+          "correct": false,
+          "explanation": "The 10 MB limit is a separate file-size constraint and does not mean pixel dimensions are preserved. Images larger than the model's resolution tier are still resized down before the model sees them, regardless of byte size.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "D",
+          "text": "Claude 4.7 supports a high-resolution tier well above 1568 px, and oversized images are downscaled rather than rejected.",
+          "correct": true,
+          "explanation": "Newer models use a high-resolution tier that accepts a substantially longer edge than the older standard tier's 1568 px, at a correspondingly higher visual-token budget. Because the API downscales anything larger instead of erroring, sending the native photo lets the model use every pixel the tier allows.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-09",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A property-inspection platform sends Claude a conversation containing 30 image blocks: photos from the current inspection, images resent from earlier turns, and screenshots returned inside `tool_result` blocks. Some requests now fail on image dimensions that worked fine in smaller conversations. Which TWO facts explain this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Once a request contains more than 20 image blocks, a stricter maximum dimension applies to every image in it — resize to about 2000 px.",
+          "correct": true,
+          "explanation": "The documented behavior is a threshold effect: past 20 image blocks the per-image dimension ceiling tightens for the whole request, which is why images that passed in a short conversation start failing in a long one. Resizing to about 2000 px on the long edge keeps requests inside the stricter limit.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "B",
+          "text": "Images inside `tool_result` blocks and images resent from earlier turns both count toward that 20-block threshold.",
+          "correct": true,
+          "explanation": "The count is of image blocks in the request, not of newly attached photos. Because the Messages API is stateless, every earlier-turn image the client replays is present again, and tool-generated screenshots are ordinary image blocks — so a long agentic session crosses the threshold without the developer intentionally uploading 20 files.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "C",
+          "text": "Requests are hard-capped at 20 images; the 21st image block returns a 400 regardless of size.",
+          "correct": false,
+          "explanation": "The 20-image cap applies to a single message in the claude.ai product, not to the API. The API allows far more image blocks per request — the number depends on the model's context window — so 30 blocks is legal and the failure is about dimensions, not count.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "D",
+          "text": "Beyond 20 images the API stops downscaling automatically, so any single image above the model's resolution tier limit now returns a dimension validation error.",
+          "correct": false,
+          "explanation": "Automatic downscaling is not switched off by image count. The documented exceptions to auto-resizing are `tool_result` images from computer- and browser-use tools and the explicit `oversized_image: \"error\"` setting, neither of which is a function of how many images the request holds.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "E",
+          "text": "Base64 image blocks count toward the threshold but `url` and `file` sources do not, so switching sources avoids the limit.",
+          "correct": false,
+          "explanation": "All three image source types produce the same image content block once fetched, and the limits apply identically. Switching from base64 to the Files API is worth doing to shrink request payloads, but it does not change how images are counted or sized.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-10",
+      "question": "A customer-support tool adds a `cache_control` breakpoint after a 300-token system prompt on Claude Opus 4.7. Deployment succeeds and no errors appear in the logs, but `cache_read_input_tokens` is always 0 and costs are unchanged. What is happening?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The prefix is below the model's minimum cacheable length, so the request runs without caching and no error is raised.",
+          "correct": true,
+          "explanation": "Each model has a minimum cacheable prompt length, and shorter prefixes are simply not cached — the request succeeds normally with no warning, which is exactly the silent failure described. Opus 4.7's minimum is higher than 300 tokens, so the team must either grow the cached prefix or move the breakpoint later.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "`cache_control` on a system block is silently ignored, because breakpoints are only honored inside the `messages` array after the last completed user turn.",
+          "correct": false,
+          "explanation": "Breakpoints are valid on tools, system blocks, and message content alike — in fact the system prompt is one of the most common places to put one. The cache prefix is built in the order tools, then system, then messages.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "The 5-minute default TTL expired between requests, so every call is a cold write.",
+          "correct": false,
+          "explanation": "An expired TTL would show up as nonzero `cache_creation_input_tokens` on each call as the cache is rewritten. Seeing no cache activity at all points to the prefix never being cached in the first place.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Caching requires the `anthropic-beta: prompt-caching` header, and without it the field is dropped.",
+          "correct": false,
+          "explanation": "Prompt caching is generally available and needs no beta header; even the 1-hour TTL option requires none. An unrecognized `cache_control` field would also produce a validation error rather than being silently dropped.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-11",
+      "question": "A tax-prep assistant sends a large stable system prompt and tool set, then a growing chat history. To \"maximize hits,\" a developer adds a `cache_control` breakpoint to every one of the last twelve message blocks. The request is rejected. What is the correct configuration?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move all twelve breakpoints into the `tools` array, which has no breakpoint limit.",
+          "correct": false,
+          "explanation": "The breakpoint limit applies to the request as a whole, not per section, so relocating them does not help. Tools sit at the front of the cache prefix and normally need at most one breakpoint after the last tool definition.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Keep one breakpoint per turn but set `ttl: \"1h\"` on each, which raises the allowed breakpoint count.",
+          "correct": false,
+          "explanation": "TTL selection and breakpoint count are unrelated settings. Choosing a 1-hour lifetime changes how long an entry survives and what the write costs, not how many `cache_control` markers a request may carry. The four-breakpoint maximum applies regardless of TTL.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Use at most four breakpoints — typically one at the end of the stable prefix — since each is matched against a lookback window.",
+          "correct": true,
+          "explanation": "A request may contain a maximum of four `cache_control` breakpoints, and each one is matched by walking backward through a window of preceding blocks rather than requiring an exact marker at the hit point. One breakpoint placed at the end of the stable content therefore captures the longest reusable prefix without needing a marker per turn.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Place a single breakpoint on the newest user message, so that the entire conversation history up to and including that point is captured in the cache.",
+          "correct": false,
+          "explanation": "Marking the newest message caches content that changes on the very next turn, guaranteeing a write that is never read. Breakpoints belong at the boundary between stable and volatile content, not at the tail of the request.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-12",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A healthcare scheduling vendor caches a large clinical system prompt. Finance reports that `input_tokens` in the response looks far too small versus what the team believes it sent, and a second team in a different workspace using an identical prompt sees no cache hits at all. Which TWO explanations are correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "`input_tokens` counts only tokens after the last breakpoint; the true total also adds `cache_read_input_tokens` and `cache_creation_input_tokens`.",
+          "correct": true,
+          "explanation": "Cached portions are reported in their own usage fields rather than folded into `input_tokens`, which is why the uncached remainder looks small. Any billing or capacity dashboard must sum all three fields to reconstruct what was actually sent.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Prompt caches are isolated per workspace, so an identical prefix sent from another workspace cannot read the first team's cache.",
+          "correct": true,
+          "explanation": "Cache entries are not shared across workspace boundaries, which is a privacy and isolation guarantee rather than a bug. Two teams with byte-identical prompts in different workspaces each pay their own cache write and build separate entries.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "`input_tokens` is the grand total, and `cache_read_input_tokens` is a subset already included in it.",
+          "correct": false,
+          "explanation": "This double-counts. The usage fields are disjoint: cache reads and cache writes are reported separately precisely so that each can be priced at its own rate, and adding a subset back in would overstate the bill.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Caches are keyed solely by the hash of the prompt prefix and the model name, so any organization that happens to send byte-identical text will get a cache hit.",
+          "correct": false,
+          "explanation": "Cross-tenant cache sharing would leak information about what other customers send. Isolation is enforced above the prefix hash, so an identical prompt from a different workspace produces a miss and a fresh write.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "E",
+          "text": "The 5-minute and 1-hour write buckets are reported in a single combined field, so the team cannot tell them apart.",
+          "correct": false,
+          "explanation": "Writes are broken out by TTL under `cache_creation`, with separate `ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens` counters. The team can attribute spend to each bucket precisely.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-13",
+      "question": "A travel booking assistant streams responses and records token usage for per-tenant chargeback. The developer accumulates `usage` from every `message_delta` event by adding the values together. Finance finds the streamed totals are much higher than the non-streamed equivalents. What is the fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Read `usage` from the `message_stop` event, which is the only event in the stream that carries the final token totals for the message.",
+          "correct": false,
+          "explanation": "`message_stop` marks the end of the stream and does not carry a usage payload. Final counts are delivered on the `message_delta` events, so the accounting code must look there.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "B",
+          "text": "Take the values from the final `message_delta` as-is, because streamed `usage` is cumulative, not incremental.",
+          "correct": true,
+          "explanation": "Usage reported during a stream is a running total, so each `message_delta` restates the counts rather than reporting a delta since the previous event. Summing them multiplies the true figure; the last event already holds the final numbers.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "C",
+          "text": "Add `message_start.usage.input_tokens` to the sum of all `message_delta` output tokens.",
+          "correct": false,
+          "explanation": "Input tokens do appear on `message_start`, but the underlying error — treating cumulative output counts as increments — remains. This preserves the double-counting it was meant to fix.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "D",
+          "text": "Call `/v1/messages/count_tokens` on the assembled response text to get an authoritative output count.",
+          "correct": false,
+          "explanation": "The token-counting endpoint estimates input tokens for a prospective request; it is not an output-accounting tool and re-tokenizing generated text ignores thinking and tool-use tokens. The stream already reports authoritative usage.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-14",
+      "question": "A competitive-intelligence tool gives Claude a server-side web search tool. On long research questions the response comes back with `stop_reason: \"pause_turn\"` and partial findings. The developer wants the model to keep going. What is the correct continuation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Append the returned assistant content unmodified as an assistant message and reissue the request with the same tools.",
+          "correct": true,
+          "explanation": "`pause_turn` means a long-running server-tool loop hit its iteration limit mid-turn, not that anything failed. Passing the assistant content back verbatim — including the server tool blocks — and re-sending with the same tool definitions lets the model resume from where it stopped.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Append a `tool_result` block for the paused server tool call, then resend.",
+          "correct": false,
+          "explanation": "Server-side tools are executed by the API, not the client, so there is no result for the developer to supply. Injecting a fabricated `tool_result` for a server tool is a validation error and conflates the server-tool loop with client-side tool use.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "Raise `max_tokens` and resend the original request, since `pause_turn` indicates the output budget was exhausted.",
+          "correct": false,
+          "explanation": "Output-budget exhaustion is reported as `stop_reason: \"max_tokens\"`, a distinct value. `pause_turn` is about the number of server-tool iterations in a single turn, so raising `max_tokens` and discarding the partial work wastes the research already done.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "D",
+          "text": "Summarize the partial findings into a new user message and start a fresh conversation to save context.",
+          "correct": false,
+          "explanation": "Summarizing discards the exact tool state the model needs to resume and risks losing citations and intermediate evidence. The documented path is to replay the assistant content as-is; summarization is a context-management technique for a different problem.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-15",
+      "question": "An insurance claims agent uses extended thinking with tools. To rebuild the next request, the developer keeps only blocks where `block.type == \"thinking\"` or `\"text\"`. Most turns work, but occasionally the follow-up call returns a 400 `invalid_request_error` naming a block position. What is the cause?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Thinking blocks must be stripped entirely before the next request; keeping them is what triggers the 400.",
+          "correct": false,
+          "explanation": "The opposite is true when tool use is involved: thinking blocks from the immediately preceding assistant turn must be passed back so the model can verify the reasoning it already committed to. Stripping them is itself an error.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "B",
+          "text": "Thinking blocks expire after a few minutes, so slow user turns produce a stale-signature 400.",
+          "correct": false,
+          "explanation": "Thinking blocks carry a cryptographic signature for verification, but there is no documented wall-clock expiry that invalidates them between turns. The intermittent pattern is better explained by which block types a given response happened to contain.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "C",
+          "text": "The filter should also keep `tool_use` blocks; the missing `thinking` signature is a red herring.",
+          "correct": false,
+          "explanation": "Dropping `tool_use` blocks would break the tool-result pairing, but that produces a different error about unmatched `tool_use_id`. The error naming a block position in a thinking-enabled turn points at the reasoning blocks themselves.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "D",
+          "text": "The filter silently discards `redacted_thinking` blocks, which must also be replayed complete and unmodified.",
+          "correct": true,
+          "explanation": "When internal reasoning is flagged by safety systems it is returned as an encrypted `redacted_thinking` block, which appears only on some turns — hence the intermittent failure. All thinking blocks, redacted or not, must be passed back exactly as received, so a type check that matches only `\"thinking\"` drops them and yields a 400.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-16",
+      "question": "A content-moderation vendor sees occasional responses where `stop_reason` is `\"refusal\"` and `content` is empty. Their client treats any empty content array as a transport failure and retries the identical request up to five times against the same model. What should they do instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Catch the 403 and surface a policy error, since refusals are returned as an authorization failure.",
+          "correct": false,
+          "explanation": "A refusal is not an HTTP error at all. The call returns 200 with a well-formed message whose `stop_reason` is `refusal`, so no 4xx handler will ever see it.",
+          "citation": { "title": "Refusals and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback" }
+        },
+        {
+          "key": "B",
+          "text": "Retry with exponential backoff, because refusals are transient safety glitches that usually resolve within a few additional attempts against the same model.",
+          "correct": false,
+          "explanation": "Refusals reflect a safety decision about the content of the request, not a transient server condition, so identical retries reliably fail. Worse, each refused call still counts against rate limits, so the retry storm degrades throughput for legitimate traffic.",
+          "citation": { "title": "Refusals and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback" }
+        },
+        {
+          "key": "C",
+          "text": "Branch on `stop_reason == \"refusal\"`, read `stop_details.category`, and retry once on a fallback model.",
+          "correct": true,
+          "explanation": "Refusals arrive as a successful 200 response, so the client must inspect `stop_reason` explicitly. `stop_details.category` tells the application which policy area triggered it, and the documented recovery is a single attempt on a fallback model — which can be requested via the server-side fallback option — not a retry loop.",
+          "citation": { "title": "Refusals and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback" }
+        },
+        {
+          "key": "D",
+          "text": "Set a longer `max_tokens`, since an empty content array means the model had no room to begin its answer.",
+          "correct": false,
+          "explanation": "An output budget too small to start a response would surface as `stop_reason: \"max_tokens\"`, not `refusal`. Increasing `max_tokens` cannot change a safety outcome and leaves the misclassified retry loop in place.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D2-17",
+      "question": "A clinical-trials CRO wants Claude to review 1,400-page protocol PDFs, each around 90 MB, and the same protocol is queried dozens of times a day by different reviewers. Their first attempt inlines the PDF as base64 in every request and fails. What is the right implementation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Split each protocol to respect the per-request page and 32 MB limits, upload the chunks via the Files API, and reference each `file_id`.",
+          "correct": true,
+          "explanation": "Both a per-request page ceiling and a 32 MB total request size apply to PDFs, and a 1,400-page 90 MB document exceeds both — so chunking is unavoidable. Uploading once and referencing `file_id` then keeps every subsequent request small instead of re-encoding tens of megabytes of base64 per reviewer.",
+          "citation": { "title": "PDF support", "url": "https://platform.claude.com/docs/en/build-with-claude/pdf-support" }
+        },
+        {
+          "key": "B",
+          "text": "Keep each protocol as a single PDF but pass it as a `url` source, which bypasses the page and size limits because the API fetches the document directly.",
+          "correct": false,
+          "explanation": "The `url` source only changes how the document reaches the API; the same page and size limits apply once it is fetched. It does avoid base64 bloat in the request body, but it will not make an oversized protocol acceptable.",
+          "citation": { "title": "PDF support", "url": "https://platform.claude.com/docs/en/build-with-claude/pdf-support" }
+        },
+        {
+          "key": "C",
+          "text": "Encrypt each PDF before upload so it compresses below the size limit, then let Claude decrypt it at read time.",
+          "correct": false,
+          "explanation": "Encrypted PDFs are explicitly unsupported and will be rejected, and encryption does not reduce size in any case. Documents must be decrypted before they are sent.",
+          "citation": { "title": "PDF support", "url": "https://platform.claude.com/docs/en/build-with-claude/pdf-support" }
+        },
+        {
+          "key": "D",
+          "text": "Extract the text with a local library and send plain text, since Claude processes PDF pages as text only anyway.",
+          "correct": false,
+          "explanation": "Claude processes each PDF page as both extracted text and an image, so it can read charts, tables, and figures that text extraction loses — a serious gap for trial protocols. Text-only extraction also forfeits `page_location` citations back to the source page.",
+          "citation": { "title": "PDF support", "url": "https://platform.claude.com/docs/en/build-with-claude/pdf-support" }
+        }
+      ]
+    }
+  ]
+}

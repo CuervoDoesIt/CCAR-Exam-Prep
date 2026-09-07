@@ -1,0 +1,288 @@
+{
+  "examId": "ccdv-f-exam2",
+  "domainId": "D1",
+  "domainName": "Agents and Workflows",
+  "questions": [
+    {
+      "id": "V2-D1-01",
+      "question": "A wind-farm operator generates monthly performance reports with a three-call chain: extract turbine metrics, draft an outline, then write the report. When the outline omits a required section, the expensive final call produces an unusable report and the team only finds out at the end. Which change matches the prompt-chaining guidance in Building Effective Agents?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Merge the three steps into a single prompt and instruct the model to review its own outline before it writes the report.",
+          "correct": false,
+          "explanation": "Collapsing the chain removes the very decomposition that makes each step easy to check, and there is no longer an intermediate output for your code to inspect. Prompt chaining exists to trade a little latency for higher accuracy on each simpler subtask.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Add a programmatic gate after the outline call that checks the required sections before the report call runs.",
+          "correct": true,
+          "explanation": "Anthropic describes adding programmatic checks, called gates, on intermediate steps to ensure the process is still on track. Because the required sections are a deterministic rule, plain code can enforce it and stop the chain before you pay for the final call.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Replace the chain with an autonomous agent that holds a tool for each step and decides for itself when the outline is good enough.",
+          "correct": false,
+          "explanation": "The task decomposes cleanly into fixed subtasks, which is exactly where a workflow is preferred over an agent. Handing loop control to the model adds cost and unpredictability without adding the deterministic section check the team actually needs.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Run the outline call three times in parallel and pass all three outlines into the report call so the model can choose the best one.",
+          "correct": false,
+          "explanation": "That is parallelization in its voting form, which raises confidence at triple the cost but never checks whether any outline satisfies the section rule. Nothing stops a report being written from three equally incomplete outlines.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D1-02",
+      "question": "A game studio localises in-game dialogue. Reviewers can state precisely what a translation gets wrong, such as register, idiom, or character voice, and a second pass usually fixes it. The studio wants that review cycle in code rather than in a review queue. Which implementation is the evaluator-optimizer workflow?",
+      "options": [
+        {
+          "key": "A",
+          "text": "One call that translates the line and is instructed to critique and rewrite its own output once before returning it.",
+          "correct": false,
+          "explanation": "A single call doing generation and critique together gives no independent evaluation and no exit criterion to loop against. The pattern's value comes from a separate evaluator whose feedback is fed back to the generator.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Three translations generated concurrently, shipping whichever wording two of the three agree on.",
+          "correct": false,
+          "explanation": "Running the same task several times and aggregating is parallelization by voting. Majority agreement measures consensus, not quality against criteria, and no feedback is ever applied to improve a draft.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "A lead call that splits the script by character, dispatches one worker call per character, then merges the translated lines back into a single localisation file.",
+          "correct": false,
+          "explanation": "That is orchestrator-workers: a central call decomposes the job and delegates it. Decomposition spreads the work out but never refines any individual line against stated criteria.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "One call translates; a second scores it against the criteria and returns specific feedback; the generator revises until it passes or a cap is hit.",
+          "correct": true,
+          "explanation": "Evaluator-optimizer is one LLM call generating while another provides evaluation and feedback in a loop. Anthropic notes it is particularly effective when there are clear evaluation criteria and iterative refinement adds measurable value, which is precisely what the reviewers describe.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D1-03",
+      "question": "An online tutoring platform must screen every student message for self-harm and abuse signals before Claude's answer is displayed. Its p95 latency budget has no room for a second sequential round trip. Which implementation follows the parallelization pattern described in Building Effective Agents?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Issue the screening call and the answering call concurrently, then release the answer only once the screening call comes back clean.",
+          "correct": true,
+          "explanation": "Sectioning splits a task into independent subtasks that run in parallel, and Anthropic gives exactly this guardrail example: one model instance handles the query while another screens it. The two calls do not depend on each other, so the wall-clock cost is the slower of the two rather than their sum.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Append the screening rules to the answering call's system prompt so that one call both moderates the student's message and produces the tutoring answer.",
+          "correct": false,
+          "explanation": "Anthropic's rationale for sectioning is that separating concerns lets each call give focused attention to one consideration. Folding moderation into the answering prompt degrades both jobs and leaves you parsing a verdict out of prose.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Run the screening call first and start the answering call only after the verdict returns.",
+          "correct": false,
+          "explanation": "Chaining is the right shape only when a later step needs an earlier step's output, and here the answer does not depend on the verdict. Serialising two independent calls adds a full round trip and breaks the stated latency budget.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Generate five answers concurrently and publish the one that the majority of them agree on.",
+          "correct": false,
+          "explanation": "Voting is the parallelization variant used when multiple attempts raise confidence in a single answer, not when a separate safety check is required. Five generations cost five times as much and still never screen the student's input.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D1-04",
+      "question": "A claims-triage agent runs on Claude Opus 4.8 with thinking: {\"type\": \"adaptive\"}. To trim tokens, the loop rebuilds each assistant message from scratch, keeping only the tool_use block, then appends the tool_result. Every follow-up request now fails with a 400. What is the correct fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Switch to thinking: {\"type\": \"enabled\", \"budget_tokens\": 8000}, a mode under which returning the earlier thinking blocks alongside tool results becomes optional.",
+          "correct": false,
+          "explanation": "Manual extended thinking is rejected on Claude 4.7 and later models, which return a 400 for thinking.type \"enabled\", so this trades one error for another. The requirement to return thinking blocks alongside tool results is identical in both modes anyway.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "B",
+          "text": "Append the assistant content array exactly as received, thinking block and signature included, then send the tool_result in the following user message.",
+          "correct": true,
+          "explanation": "The documented rule is to echo the assistant message exactly as received: when you post tool results you must include the entire unmodified thinking block that accompanies that tool request. Rebuilding the message or filtering blocks out of it is called out as a cause of 400 errors.",
+          "citation": { "title": "Thinking in tool and multi-turn workflows", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking-tool-workflows" }
+        },
+        {
+          "key": "C",
+          "text": "Keep the thinking block but strip its signature field, which only carries redundant metadata.",
+          "correct": false,
+          "explanation": "The API uses cryptographic signatures to verify thinking block authenticity, and modifying a block makes the request fail. The signature is part of the block you are required to return unchanged, not optional padding.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "D",
+          "text": "Remove the thinking parameter from follow-up requests so the API stops expecting a thinking block in the history.",
+          "correct": false,
+          "explanation": "A tool-use loop is a single assistant turn, and the thinking configuration should be held constant for the whole turn rather than changed mid-loop. Dropping the parameter also does nothing about the thinking block already sitting in the assistant message you must return.",
+          "citation": { "title": "Thinking in tool and multi-turn workflows", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking-tool-workflows" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D1-05",
+      "question": "A payments team's reconciliation agent is built on the Claude Agent SDK's query() function with several client tools. Some runs make dozens of tool round trips before they finish. The team wants a hard ceiling on round trips per query that the SDK enforces, rather than an instruction the model may ignore. Which option delivers that?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set max_budget_usd on the options object.",
+          "correct": false,
+          "explanation": "That caps estimated spend, not iterations: it is compared against total_cost_usd and ends the query with the error_max_budget_usd result subtype. A loop of cheap calls can still run far more round trips than the team wants.",
+          "citation": { "title": "Agent SDK reference - Python", "url": "https://code.claude.com/docs/en/agent-sdk/python" }
+        },
+        {
+          "key": "B",
+          "text": "Set permission_mode to a stricter value in ClaudeAgentOptions.",
+          "correct": false,
+          "explanation": "permission_mode governs how tool calls are approved, not how many of them may happen. A stricter mode adds approval friction while an unattended run can still iterate indefinitely.",
+          "citation": { "title": "Agent SDK reference - Python", "url": "https://code.claude.com/docs/en/agent-sdk/python" }
+        },
+        {
+          "key": "C",
+          "text": "Set max_turns in ClaudeAgentOptions.",
+          "correct": true,
+          "explanation": "max_turns is documented as the maximum number of agentic turns, meaning tool-use round trips, and the SDK stops the run when the limit is reached. Enforcing the bound in configuration rather than prompt wording is the same principle as putting a stopping condition in your own loop code.",
+          "citation": { "title": "Agent SDK reference - Python", "url": "https://code.claude.com/docs/en/agent-sdk/python" }
+        },
+        {
+          "key": "D",
+          "text": "Export CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1 in the environment passed to the query.",
+          "correct": false,
+          "explanation": "That variable bounds how deeply subagents may nest beneath the main agent; it stops delegation from growing a tree, not the main loop from iterating. A single agent with no subagents is completely unaffected by it.",
+          "citation": { "title": "Subagents in the SDK", "url": "https://code.claude.com/docs/en/agent-sdk/subagents" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D1-06",
+      "question": "A biotech team's Agent SDK application defines a schema-auditor subagent through the agents option. The parent agent reads a failing migration file, then invokes the subagent with the prompt \"fix the problem you just saw\". The subagent replies that it does not know which file is meant. Why, and what is the fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A non-fork subagent starts with a fresh context and receives only its own system prompt plus the Agent tool's prompt string, so put the paths and error text there.",
+          "correct": true,
+          "explanation": "Subagents are separate agent instances whose context window starts fresh, without the parent's conversation history or tool results. The docs state that the only content passed from parent to subagent is the Agent tool's prompt string, so paths, errors, and decisions must be written into it explicitly.",
+          "citation": { "title": "Subagents in the SDK", "url": "https://code.claude.com/docs/en/agent-sdk/subagents" }
+        },
+        {
+          "key": "B",
+          "text": "The subagent does inherit the parent's conversation but truncates it at its own maxTurns limit, so raising maxTurns keeps the earlier turns, including the file it read.",
+          "correct": false,
+          "explanation": "maxTurns bounds how many agentic turns the subagent may take before Claude Code marks its output partial; it has nothing to do with what the subagent can see at startup. Context isolation is the designed behaviour, not a truncation bug.",
+          "citation": { "title": "Subagents in the SDK", "url": "https://code.claude.com/docs/en/agent-sdk/subagents" }
+        },
+        {
+          "key": "C",
+          "text": "Add model: \"inherit\" to the AgentDefinition so the subagent shares the parent's session state.",
+          "correct": false,
+          "explanation": "The model field only chooses which model the subagent runs on, and \"inherit\" means it reuses the main agent's model. No value of that field copies the parent's conversation into the subagent.",
+          "citation": { "title": "Subagents in the SDK", "url": "https://code.claude.com/docs/en/agent-sdk/subagents" }
+        },
+        {
+          "key": "D",
+          "text": "Remove the subagent's tools restriction so it inherits the full tool set and, with it, the parent's conversation.",
+          "correct": false,
+          "explanation": "Omitting tools widens what the subagent may do, but capability and context are separate concerns and neither setting carries history across. The subagent would still have no idea which migration file the parent read.",
+          "citation": { "title": "Subagents in the SDK", "url": "https://code.claude.com/docs/en/agent-sdk/subagents" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D1-07",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "An airline operations team is deciding whether to build its disruption-rebooking assistant as a predefined workflow or as an autonomous agent. Per Building Effective Agents, which TWO characteristics of the task argue for an agent?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The number of steps needed varies with each disruption and cannot be fixed in the code in advance.",
+          "correct": true,
+          "explanation": "Anthropic reserves agents for open-ended problems where it is difficult or impossible to predict the required number of steps and you cannot hardcode a fixed path. When the path itself must be decided at runtime, letting the model direct its own process is what an agent adds over a workflow.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Every request must return in under two seconds at the lowest achievable cost per call.",
+          "correct": false,
+          "explanation": "Agentic systems trade latency and cost for better task performance, so a hard latency and cost ceiling argues against autonomy rather than for it. A workflow with a known number of calls is far easier to hold to an SLA.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Every request follows the same three steps in the same order, so one predefined code path already serves every case the team has seen.",
+          "correct": false,
+          "explanation": "A task that decomposes into fixed subtasks is the definition of a workflow, where predefined code paths orchestrate the model. Anthropic's advice is to use the simplest structure that works and add agentic complexity only when it measurably improves outcomes.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Each action returns verifiable ground truth from the environment, such as seat maps, fare rules, and booking confirmations, that the model can judge before its next move.",
+          "correct": true,
+          "explanation": "Anthropic stresses that during execution it is crucial for agents to gain ground truth from the environment at each step. Tool results that confirm or refute the last action are what let an autonomous loop correct itself instead of compounding an early mistake.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "E",
+          "text": "The final answer must conform to a strict JSON schema that the booking system consumes.",
+          "correct": false,
+          "explanation": "Output shape is handled by a tool schema or structured output and is orthogonal to whether the model or your code controls the path. Workflows and agents alike can end in a schema-conformant payload.",
+          "citation": { "title": "How tool use works", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D1-08",
+      "question": "A hotel group's booking agent handles the first tool call correctly. To save tokens, every later request then sends only the newest user message holding the tool_result. The API rejects those requests because the tool_result has no matching tool_use in the preceding message. What must each iteration send?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Just the tool_result plus the id of the previous response, which lets the API reattach the earlier turns on its side.",
+          "correct": false,
+          "explanation": "The Messages API keeps no server-side conversation for you to reattach; conversation state lives in the messages array you send. There is no response id that restores earlier turns.",
+          "citation": { "title": "How tool use works", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works" }
+        },
+        {
+          "key": "B",
+          "text": "Just the tool_result, with prompt caching enabled on the system prompt and tool definitions so the cached prefix keeps every earlier turn available server-side.",
+          "correct": false,
+          "explanation": "Prompt caching changes what you pay for tokens you still send; a cached prefix continues to occupy the context window and must still appear in the request. It is a cost optimisation, not a substitute for conversation state.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "C",
+          "text": "The whole accumulated messages array: the original messages, the assistant turn carrying the tool_use block, then a user turn with the tool_result.",
+          "correct": true,
+          "explanation": "The documented loop step is to send a new request containing the original messages, the assistant's response, and a user message with the tool_result blocks. Each turn accumulates in the request, which is why the tool_result must directly follow the assistant turn that requested it.",
+          "citation": { "title": "How tool use works", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works" }
+        },
+        {
+          "key": "D",
+          "text": "The user turn with the tool_result only; the assistant turn may be dropped as long as tool_use_id is correct.",
+          "correct": false,
+          "explanation": "A tool_result is matched against a tool_use block in the immediately preceding assistant message, so dropping that message leaves the id pointing at nothing. It would also discard the reasoning and partial answer Claude produced in that turn.",
+          "citation": { "title": "How tool use works", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works" }
+        }
+      ]
+    }
+  ]
+}

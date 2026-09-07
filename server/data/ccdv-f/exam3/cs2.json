@@ -1,0 +1,460 @@
+{
+  "examId": "ccdv-f-exam3",
+  "caseId": "CS2",
+  "caseTitle": "Calder Air — Rebook irregular-operations assistant",
+  "caseScenario": "Calder Air is a US regional carrier operating 640 daily departures and carrying about 31 million passengers a year. Its irregular-operations (IROP) product, Rebook, explains disruptions and offers re-accommodation options. It runs on two surfaces: the passenger mobile app, and a gate-agent console used by 1,100 agents. Both are served by the same Python 3.12 service on GKE using the `anthropic` Python SDK, fronted by a WebSocket gateway that relays streamed output to the React Native client.\n\nRebook talks to two backends. The passenger service system (PSS) owns seat inventory, fare rules, and the passenger name record (PNR), which includes form-of-payment and travel-document fields. A GDS integration supplies interline fare search. Thirty-four tools are currently registered on every request.\n\nBaseline volume is 2.4 million assistant turns a month, but a single winter storm can triple that inside 48 hours. The current build has four open defects: during the last storm about 0.7% of streams ended mid-response with no signal to the app; a passenger was shown a seat that PSS had already sold, and the team could not reproduce it from logs; a code review found the full PNR blob being serialized into the prompt; and the console and the app have drifted onto two different system prompts after a hotfix.",
+  "caseRequirements": [
+    "R1: The passenger app must render its first visible token within 900 ms of request receipt, at up to 14,000 concurrent sessions.",
+    "R2: No payment card number and no passport number may appear in any request body sent to the Anthropic API.",
+    "R3: Every rebooking option displayed to a passenger must be confirmed by a live PSS availability call issued in the same turn it is displayed; availability may never be quoted from earlier context.",
+    "R4: Every API interaction must be reconstructable from logs by request identifier alone, without replaying passenger traffic.",
+    "R5: Monthly Anthropic spend for Rebook must stay under $48,000 at the 2.4 million turn baseline.",
+    "R6: The gate-agent console and the passenger app must run identical system prompt text and tool definitions; the deploy pipeline fails when the two surfaces' prompt-and-tools hash differs."
+  ],
+  "questions": [
+    {
+      "id": "V3-CS2-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D8", "D2"],
+      "question": "Rebook is currently one open agent loop with all 34 tools available; telemetry shows a p95 of nine tool calls before any passenger-visible text is produced. Traffic is dominated by four intents: disruption explanation, rebooking, refund eligibility, and baggage status. What should the team build instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the open loop and raise output_config.effort to high so the model plans more carefully and reaches a useful answer in fewer tool calls.",
+          "correct": false,
+          "explanation": "More reasoning effort adds thinking tokens before the first visible token rather than removing them, so it moves the latency in the wrong direction. It also raises per-turn cost across all 2.4 million baseline turns, which R5 cannot absorb.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the single agent loop but enable the tool search tool, so that only the handful of tool definitions relevant to the current request are loaded into context on each turn instead of all 34 schemas, cutting prefill work substantially.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a real and well-targeted optimization: it cuts the input tokens spent on 34 unused tool schemas and measurably improves tool-selection accuracy, and Calder should adopt it. But it does not meet R1, because shrinking the tool catalogue does not bound how many turns the agent takes — a nine-call p95 still means the passenger sees nothing for seconds, and R1 is a wall-clock budget on the first visible token, not a token-count budget.",
+          "citation": { "title": "Tool search tool", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool" }
+        },
+        {
+          "key": "C",
+          "text": "Collapse the 34 tools into one generic tool that takes an operation name and a free-form parameters object, so the model has a single obvious call to make.",
+          "correct": false,
+          "explanation": "A single untyped dispatcher removes the schema that helps the model produce well-formed arguments, so argument errors and retries increase. It also destroys the per-tool descriptions that guide selection, which is the opposite of Anthropic's tool-authoring guidance.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Replace the open loop with a routing workflow: a small classifier call assigns the intent, then dispatches to one of four fixed sub-flows, each with a narrow tool set and a bounded call sequence before the first streamed token.",
+          "correct": true,
+          "explanation": "Routing is the documented pattern for a workload with a small number of known, distinct intents, and it makes the number of pre-response calls a design-time constant instead of a model decision — which is what R1's 900 ms budget requires. Narrow per-intent tool sets deliver the input-token savings option B chases, as a side effect of the structure rather than as a separate mechanism. Option B is still worth adding inside the rebooking sub-flow, but it cannot bound turn count on its own.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-02",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D4"],
+      "question": "The WebSocket gateway forwards only content_block_delta events carrying text_delta and discards every other server-sent event. During the last storm roughly 0.7% of sessions ended with a half-written answer and no indication anything went wrong. How should the gateway consume the stream?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Buffer the full stream server-side, validate that it terminated cleanly with a normal stop_reason, and only then forward the completed message to the client in a single WebSocket frame, so a partial answer can never reach a passenger's screen.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a legitimate design and it does eliminate the half-answer defect completely while simplifying the client. But it does not meet R1, because buffering makes the first visible token arrive at the same moment as the last one — the 900 ms budget is unachievable for any response that takes longer than that to generate in full.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "B",
+          "text": "Keep forwarding only text deltas, but treat the absence of periodic ping events as the signal that a stream has died and reconnect the socket when one is missed.",
+          "correct": false,
+          "explanation": "Ping events keep the connection alive but say nothing about whether the message completed, refused, or was truncated — a stream can deliver pings right up to an error. Inferring completion from a heartbeat replaces an explicit, documented signal with a guess.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "C",
+          "text": "Consume the whole event sequence: message_start for the message id, content_block_start and content_block_stop to bracket each block, message_delta for the final stop_reason and usage, message_stop to close, plus any mid-stream error event.",
+          "correct": true,
+          "explanation": "The stop_reason and final usage only arrive on message_delta, and an error event such as an overloaded_error can be emitted after text has already been delivered — a gateway that drops both cannot distinguish a finished answer from a severed one, which is exactly the observed defect. Capturing message_start also gives the message id needed for the R4 log trail. Unlike option A this preserves incremental rendering, so R1 survives.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "D",
+          "text": "Rely on the HTTP status code of the streaming request, since a non-200 response indicates the turn failed and the client can be told to retry.",
+          "correct": false,
+          "explanation": "The status code is committed when the stream opens, before any content is generated, so a mid-stream failure still arrives under a 200. Errors that occur after the response headers are sent are delivered as SSE error events, not as a status code.",
+          "citation": { "title": "Errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-03",
+      "primaryDomain": "D7",
+      "secondaryDomains": ["D2", "D6"],
+      "question": "Code review found that the rebooking flow serializes the entire PNR object into the prompt, and PNRs carry form-of-payment and travel-document fields. What implementation removes this class of exposure?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Build the model-facing PNR from an explicit allowlist of fields at the serialization boundary, and have repricing call a PSS tool that takes an opaque payment token id rather than any card value.",
+          "correct": true,
+          "explanation": "An allowlist projection is closed by construction: a field that is not named is never emitted, so a new PSS field or an unfamiliar document format cannot leak the way it can past a pattern matcher. Referring to payment by token keeps the card entirely inside PSS, which is what R2 means by never appearing in a request body. Option C is worth keeping as a second line of defense, but it cannot make that guarantee.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Leave the payload as it is and rely on the organization's zero-data-retention configuration so sensitive fields are not stored after the request completes.",
+          "correct": false,
+          "explanation": "Retention policy governs what happens to data after it arrives; it does not stop the data from being transmitted. R2 is written as a transmission control precisely because that is the boundary Calder's auditors test.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        },
+        {
+          "key": "C",
+          "text": "Add a scrubbing middleware that runs a set of card and passport regular expressions over every serialized request body immediately before it is sent, redacting any match.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Pattern-based scrubbing at the egress boundary is a real DLP control, catches the exact leak that review found, and ships in an afternoon. But it does not meet R2, because a denylist only removes formats it anticipates: non-US passport formats, spaced or hyphenated card groupings, and values inside OCR'd document text all pass through, and the requirement is absolute rather than statistical.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Move the API key out of the service configuration into the cluster secret manager and send it using the Authorization Bearer header rather than the legacy key header.",
+          "correct": false,
+          "explanation": "Both are correct credential hygiene — Bearer is the primary auth header and the older key header is a legacy fallback — but neither changes what is inside the request body. R2 concerns the payload, not how the caller authenticates.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-04",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "Profiling the rebooking sub-flow shows the option-ranking step spends a large share of its output budget on reasoning tokens, and its p95 first-visible-token time is 1.4 seconds. Ranking is a bounded comparison over at most eight candidate itineraries. What is the right tuning?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send a top-level effort parameter set to low on the ranking request, leaving the rest of the flow at the default.",
+          "correct": false,
+          "explanation": "There is no top-level effort parameter; effort is nested inside output_config. A request built this way either errors or silently ignores the field, so the reasoning spend is unchanged.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "B",
+          "text": "Switch the ranking step to adaptive thinking so the model decides for itself how much reasoning each itinerary set warrants, spending tokens only on genuinely hard comparisons.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Adaptive thinking is the current, supported mechanism and is well matched to workloads with a mix of trivial and hard inputs, so this is a defensible choice. But it does not meet R1, because thinking blocks stream before any visible text: on the hard cases the model chooses to think through, the passenger's first visible token slips well past 900 ms, and the whole point of a hard-case-aware policy is that those cases are not rare during a storm.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Set output_config.effort to low on the ranking call while leaving the complex multi-leg re-accommodation call at the default, so the bounded comparison stops paying for deep reasoning.",
+          "correct": true,
+          "explanation": "Effort is a per-request control nested under output_config with a default of high, so lowering it only for a bounded eight-item comparison caps reasoning tokens where they add nothing and keeps first-token latency predictable — the determinism R1 needs. That predictability is the decisive advantage over option B, which delegates the latency decision to the model. It also reduces output spend against R5 on the highest-volume step.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "D",
+          "text": "Pass a thinking object with type enabled and budget_tokens set to 2048 so reasoning is capped at a known ceiling on every ranking call.",
+          "correct": false,
+          "explanation": "The enabled-with-budget_tokens form of extended thinking is deprecated and errors on current models; adaptive thinking and the effort control replaced it. A configuration that fails at request time is not a latency fix.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-05",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D5", "D6"],
+      "question": "Both surfaces set cache_control on the shared prefix. The passenger app, on the larger model, reports healthy cache_read_input_tokens. The gate-agent console, running a smaller model against a 3,400-token prefix after a hotfix trimmed it, reports zero cache creation and zero cache reads. Why, and what is the fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The console's cache entries are expiring between agent interactions; switch its cache_control to a one-hour TTL so entries survive the gaps.",
+          "correct": false,
+          "explanation": "An expired entry would still show non-zero cache_creation_input_tokens on the write, and the console is reporting zero on both counters — nothing is being cached at all. Extending the TTL of an entry that is never created changes nothing.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "The console's prefix is below the smaller model's minimum cacheable length, which is higher than the larger model's; restore the full shared prompt so the prefix clears the minimum on both surfaces.",
+          "correct": true,
+          "explanation": "Minimum cacheable prompt length is model-dependent — the smaller models require several thousand tokens where the larger ones cache from around a thousand — and a request below the threshold is served with no cache activity and no error, which matches the all-zero counters exactly. Restoring the shared prompt fixes caching and simultaneously satisfies R6, which option D deliberately abandons. It is also the cheaper outcome under R5 despite the longer prefix, because cache reads are billed at a fraction of base input.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "One breakpoint is not enough coverage for two surfaces; place cache_control on all four allowed positions in the console's request so at least one of them matches.",
+          "correct": false,
+          "explanation": "Breakpoints define where a cacheable prefix ends, not how many chances a request gets to match. Adding breakpoints inside content that is already below the model's minimum length produces no cache entries and no benefit.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Accept the trimmed console prompt as its permanent variant and disable caching for that surface, since the console is a small fraction of turns and a shorter prompt is cheaper per call anyway.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Per-surface prompt tuning is a reasonable optimization in the general case, and for a low-volume surface the uncached cost really is modest. But it does not meet R6, which requires the console and the app to run identical system prompt text and fails the deploy pipeline on a hash mismatch — this option formalizes exactly the drift the hotfix introduced.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-06",
+      "primaryDomain": "D8",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "The PSS team will publish availability either as a remote MCP server exposing a search_availability tool and a fare-rules resource, or as a plain REST endpoint. Rebook must call availability live in-turn and keep both surfaces on identical tool definitions. What should the team implement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Reference the remote MCP server from the Messages request via mcp_servers with a toolset that allowlists search_availability, so both surfaces receive identical tool definitions from a single published source.",
+          "correct": true,
+          "explanation": "The MCP connector resolves tool definitions from the server at request time, so the console and the app cannot drift apart without the server itself changing — that is a structural guarantee of R6 rather than a process one, and the call is still a live in-turn tool invocation as R3 demands. Option C works today but reintroduces two copies of the definition; the connector removes the copy entirely.",
+          "citation": { "title": "MCP connector", "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector" }
+        },
+        {
+          "key": "B",
+          "text": "Run the PSS MCP server as a local stdio process alongside the gateway pod and point the connector at that process, keeping the call inside the cluster network.",
+          "correct": false,
+          "explanation": "The MCP connector connects to remote MCP servers over an HTTP URL; it cannot launch or attach to a local stdio server. Local stdio servers are a client-side transport used by tools such as Claude Code, not by the Messages API connector.",
+          "citation": { "title": "MCP connector", "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector" }
+        },
+        {
+          "key": "C",
+          "text": "Skip MCP and wrap the REST endpoint as a custom tool defined in the request tools array of each service, which avoids the connector's extra network hop and keeps the schema alongside the code that actually calls PSS.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a perfectly sound implementation, marginally lower latency, and the path most teams take. But it does not meet R6 as written, because the tool definition now lives in two services' source trees and any hotfix to one produces exactly the hash mismatch the deploy pipeline is supposed to prevent — unless the team additionally extracts and versions a shared package, which the option does not do.",
+          "citation": { "title": "How to implement tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use" }
+        },
+        {
+          "key": "D",
+          "text": "Have the model pull fare rules through the server's resource primitive over the connector, so the reference data is fetched lazily instead of being pasted into the prompt.",
+          "correct": false,
+          "explanation": "The connector surfaces tool calls only; MCP resources and prompts are not exposed through it. Fare rules must be fetched by application code and placed in the request, or re-exposed by the server as a tool.",
+          "citation": { "title": "MCP connector", "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-07",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Each search_availability tool_result returns a 38 KB raw GDS XML document, and a rebooking session averages four searches. Mean input tokens per turn is now 61,000 and first-token latency has crept to 1.4 seconds. What should change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Gzip and base64-encode the XML payload inside the tool_result so the same information occupies far fewer characters in the request.",
+          "correct": false,
+          "explanation": "Base64 of compressed bytes is high-entropy text that tokenizes worse than the original XML, so this usually increases input tokens rather than reducing them. The model also cannot decode it, so the information becomes unusable.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        },
+        {
+          "key": "B",
+          "text": "Keep returning the full GDS document but add a system-prompt section that documents the GDS schema, so that the model navigates the payload reliably and no field is ever lost to a projection that some later turn might have needed.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Explaining an unfamiliar schema is sound context engineering and would genuinely improve extraction accuracy while preserving every field for later questions. But it does not meet R1 or R5, because the 61,000 input tokens per turn are unchanged and the added schema documentation makes the prefix larger still — prefill latency and per-turn input cost both go up.",
+          "citation": { "title": "Claude prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Insert an extra model call after each search that summarizes the GDS document, and pass only the summary into the main conversation.",
+          "correct": false,
+          "explanation": "This adds a full round trip per search to a flow already missing its latency budget, and a model-written summary of inventory can drop or garble the option identifiers the next turn must confirm. A deterministic projection in the tool handler achieves the same size reduction without either cost.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Have the tool handler return a compact JSON projection — the top candidates with named fields and an availability timestamp — and keep the raw document in application state under an id the model can request if needed.",
+          "correct": true,
+          "explanation": "Anthropic's tool-authoring guidance is to return the smallest representation the model actually reasons over, because every byte of a tool_result is re-sent on every subsequent turn of the loop. A deterministic projection cuts input tokens by an order of magnitude with no model call and no information loss, since the raw document stays retrievable by id. That is the difference from option B, which improves comprehension while leaving R5's token ceiling and R1's time-to-first-token budget exactly where they are.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-08",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D7", "D8"],
+      "question": "Engineers want to debug PSS integrations from Claude Code by connecting to the PSS MCP server. The production server returns live PNRs. How should the repository be configured?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Document in CLAUDE.md that engineers must only connect Claude Code to the staging PSS server, and review the rule in onboarding.",
+          "correct": false,
+          "explanation": "Project memory is loaded into every session and is useful for conventions, but it is guidance rather than configuration — an engineer can add a production server with one command regardless of what CLAUDE.md says. It leaves R2 dependent on individual discipline.",
+          "citation": { "title": "Manage Claude's memory", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Check a project-scoped .mcp.json into the repository that defines only the staging PSS server backed by synthetic PNRs, and keep the production server out of every checked-in configuration.",
+          "correct": true,
+          "explanation": "Project-scoped MCP configuration is version-controlled and shared, so every clone of the repo gets the same safe server list and the production endpoint is simply not reachable from a default session — no live card or passport value can enter a transcript, which is R2's boundary. This is what option D cannot promise: once real data is returned into the session, it is sent to the API on the following turn whether or not the tool call was approved.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "C",
+          "text": "Allow the production server but wrap the PSS calls in a PostToolUse hook that redacts sensitive fields from the transcript after each call returns.",
+          "correct": false,
+          "explanation": "A PostToolUse hook runs after the tool result exists, and the sensitive value is already in the session by then. Redacting the display does not undo what will be serialized into the next request.",
+          "citation": { "title": "Hooks", "url": "https://code.claude.com/docs/en/hooks" }
+        },
+        {
+          "key": "D",
+          "text": "Register the production PSS server at user scope on each engineer's machine and rely on Claude Code's per-server tool approval prompts so no PSS call runs without a human explicitly allowing it.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Per-tool approval is a real Claude Code control and it does stop unattended access, so this is a defensible setup for a genuinely sensitive backend. But it does not meet R2, because approval governs whether the call happens, not what it returns: the moment an engineer approves a PNR lookup, live card and passport fields land in the transcript and are transmitted on the next turn.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-09",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "A passenger was shown a seat PSS had already sold. Logs contain the rendered text, a session id, and a timestamp, and the team cannot reconstruct what the model was actually sent. What logging change closes this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Capture the full request and response for a 1% random sample of traffic, plus any session that a passenger explicitly flags in the app, keeping storage volume and reviewer effort proportionate even during a storm surge.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Sampled capture is standard practice, keeps log volume sane during a storm, and would eventually surface a systemic bug. But it does not meet R4, which requires every interaction to be reconstructable by identifier — a 1% sample means the specific reported session is almost certainly absent, and app-side flagging arrives after the request has already gone unlogged.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Set temperature to 0 on every Rebook call so any reported session can be re-run later and will produce the same output.",
+          "correct": false,
+          "explanation": "Low temperature reduces variability but does not guarantee byte-identical replays, and it does nothing to recover an interaction whose inputs were never recorded. It also cannot reproduce a defect whose cause was stale tool data rather than sampling.",
+          "citation": { "title": "Messages API", "url": "https://platform.claude.com/docs/en/api/messages" }
+        },
+        {
+          "key": "C",
+          "text": "Record the request-id response header and the message id for every call alongside the serialized request body, the final stop_reason, and the usage object, indexed so any interaction can be pulled up by identifier.",
+          "correct": true,
+          "explanation": "The request-id header is the identifier Anthropic support and the team's own tooling both key on, and pairing it with the exact request body and terminal metadata makes any past turn reconstructable from storage alone — precisely R4's wording. Unlike option A, coverage is universal, so a single reported session is always retrievable rather than probably missing. It also supplies the per-call usage needed later for cost attribution.",
+          "citation": { "title": "Errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "D",
+          "text": "Enable extended thinking on the rebooking flow and persist the thinking blocks, so the log explains the model's reasoning about availability.",
+          "correct": false,
+          "explanation": "Reasoning text is a narrative the model produced, not a record of the inputs it received, so it cannot establish what availability data was actually in context. It also adds token cost to every turn for a debugging benefit that request logging provides directly.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-10",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D8", "D4"],
+      "question": "With request logging in place, the root cause is clear: the rebooking sub-flow searches inventory, reasons over the results, and then renders options, and seats are occasionally sold in the seconds between the search and the render. How should the sub-flow be restructured?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Make the render step call confirm_availability for each candidate option in the same turn it displays them, and drop any option whose confirmation does not come back available.",
+          "correct": true,
+          "explanation": "R3 is a same-turn liveness requirement, and only an actual PSS call issued at display time can satisfy it — the check is a deterministic gate in the flow, not a model judgement. Option C is a stronger reasoning safeguard but it inspects earlier tool output, so a seat sold thirty seconds ago is invisible to it; this option queries the system of record at the moment of display.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Shorten the window by moving the search later in the flow and caching PSS availability for thirty seconds so the render uses very recent data.",
+          "correct": false,
+          "explanation": "A shorter staleness window makes the defect rarer without eliminating it, and R3 does not permit availability to be quoted from any cached or earlier context. Caching inventory is the specific anti-pattern the requirement forbids.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Add an evaluator-optimizer step in which a second model call reviews the drafted option list against the search results already in context and sends anything inconsistent back for revision.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Evaluator-optimizer is a documented workflow and would reliably catch options the drafting call invented or mis-transcribed, which is real value. But it does not meet R3, because the evaluator's ground truth is the earlier tool result rather than a live PSS call — a seat sold after that search will be confirmed as consistent by the evaluator and shown to the passenger anyway.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Instruct the model in the system prompt that it may only present availability it retrieved during the current session and must otherwise say it needs to re-check.",
+          "correct": false,
+          "explanation": "This constrains where the model sources its claims but not how old that source is, so an option retrieved earlier in the same session still qualifies under the instruction. It is also a prompt-level request rather than an enforced step.",
+          "citation": { "title": "Claude prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-11",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D4", "D1"],
+      "question": "A storm month closed at $71,000 against the ceiling. Telemetry shows 61% of turns are disruption explanations with no PSS write and no multi-leg reasoning, while 39% are multi-leg re-accommodation, and both classes currently run the same premium model at default effort. What should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Disable prompt caching during surge periods, since cache writes are billed above base input rates and surge traffic multiplies the number of writes.",
+          "correct": false,
+          "explanation": "Writes cost more than base input but reads cost a fraction of it, and a shared prefix served across millions of turns is read far more often than written. Turning caching off during the highest-volume period raises the bill rather than lowering it.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Keep one model for all traffic but set output_config.effort to low globally — a one-line change that cuts reasoning tokens on every turn with no routing infrastructure and no new deployment surface to test.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a genuine, immediately deployable saving and it is already the right setting for the bounded ranking step. But it does not meet R3 on the 39% re-accommodation path: Calder's grounding eval shows that at low effort the model skips one of the required same-turn confirm_availability calls on multi-leg itineraries, so options reach passengers unconfirmed. A single global setting cannot serve two task classes with different reasoning needs.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "C",
+          "text": "Truncate every session's message history to the last two turns so input tokens per request stop growing with conversation length.",
+          "correct": false,
+          "explanation": "Blind truncation discards the itinerary and passenger constraints the later turns depend on, producing re-accommodation options that ignore stated requirements. It also does nothing about the model and effort choices that dominate this bill.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Route by task class: run the explanation turns on a smaller model with a trimmed tool set, keep the premium model for re-accommodation, and gate the change on the existing grounding eval before it ships.",
+          "correct": true,
+          "explanation": "Anthropic's model-selection guidance is to match model capability to task difficulty rather than to standardize on the strongest option, and 61% of turns here are summarization-shaped work a smaller model handles well. Routing gets most of option B's saving while leaving the re-accommodation path at full capability, so the R3 confirmation behaviour that option B breaks is preserved. Gating on the eval makes the R5 saving auditable rather than assumed.",
+          "citation": { "title": "Choosing a model", "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS2-12",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D5", "D4"],
+      "question": "Finance now wants per-session cost attribution across both surfaces. The service currently estimates tokens by dividing the request body's character count by four, and the estimate has been running about 18% under the invoice. What should the service record?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the character heuristic but recalibrate the divisor monthly against the invoice so the drift is corrected as usage patterns change.",
+          "correct": false,
+          "explanation": "A single scalar cannot reconcile a bill whose components are priced differently — output, cache writes and cache reads all carry distinct rates, so one blended divisor stays wrong per session even when it happens to be right in aggregate. It also cannot attribute cost to a session that has an unusual cache profile.",
+          "citation": { "title": "Pricing", "url": "https://platform.claude.com/docs/en/about-claude/pricing" }
+        },
+        {
+          "key": "B",
+          "text": "Persist the usage object from every response — input, output, cache creation, cache read, and output_tokens_details.thinking_tokens — taking cumulative values from message_delta on streamed turns, keyed by request-id.",
+          "correct": true,
+          "explanation": "The usage object is the authoritative, billed accounting for a call and separates the differently-priced components, including thinking tokens, which sit under output_tokens_details and are a real share of spend on the reasoning-heavy paths. On a streamed turn the final cumulative counts arrive in message_delta, so a gateway that only forwards text deltas must be taught to capture it. Keying by request-id joins the cost record to the R4 log trail, giving finance an auditable R5 number.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        },
+        {
+          "key": "C",
+          "text": "Assume thinking tokens are billed separately from output and track them by subtracting the visible text length from the reported output token count.",
+          "correct": false,
+          "explanation": "Thinking tokens are reported explicitly under output_tokens_details.thinking_tokens, so there is no need to infer them, and length arithmetic over rendered text is not a token count. Deriving a figure the API already reports exactly introduces error for no benefit.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Call the token counting endpoint immediately before each request to obtain an exact input token count for that session, record that figure against the session id, and reconcile the monthly total against the invoice at close.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The counting endpoint is exact for the input side and is the right tool for checking a payload against the context window before sending it. But it does not meet R5's attribution need, because it says nothing about output tokens, thinking tokens, or how the input divided between cache writes and cache reads — the three things driving the 18% gap. It also adds a network round trip in front of a call already governed by R1.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        }
+      ]
+    }
+  ]
+}

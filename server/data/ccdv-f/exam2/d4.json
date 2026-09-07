@@ -1,0 +1,41 @@
+{
+  "examId": "ccdv-f-exam2",
+  "domainId": "D4",
+  "domainName": "Eval, Testing, and Debugging",
+  "questions": [
+    {
+      "id": "V2-D4-01",
+      "question": "A recruiting SaaS evaluates an endpoint that labels each support email with one of six intents and writes a one-line rationale. Its eval prompts a Claude grader with \"Is this output good? Explain your reasoning\" and stores the prose reply. Results are noisy and cannot be turned into a pass rate. How should the grading be rebuilt?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the free-form grader but run it three times per case and average the three replies.",
+          "correct": false,
+          "explanation": "Averaging assumes a numeric score, and prose explanations give you nothing to average, so the noise stays and the cost triples. Anthropic's grader guidance is to define the scale first and ask for only the score so it parses cleanly.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Compare the intent label to the reference label in code, and grade the rationale with a separate LLM call returning only a 1-5 rubric score.",
+          "correct": true,
+          "explanation": "The guidance is to automate whenever possible and match the method to the criterion: a fixed label is an exact-match comparison after normalisation, which is the fastest and most reliable form of grading. The subjective rationale is what LLM-based grading is for, and constraining the grader to a defined scale with score-only output makes the result parseable and comparable across runs.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Apply exact string matching to the entire output, intent label and rationale together, against a stored reference answer written by the team for every case in the set.",
+          "correct": false,
+          "explanation": "Exact match suits the closed set of intent labels, but a rationale can be entirely correct while worded differently, so the gate would fail on acceptable outputs. Automated grading only works when the method fits the shape of the field being graded.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Retire automated grading altogether and have an experienced recruiter hand-grade a sample of 20 outputs after every prompt change before it is allowed to deploy.",
+          "correct": false,
+          "explanation": "Anthropic advises prioritising volume over quality: many questions with slightly lower-signal automated grading beat a handful of hand-graded ones. Twenty manual cases per change is both too slow to gate a deploy and too small to detect a regression in a minority intent.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        }
+      ]
+    }
+  ]
+}

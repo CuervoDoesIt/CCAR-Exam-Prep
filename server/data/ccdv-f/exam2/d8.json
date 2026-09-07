@@ -1,0 +1,220 @@
+{
+  "examId": "ccdv-f-exam2",
+  "domainId": "D8",
+  "domainName": "Tools and MCPs",
+  "questions": [
+    {
+      "id": "V2-D8-01",
+      "question": "An event-ticketing agent calls reserve_seats. The venue service returns HTTP 409 because the seats were taken moments earlier. The developer catches the exception and simply omits the tool_result block from the next user message. The API rejects the request, and when they instead send \"error\" as ordinary result text, Claude reports the booking as confirmed. What is the correct handling?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Drop the failed tool_use block from the assistant turn as well, so the conversation contains no trace of the call that could not be completed.",
+          "correct": false,
+          "explanation": "Editing the assistant's own turn to remove a tool_use block breaks the pairing the API expects and discards history Claude needs to reason about what it already tried. The documented flow is to answer every tool_use with a matching tool_result, not to erase the request.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "B",
+          "text": "Return an ordinary tool_result whose content is the string \"409\", and let Claude infer failure from the numeric status code.",
+          "correct": false,
+          "explanation": "A bare status code is exactly the ambiguous signal that produced the false confirmation here, since nothing marks the block as a failure. Tool responses should carry an explicit error flag plus text a model can act on.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Send a tool_result with the matching tool_use_id, is_error set to true, and content describing the conflict so Claude can offer other seats.",
+          "correct": true,
+          "explanation": "Every tool_use must be answered by a tool_result carrying the matching tool_use_id, and failures are signalled by setting is_error to true rather than by omission. A descriptive message such as \"those seats are no longer available\" gives Claude enough to recover by proposing alternatives.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Append a message with role \"tool\" containing the error payload, since tool outcomes belong to their own role rather than the user turn.",
+          "correct": false,
+          "explanation": "The Messages API has only user and assistant roles for conversation turns; there is no tool role. Tool results are content blocks inside a user message, which is why sending a separate role fails validation.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D8-02",
+      "question": "A utility's outage-reporting agent defines set_priority with an input_schema whose priority field is a plain string. Its description says \"use P1, P2, or P3\". Production logs show the model emitting \"high\", \"P-1\", and \"critical\", and the downstream dispatcher throws on every one. Which change most reliably eliminates these invalid values?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Type priority as a JSON Schema enum of P1, P2, and P3, and enable strict on the tool so generation is constrained to the schema.",
+          "correct": true,
+          "explanation": "An enum makes the permitted values part of the schema rather than a hint buried in prose, and strict tool use constrains sampling so the model cannot emit a value outside it. This turns a validation problem the dispatcher was catching at runtime into one that cannot occur.",
+          "citation": { "title": "Strict tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use" }
+        },
+        {
+          "key": "B",
+          "text": "Restate the three allowed values more forcefully in the tool description, and add several examples of correct usage to the system prompt.",
+          "correct": false,
+          "explanation": "Descriptions do influence tool use and are worth writing well, but they remain guidance the model may drift from, especially in long or unusual conversations. When a field has a closed set of values, encode that set in the schema so the constraint is machine-enforced.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "Add a regex pattern of ^P[123]$ to the string field and rely on the API to reject any tool_use block that violates it.",
+          "correct": false,
+          "explanation": "A pattern documents intent, but the API does not reject a model-generated tool_use for failing a regex, so invalid calls would still reach your code. Constrained generation works from an enum, which is why the enum plus strict combination is the documented approach.",
+          "citation": { "title": "Strict tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use" }
+        },
+        {
+          "key": "D",
+          "text": "Normalize the value server-side by lowercasing it and mapping synonyms such as \"critical\" and \"high\" onto P1 before dispatching.",
+          "correct": false,
+          "explanation": "A synonym map hides the problem behind guesswork about what the model meant, and every new phrasing requires another patch. Defensive normalization is reasonable as a backstop but is not the fix when the schema can state the closed set directly.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D8-03",
+      "question": "A pharma R&D team builds an MCP server over its assay repository. Bench scientists want to attach a specific protocol document to a conversation themselves, and they should decide when it is included rather than having the model fetch it opportunistically. Which MCP primitive fits, and why?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Expose it as a tool named get_protocol, since tools are the only primitive that can return document content to the model.",
+          "correct": false,
+          "explanation": "Tools are not the only way to surface content, and they are model-controlled: Claude decides when to invoke them, which is the opposite of the requirement. Modelling a scientist-chosen attachment as a tool hands the timing decision to the model.",
+          "citation": { "title": "Server concepts", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "B",
+          "text": "Expose it as a prompt, because prompts are the primitive designed to carry arbitrary file contents into the conversation.",
+          "correct": false,
+          "explanation": "Prompts are user-controlled, which matches the timing requirement, but they are reusable templates for structured interactions rather than a mechanism for exposing repository documents. The primitive built to expose contextual data is resources.",
+          "citation": { "title": "Server concepts", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        },
+        {
+          "key": "C",
+          "text": "Expose it through the elicitation client feature, so the server can request the document from the user at the moment it is needed.",
+          "correct": false,
+          "explanation": "Elicitation is a client capability that lets a server ask the user for additional input mid-operation, typically to complete a request that is missing information. It is not how a server publishes documents it already holds.",
+          "citation": { "title": "Client concepts", "url": "https://modelcontextprotocol.io/docs/learn/client-concepts" }
+        },
+        {
+          "key": "D",
+          "text": "Expose each protocol as a resource with its own URI, which the host lists and the user selects to attach to the conversation.",
+          "correct": true,
+          "explanation": "Resources are the application-controlled primitive for exposing contextual data, identified by URI and retrieved through the list and read operations. Because the host surfaces them for the user to pick, inclusion happens when the scientist chooses rather than when the model decides.",
+          "citation": { "title": "Server concepts", "url": "https://modelcontextprotocol.io/docs/learn/server-concepts" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D8-04",
+      "question": "A hotel group wants its backend service, which calls the Messages API directly, to reach a vendor's remote MCP server that exposes twelve tools. The team also maintains a local MCP server that its developers launch as a subprocess. They plan to hand-copy every tool schema into the tools array. What should they do instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Hand-copying is required: the Messages API accepts only tool definitions, so an MCP server must always be bridged by translating its schemas into the tools array yourself.",
+          "correct": false,
+          "explanation": "A manual bridge is a legitimate pattern but not a requirement, and it means re-copying schemas each time the vendor ships a change. The API can connect to remote MCP servers directly, which removes that maintenance burden.",
+          "citation": { "title": "MCP connector", "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector" }
+        },
+        {
+          "key": "B",
+          "text": "Use the MCP connector: pass the vendor's server URL in the request's mcp_servers configuration with the MCP beta header, and keep the local stdio server out of scope.",
+          "correct": true,
+          "explanation": "The MCP connector lets the Messages API talk to a remote MCP server directly from a request-level server configuration, with the tool list discovered rather than hand-copied. It reaches servers over HTTP only, so a local subprocess server cannot be connected this way and stays a developer-machine concern.",
+          "citation": { "title": "MCP connector", "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector" }
+        },
+        {
+          "key": "C",
+          "text": "Add both servers to a .mcp.json file at the repository root, which the Messages API reads at request time to discover available tools.",
+          "correct": false,
+          "explanation": "A .mcp.json file is a Claude Code project-configuration mechanism read by that client on the developer's machine. The Messages API is a stateless HTTP endpoint that has no access to files in your repository.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "D",
+          "text": "Point the connector at the local stdio server too, supplying the launch command so the API can start the subprocess when a tool is invoked.",
+          "correct": false,
+          "explanation": "The connector reaches MCP servers over the network and cannot spawn processes inside your infrastructure, so there is nowhere for a launch command to run. Local stdio servers must be exposed over HTTP first if a hosted client is to use them.",
+          "citation": { "title": "MCP connector", "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D8-05",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "An agriculture-tech platform ships two MCP servers: one runs on an agronomist's laptop reading local field files, and one runs in the company's cloud serving many customers over the internet. A developer is unsure which transports the specification defines and how they differ. Which TWO statements are correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The local server can use the stdio transport: the client launches it as a child process and exchanges messages over its stdin and stdout.",
+          "correct": true,
+          "explanation": "Stdio is the specification's transport for local servers: the client spawns the server as a subprocess and writes requests to its stdin while reading responses from its stdout. That model suits a laptop server because it needs no network listener and inherits the user's own file access.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        },
+        {
+          "key": "B",
+          "text": "Remote servers must use a WebSocket transport, since HTTP request/response cannot support server-initiated messages.",
+          "correct": false,
+          "explanation": "WebSocket is not one of the transports the specification defines. Server-initiated messages are handled within the HTTP transport, which can stream events back to the client rather than requiring a different protocol.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        },
+        {
+          "key": "C",
+          "text": "The cloud server can use the HTTP transport: the client POSTs to one endpoint, and the server may stream responses back over that connection.",
+          "correct": true,
+          "explanation": "The streamable HTTP transport is designed for remote servers: clients send messages by HTTP POST to a single endpoint, and the server can reply with a plain response or an event stream when it needs to push multiple messages. It also lets you apply ordinary web authentication and authorization to the connection.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        },
+        {
+          "key": "D",
+          "text": "The two transports use different message formats, so a server must serialize its responses differently depending on which one a client connects with.",
+          "correct": false,
+          "explanation": "Both transports carry the same JSON-RPC 2.0 messages; only the delivery channel differs. That separation is what allows a single server implementation to be exposed over either transport without rewriting its handlers.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        },
+        {
+          "key": "E",
+          "text": "A local server can only be reached by tools running as the same operating-system user, because stdio has no way to express which client is connected.",
+          "correct": false,
+          "explanation": "The parent-child process relationship is a property of how the client starts the server, not a security model the transport enforces or describes. Access control is the host application's responsibility, and stdio servers are frequently launched by different clients on the same machine.",
+          "citation": { "title": "Architecture overview", "url": "https://modelcontextprotocol.io/docs/learn/architecture" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D8-06",
+      "question": "A media-analytics agent has one tool, search_mentions, that returns every matching mention with full article bodies. A single broad query returned 900 results and consumed most of the context window, after which the agent's answers degraded. The team does not want to remove the tool. What is the most effective change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep returning everything but instruct Claude in the tool description to ignore results beyond the first twenty.",
+          "correct": false,
+          "explanation": "The tokens are spent the moment the payload enters the context, so telling the model to ignore them saves nothing and still degrades performance. Anthropic's tool-writing guidance is to control response size at the source rather than after the fact.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Split the tool into search_mentions_page1 through search_mentions_page10, so the agent can choose for itself how much of the result set it loads.",
+          "correct": false,
+          "explanation": "Encoding pagination into tool names bloats the tool list with near-identical entries and makes selection harder without adding any capability. Page position is a parameter, which is precisely the kind of variation a single tool should express in its schema.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Add pagination and filtering parameters with sensible defaults, plus a response_format option so the agent can request concise records.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is to make tool responses token-efficient by default through pagination, filtering, and truncation, since context is the scarce resource in an agent loop. A concise-versus-detailed response format then lets the agent pay for full article text only on the few mentions it actually needs.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Set tool_choice to {\"type\": \"none\"} once the conversation passes a token threshold, so no further oversized results can be added.",
+          "correct": false,
+          "explanation": "Disabling tools mid-task strands the agent with whatever it has already gathered and does nothing about the single call that caused the overflow. tool_choice governs whether tools are used, not how large their responses are.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    }
+  ]
+}

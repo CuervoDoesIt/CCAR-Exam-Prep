@@ -1,0 +1,152 @@
+{
+  "examId": "ccdv-f-exam2",
+  "domainId": "D7",
+  "domainName": "Security and Safety",
+  "questions": [
+    {
+      "id": "V2-D7-01",
+      "question": "An online gaming community must screen roughly two million chat messages a day for harassment and threats. A prototype sends each message to a large model with the prompt \"Is this message okay?\" and parses free-form prose. Latency and cost are both unacceptable, and the parser breaks on hedged answers. Which implementation change best matches Anthropic's documented moderation approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the same prompt and model but batch 200 messages per request, then split the prose response on newlines to recover one verdict per message.",
+          "correct": false,
+          "explanation": "Batching reduces per-request overhead but leaves the two real defects untouched: an undefined policy and an unparseable output shape. Newline splitting is especially brittle because nothing in the response contract guarantees one line per input item.",
+          "citation": { "title": "Content moderation", "url": "https://platform.claude.com/docs/en/about-claude/use-case-guides/content-moderation" }
+        },
+        {
+          "key": "B",
+          "text": "Use Claude Haiku with a prompt defining each prohibited category, and constrain the reply to a small JSON object with a boolean and a category name.",
+          "correct": true,
+          "explanation": "The moderation guide builds exactly this: a fast, inexpensive Haiku classifier whose prompt lists the unsafe categories with explicit definitions, returning a minimal structured verdict. Naming the categories removes the ambiguity in \"is this okay\", and a fixed JSON shape makes downstream parsing deterministic.",
+          "citation": { "title": "Content moderation", "url": "https://platform.claude.com/docs/en/about-claude/use-case-guides/content-moderation" }
+        },
+        {
+          "key": "C",
+          "text": "Send each message with a stop_sequences entry of \"UNSAFE\" so the response terminates early whenever the model detects a violation, and treat stop_reason as the verdict.",
+          "correct": false,
+          "explanation": "A stop sequence only halts generation once the model has already emitted that exact string, so it cannot detect anything the model was not going to write anyway. Reading classification results out of stop_reason conflates a generation-control mechanism with a policy decision.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "D",
+          "text": "Keep the frontier model for accuracy and instead cut cost by asking it to also explain its reasoning, so borderline calls can be audited later.",
+          "correct": false,
+          "explanation": "Adding a reasoning field increases output tokens and latency, which is the opposite of the stated constraint. The guide's cost argument is to run high-volume screening on the cheapest capable model and to trim optional explanation fields when throughput matters.",
+          "citation": { "title": "Content moderation", "url": "https://platform.claude.com/docs/en/about-claude/use-case-guides/content-moderation" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D7-02",
+      "question": "A construction-tech company runs nightly document-extraction jobs from GitHub Actions. A long-lived API key sits in a repository secret; it has been copied into three workflows and has not been rotated in a year. The security team wants no static Anthropic credential stored in CI at all. Which implementation satisfies that requirement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the key into a self-hosted runner's environment file so it lives on machines the team controls rather than in GitHub's secret store.",
+          "correct": false,
+          "explanation": "This relocates the static secret without eliminating it, so it can still be exfiltrated, copied between jobs, and left unrotated. The stated requirement is that no static Anthropic credential exists in CI, which relocation cannot satisfy.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        },
+        {
+          "key": "B",
+          "text": "Create a separate workspace-scoped key per workflow and add a scheduled job that deletes and recreates each key every 30 days.",
+          "correct": false,
+          "explanation": "Per-workflow keys plus rotation genuinely reduce blast radius and are better than the status quo, but a static secret still sits in CI between rotations. It is a mitigation, not the elimination the team asked for.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        },
+        {
+          "key": "C",
+          "text": "Have each workflow call the Admin API at the start of the run to mint a fresh API key, then delete that key in a cleanup step once the job finishes.",
+          "correct": false,
+          "explanation": "Minting keys at runtime requires an admin credential in CI, so you have traded one long-lived secret for a strictly more powerful one. It also leaves orphaned keys behind whenever a job is cancelled before its cleanup step runs.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        },
+        {
+          "key": "D",
+          "text": "Configure Workload Identity Federation, exchanging the workflow's GitHub OIDC token for a short-lived access token used as the request credential.",
+          "correct": true,
+          "explanation": "Workload Identity Federation lets a CI job present an identity token its provider already issues and receive a short-lived Anthropic access token in return. Because the credential is minted per run and expires on its own, there is nothing static to store, rotate, or leak.",
+          "citation": { "title": "Workload identity federation", "url": "https://platform.claude.com/docs/en/manage-claude/workload-identity-federation" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D7-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A recruiting platform runs a candidate-facing chatbot. A handful of accounts repeatedly probe it with role-play framings and hypothetical wrappers trying to extract other candidates' records, and occasionally succeed. The threat here is the end user, not third-party content. Which TWO measures does Anthropic's guidance recommend for this direct-jailbreak scenario?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Prefill the assistant turn with a refusal opener so every response starts from a safe stance the model must continue.",
+          "correct": false,
+          "explanation": "Prefilling the assistant turn is no longer available on current Claude models and returns a 400 error, so this cannot be built. Even where it once worked, steering the opening tokens was a stylistic nudge rather than an access-control boundary.",
+          "citation": { "title": "Working with messages", "url": "https://platform.claude.com/docs/en/build-with-claude/working-with-messages" }
+        },
+        {
+          "key": "B",
+          "text": "Screen the incoming user message with a cheap harmlessness check before the main call, and decline the turn when that check flags a jailbreak attempt.",
+          "correct": true,
+          "explanation": "Anthropic recommends a lightweight pre-screen, typically Claude Haiku with a structured-output schema, that classifies the user's message before it reaches the production prompt. Because the check runs on its own call, a role-play wrapper aimed at the main assistant has no effect on the screen's verdict.",
+          "citation": { "title": "Mitigate jailbreaks and prompt injections", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks" }
+        },
+        {
+          "key": "C",
+          "text": "Raise the model's max_tokens so it has room to reason through the framing and reach the safer conclusion on its own.",
+          "correct": false,
+          "explanation": "Output-length headroom has no bearing on whether an adversarial framing succeeds; a jailbreak that works at 1,000 tokens works at 8,000. The documented controls are screening, least privilege, and account-level enforcement, none of which are sampling parameters.",
+          "citation": { "title": "Mitigate jailbreaks and prompt injections", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks" }
+        },
+        {
+          "key": "D",
+          "text": "Track flagged attempts per account and apply throttling or a ban once a user crosses a threshold of repeated violations.",
+          "correct": true,
+          "explanation": "When the adversary is the authenticated user, account-level enforcement is available in a way it never is for anonymous injected text. Anthropic's guidance is to rate limit or ban repeat offenders, which caps how many probes an attacker can afford to run.",
+          "citation": { "title": "Mitigate jailbreaks and prompt injections", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks" }
+        },
+        {
+          "key": "E",
+          "text": "Move the platform's safety rules out of the system prompt and into each tool_result payload so they are repeated close to the model's most recent context.",
+          "correct": false,
+          "explanation": "The docs specifically warn against placing your own instructions inside tool results, because Claude treats that channel as untrusted data. Your policy belongs in the system prompt, which is the channel the model is trained to trust.",
+          "citation": { "title": "Mitigate jailbreaks and prompt injections", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D7-04",
+      "question": "An ed-tech analytics service asks Claude to emit {\"table\": \"...\", \"filters\": [...]} and interpolates the result into a shell command that runs an export script. A JSON Schema in output_config validates every response, yet an incident report shows a request exported a table the requesting teacher had no rights to. What is the correct fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Tighten the schema by adding additionalProperties: false and marking table and filters as required, so malformed payloads are rejected before execution.",
+          "correct": false,
+          "explanation": "Those constraints are good schema hygiene, but the failing payload was already well-formed: the table name was a valid string that happened to name a forbidden table. Structural validation cannot express which values a particular caller is entitled to.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "B",
+          "text": "Add a system prompt rule that Claude must only reference tables the current teacher owns, and include the teacher's identifier in every request.",
+          "correct": false,
+          "explanation": "A prompt rule is a request the model may or may not honour, and it degrades under injected content or long contexts. Anthropic's guidance is to enforce authorization in code that the model cannot talk its way past.",
+          "citation": { "title": "Mitigate jailbreaks and prompt injections", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks" }
+        },
+        {
+          "key": "C",
+          "text": "Check the returned table against an allowlist for that caller, and pass values as script arguments rather than interpolating them into a shell string.",
+          "correct": true,
+          "explanation": "Schema validation proves shape, not authority, so the server must independently confirm that this caller may read this table before acting. Passing arguments rather than building a shell string also removes the injection path that a crafted table name would otherwise open.",
+          "citation": { "title": "Mitigate jailbreaks and prompt injections", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks" }
+        },
+        {
+          "key": "D",
+          "text": "Have a second Claude call review the first call's JSON and approve or reject it before the export script runs.",
+          "correct": false,
+          "explanation": "A reviewing model has no reliable knowledge of the requester's entitlements and is steerable by the same content, so this adds latency and cost without adding a boundary. Model-based screening complements deterministic authorization checks; it cannot replace them.",
+          "citation": { "title": "Mitigate jailbreaks and prompt injections", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks" }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,460 @@
+{
+  "examId": "ccdv-f-exam4",
+  "caseId": "CS2",
+  "caseTitle": "Vantry Group — \"SpecCheck\" construction submittal review",
+  "caseScenario": "Vantry Group is a design-build contractor with 2,400 staff and $3.1B of annual contract volume, delivering hospitals, data centres and transit stations across fourteen US states. Its `speccheck-api` is a Node 20 / TypeScript service built on `@anthropic-ai/sdk`, deployed to Azure Kubernetes Service and serving a React reviewer console used by 190 project engineers. When a subcontractor uploads a submittal package, SpecCheck compares it against the governing specification sections and returns a list of non-conformances.\n\nA package is typically a 40–180 page product-data PDF plus a handful of scanned shop drawings at roughly 6,000 × 4,000 pixels. Specifications and submittals both live in Fieldstack, Vantry's document-management platform, which `speccheck-api` reaches through an internal MCP server, `fieldstack-mcp`, written fourteen months ago against an older protocol revision.\n\nFour problems are blocking the rollout from 3 pilot projects to all 61. Packages over about a hundred pages come back from the API with a 400. A cost-saving change that downsamples every drawing to 1,024 pixels on the long edge before upload has made dimension callouts unreadable, and reviewers no longer trust drawing findings. About 7% of responses fail `JSON.parse` in the console, which then shows an empty review. And inference cost is running at $1.34 per submittal against a $0.55 budget, on a volume of 41,000 submittals a quarter.",
+  "caseRequirements": [
+    "R1: A submittal review must return a complete verdict within 90 seconds of upload for packages of up to 120 pages.",
+    "R2: Every reported non-conformance must carry the specification section and the source page at page granularity or finer; the console rejects any finding without one.",
+    "R3: Inference cost per submittal must be $0.55 or less at a volume of 41,000 submittals per quarter.",
+    "R4: The console consumes a fixed JSON contract — a `findings[]` array of objects with `spec_section`, `severity` and `page` — and a response that fails to parse is a hard failure that may be retried at most once.",
+    "R5: Drawing sheets must stay legible enough to read 1/8-inch dimension callouts, and the pipeline must never silently degrade sheet resolution.",
+    "R6: Only documents in the project's specification and submittal sets may reach the model; subcontractor pricing and personnel records held elsewhere in Fieldstack must be unreachable by the assistant's tools."
+  ],
+  "questions": [
+    {
+      "id": "V4-CS2-01",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "`speccheck-api` base64-encodes the whole submittal PDF into a single `document` content block. Packages under about a hundred pages succeed; a 180-page mechanical package returns a 400. The service runs on a model with a 200k-token context window. What should the team change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Rasterise every PDF page to a PNG on the worker and send the pages as individual `image` blocks, which sidesteps the document page limit entirely and gives Claude the same visual content.",
+          "correct": false,
+          "explanation": "This trades one limit for a stricter one: any request carrying more than twenty image blocks triggers a tighter per-image dimension rule, and images breaching it are rejected with an `invalid_request_error` mentioning many-image requests. It also discards the extracted text layer that document blocks supply alongside each page image, so exact specification wording is lost. And 180 base64 PNGs will breach the 32 MB request-size ceiling long before the page count matters.",
+          "citation": { "title": "Images and vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "B",
+          "text": "Move `speccheck-api` onto a model with a 1M-token context window so the 600-page document limit applies instead of the 100-page one, and keep sending each package whole in a single base64 request.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The page ceiling really does depend on context-window size — 600 pages, dropping to 100 when the request's context window is under 1M tokens — so this diagnosis is correct and the 400 would stop. It does not meet **R3**: each page is billed as roughly 1,500–3,000 text tokens plus its image tokens, so a 180-page package priced whole on every review is several times the $0.55 budget, and nothing in the package is reused between calls. A 32 MB payload of base64 scans also strains the request-size limit. Raising the ceiling is not the same as fitting under the budget.",
+          "citation": { "title": "PDF support", "url": "https://platform.claude.com/docs/en/build-with-claude/pdf-support" }
+        },
+        {
+          "key": "C",
+          "text": "Upload each package once through the Files API and reference it by `file_id`, splitting the review into per-specification-section requests that each carry only the pages relevant to that section.",
+          "correct": true,
+          "explanation": "Referencing by `file_id` keeps the request payload small instead of re-encoding tens of megabytes of base64 on every call, which is the documented remedy for large PDFs. Splitting by specification section keeps each request well inside the 100-page limit that applies below a 1M-token context window, and it means a review only pays for the pages a given section actually needs — the R3 arithmetic option B never addresses, since B raises the limit but still prices all 180 pages every time. Sections can then run concurrently rather than serially, which also helps R1.",
+          "citation": { "title": "Files API", "url": "https://platform.claude.com/docs/en/build-with-claude/files" }
+        },
+        {
+          "key": "D",
+          "text": "Extract the PDF text with a library on the worker and send it as plain text, dropping the page images so the request no longer counts against the PDF page limit at all.",
+          "correct": false,
+          "explanation": "Document blocks give Claude each page as text *and* image, which is what lets it read a stamped revision cloud, a dimension callout or a product-data table that a text extractor renders as jumbled columns. Dropping the images therefore breaks exactly the drawing-review capability reviewers already distrust, and it forfeits the page-level citation anchors R2 depends on. Cheaper input that cannot answer the question is not an optimisation.",
+          "citation": { "title": "PDF support", "url": "https://platform.claude.com/docs/en/build-with-claude/pdf-support" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-02",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "The pre-upload downsample to 1,024 px on the long edge was added to cut visual-token cost, and reviewers can no longer read 1/8-inch dimension callouts on 6,000 × 4,000 px shop drawings. Which change satisfies R5?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send sheets on a high-resolution-tier model at up to its 2,576 px long-edge limit, and set the image block's `transformations` field so an oversized sheet is rejected with an error rather than downscaled.",
+          "correct": true,
+          "explanation": "Claude bills images in 28×28-pixel patches, and each model tier has a long-edge and visual-token ceiling — 2,576 px and 4,784 tokens on the high-resolution tier against 1,568 px and 1,568 tokens on the standard tier — above which an image is downscaled automatically. Sending at the tier's native ceiling preserves roughly two and a half times the linear detail of the current 1,024 px, which is what makes a 1/8-inch callout resolvable. `transformations` turns the second half of R5 into a guarantee by making any further reduction an error the pipeline must handle, whereas option B leaves the shrink silent inside Vantry's own code. Cost stays bounded because the tier caps visual tokens.",
+          "citation": { "title": "Images and vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the pre-upload downsample but raise it from 1,024 px to 2,000 px on the long edge, which stays under the stricter dimension threshold that applies to many-image requests and still holds visual-token cost down.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Raising the ceiling is a real improvement, and 2,000 px is a sensible number: it is the documented figure for staying safe when a request carries more than twenty image or document blocks. It does not meet **R5** on either clause. It still throws away resolution the high-resolution tier would have accepted, and — decisively — the reduction still happens quietly inside Vantry's own uploader, so a sheet that arrives too coarse to read produces a confident but unfounded finding with no error anywhere. R5 asks for legibility *and* for degradation to be loud.",
+          "citation": { "title": "Images and vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "C",
+          "text": "Stop converting the scans and send the original 6,000 × 4,000 px TIFF sheets unaltered, so no resolution is lost anywhere in the pipeline.",
+          "correct": false,
+          "explanation": "TIFF is not a supported image media type — Claude accepts `image/jpeg`, `image/png`, `image/gif` and `image/webp` — so these requests would fail outright. Even converted, a 6,000 px sheet exceeds every tier's long-edge limit and is downscaled by the API anyway, so the intended guarantee is not obtained. Sending above the tier ceiling buys nothing but payload.",
+          "citation": { "title": "Images and vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "D",
+          "text": "Slice each sheet into sixteen tiles at native resolution and attach all sixteen as separate image blocks so no pixel is ever discarded from the drawing.",
+          "correct": false,
+          "explanation": "Sixteen tiles per sheet across several sheets pushes the request past twenty image blocks, at which point the stricter per-image dimension rule applies to every block and native-resolution tiles are rejected with an `invalid_request_error`. Visual-token cost also multiplies, since patches are counted per block rather than per sheet, which works against R3. Tiling additionally destroys the whole-sheet context needed to relate a callout to its detail bubble.",
+          "citation": { "title": "Images and vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-03",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D6", "D4"],
+      "question": "About 7% of responses fail `JSON.parse` in the console. Logs show three causes: a markdown fence wrapping the object, a leading sentence of commentary, and responses ending with `stop_reason: \"max_tokens\"` mid-array. What should `speccheck-api` do about R4?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask for the findings inside `<findings_json>` tags and extract the contents with a regular expression, which is robust to any commentary the model adds before or after the tagged block.",
+          "correct": false,
+          "explanation": "XML delimiters do make extraction more reliable than fence-stripping, and they solve the commentary case, but they say nothing about whether the extracted text is valid JSON or whether `severity` holds a value the console accepts. They also do nothing for the truncation case, since a response cut off at `max_tokens` ends before the closing tag. Delimiting output and constraining its schema are different guarantees.",
+          "citation": { "title": "Claude prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Set `output_config.format` to a `json_schema` describing the `findings[]` contract, and raise `max_tokens` above the largest observed review so responses are not truncated.",
+          "correct": true,
+          "explanation": "Structured outputs constrain generation to the supplied schema, so the response is guaranteed to be a parseable object with the declared fields and enumerated `severity` values — no fence, no preamble, nothing to strip. That removes two of the three failure modes by construction rather than by repair, which is the gap in option C: a cleanup pass can only rescue text the model already emitted. The third mode is a `max_tokens` truncation, which is a budget problem and is fixed by sizing `max_tokens` to the longest genuine review. Together they satisfy R4 without relying on the single permitted retry.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "C",
+          "text": "Keep free-form generation, add a firm system-prompt instruction to emit JSON only, and run a repair pass that strips markdown fences and leading prose before parsing, falling back to the one permitted retry.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is the pragmatic fix most teams reach for, it needs no schema work, and it genuinely recovers the fence and preamble cases. It does not meet **R4**, because a text-repair pass cannot reconstruct an array that ended mid-object when generation hit `max_tokens`, and it cannot stop the model inventing a `severity` string the console rejects. Those become hard failures, and the single permitted retry is then the only remaining defence against a symptom that is not random. R4 needs the contract enforced during generation, not patched afterwards.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "D",
+          "text": "Detect a failed parse and retry the same request twice with a higher effort setting, on the basis that more deliberation produces better-formed output.",
+          "correct": false,
+          "explanation": "R4 explicitly caps retries at one, so a two-retry policy breaks the contract it is meant to protect, and it triples cost on the worst 7% of reviews against R3. Effort governs how much the model deliberates, not whether its output conforms to a syntax, so a higher setting does not make a fence or a truncation less likely. Retrying is also the wrong shape of fix for a deterministic formatting defect.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-04",
+      "primaryDomain": "D8",
+      "secondaryDomains": ["D1", "D2"],
+      "question": "`fieldstack-mcp` was written fourteen months ago. Inside its `get_spec_section` handler it issues a `sampling/createMessage` request back to the host to pre-summarise the section, and it declares a `roots` capability to scope itself to a project folder. Against protocol revision `2026-07-28`, how should the server be brought current?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the sampling call but move it behind a feature check, so the server uses it when the connected host still advertises the capability and falls back to returning raw section text when it does not.",
+          "correct": false,
+          "explanation": "Capability negotiation is the right instinct in general, but it leaves the server carrying two divergent behaviours whose outputs differ, which makes SpecCheck's findings depend on which host connected. It also preserves a dependency on a client feature the current revision no longer lists, so the fallback path becomes the only live path and the branch is dead weight. Migration here means removing the dependency, not guarding it.",
+          "citation": { "title": "Model Context Protocol specification", "url": "https://modelcontextprotocol.io/specification/2026-07-28" }
+        },
+        {
+          "key": "B",
+          "text": "Replace the sampling call with an elicitation request, which is the current client feature and can obtain the summarised section from the host in the same server-initiated round trip.",
+          "correct": false,
+          "explanation": "Elicitation is indeed the one client feature that remains current, but it is a request for additional information *from the user*, not a way to have the host run a model on the server's behalf. Using it to fetch a summary would put a prompt in front of a project engineer for every specification section, which is neither what the feature is for nor tolerable inside a 90-second review. Substituting one feature's name for another does not preserve its semantics.",
+          "citation": { "title": "MCP client features: elicitation", "url": "https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation" }
+        },
+        {
+          "key": "C",
+          "text": "Pin the MCP client in `speccheck-api` to the older protocol revision that still advertises sampling and roots, keeping the server working unchanged while the team schedules a proper rewrite next quarter.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Version pinning is a legitimate way to buy time, and MCP's versioning rules mean an older revision keeps working with hosts that support it, so this would not break today. It does not meet **R1**: every `sampling/createMessage` is an extra model round trip initiated mid-tool-call, and a submittal touching twelve specification sections pays twelve of them serially inside a 90-second budget. Pinning also freezes SpecCheck on a revision the ecosystem is moving off, so the rewrite gets harder rather than cheaper. The latency is the reason to move now, not just the deprecation.",
+          "citation": { "title": "MCP deprecated features", "url": "https://modelcontextprotocol.io/specification/2026-07-28/deprecated" }
+        },
+        {
+          "key": "D",
+          "text": "Drop both client-feature dependencies: expose specification sections through server tools and resources, return raw section text, and let `speccheck-api` make any model calls it needs itself.",
+          "correct": true,
+          "explanation": "Under revision `2026-07-28` the server-side primitives are tools, resources and prompts, while elicitation is the only client feature clients still offer — sampling and roots are deprecated, so a server that depends on them is building on removed ground. Returning raw section text and letting the host decide when to call a model also collapses the twelve nested round trips option C preserves into the calls `speccheck-api` was already making, which is what keeps R1 reachable. Scoping that `roots` used to express belongs in the server's own authorisation logic. Nothing about the review's behaviour changes for reviewers.",
+          "citation": { "title": "MCP server features: tools", "url": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-05",
+      "primaryDomain": "D7",
+      "secondaryDomains": ["D8", "D2"],
+      "question": "`fieldstack-mcp` exposes one tool, `fieldstack_search(query)`, which runs across the whole tenant — submittals, specifications, subcontractor bid pricing and personnel files alike. Security notes that submittal PDFs arrive from external subcontractors and are read into context verbatim. What enforces R6?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Replace the generic search with tools that take a `submittal_id` or `spec_section_id`, and have the server resolve those against the project's document set and refuse anything outside it.",
+          "correct": true,
+          "explanation": "The decisive property is that authorisation happens in server code the model never sees: a narrowly typed tool cannot express a request for a pricing record, and the server refuses one even if a malicious argument is constructed. That is what makes the records unreachable rather than merely discouraged, which is precisely where option B stops and why it cannot carry R6 — a description is an instruction, and instructions are exactly what an injected paragraph inside a subcontractor's PDF is designed to override. Anthropic's guidance on writing tools for agents is to give each tool the narrowest surface that still does the job. Reviewers see no change, since SpecCheck already knows which submittal it is reviewing.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Keep `fieldstack_search` but state in its tool description and in the system prompt that it may only be used for specification and submittal documents, and log every query issued for quarterly audit.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Clear tool descriptions genuinely steer behaviour, and a query log is worth having regardless — this would reduce accidental misuse and give auditors a trail. It does not meet **R6**, which requires the pricing and personnel records to be *unreachable*: a description is an instruction to the model, and untrusted submittal text sitting in the same context can instruct it otherwise. Logging is detection after the fact, not prevention, so the records have already been read by the time the audit runs. The tool's reach, not its documentation, is what R6 constrains.",
+          "citation": { "title": "Mitigate jailbreaks and prompt injections", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks" }
+        },
+        {
+          "key": "C",
+          "text": "Run `speccheck-api` under a dedicated Fieldstack service account with read-only permissions across the tenant, so nothing the assistant does can alter pricing or personnel data.",
+          "correct": false,
+          "explanation": "Read-only access prevents modification but not retrieval, and R6 is a confidentiality rule rather than an integrity one — bid pricing read into a model's context has already left the boundary the requirement draws. A tenant-wide grant also gives an injected instruction exactly the reach it needs. Least privilege here has to be scoped by document set, not by verb.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Pass every `fieldstack_search` result through a redaction filter that removes dollar amounts and personal names before the content is placed in a `tool_result` block.",
+          "correct": false,
+          "explanation": "Redaction assumes the sensitive material is recognisable by pattern, which fails for a bid strategy memo or a disciplinary note containing neither a dollar figure nor a name in a matched format. It also concedes that out-of-scope documents are still being retrieved, when R6 requires them to be unreachable. Filtering is a reasonable last layer, but it cannot be the boundary itself.",
+          "citation": { "title": "Defining and implementing tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-06",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "A submittal register lists exactly which specification sections a package must satisfy — usually twelve. Today one request carries all twelve sections and the whole package, and takes 140 seconds. The section list is known deterministically before any model call. How should the review be structured?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Chain the sections: one request per section, each receiving the previous section's findings so the model builds a cumulative picture of the package as it works through the register.",
+          "correct": false,
+          "explanation": "Prompt chaining suits tasks where each step genuinely depends on the last, but specification-section checks are independent — a fire-stopping clause does not need the ductwork verdict. Running twelve requests serially at roughly eight seconds each lands near ninety seconds before overheads, so R1 is at risk for no benefit, and passing accumulated findings forward grows the input on every step against R3. Sequencing independent work is the cost of a dependency that does not exist.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the single request but enable adaptive thinking at maximum effort so the model works through all twelve sections methodically within one turn rather than superficially as it does now.",
+          "correct": false,
+          "explanation": "Raising effort increases how much the model deliberates, which lengthens a call that is already 50 seconds over the R1 budget, and thinking tokens are billed as output so R3 moves the wrong way too. The underlying problem is that twelve independent checks are queued behind one another inside a single generation, and no reasoning setting parallelises that. Effort is a quality-versus-cost dial, not a throughput mechanism.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "C",
+          "text": "Add an orchestrator call that reads the submittal package first, decides which specification sections genuinely apply to it, and then dispatches a worker call for each one before synthesising the results.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Orchestrator-workers is the documented pattern when subtasks cannot be predicted in advance, and it would handle a package whose scope is genuinely ambiguous. It does not meet **R1** here: the orchestrator has to ingest the whole 120-page package before it can dispatch anything, adding a complete extra pass to the critical path ahead of the workers that follow it. That pass also duplicates work the submittal register already did for free. Orchestration earns its latency only when the decomposition is unknown, and here it is not.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Fan out twelve concurrent requests, one per section, each carrying that section's text and the package pages it governs, then merge the twelve `findings[]` arrays in `speccheck-api`.",
+          "correct": true,
+          "explanation": "Sectioning is a textbook parallelisation: the subtasks are independent, so wall-clock time collapses to the slowest single section rather than the sum of twelve, which is what brings 140 seconds inside the 90-second ceiling in R1. Because the register already names the sections, no model call is needed to discover them — the difference from option C, which pays a full package read just to derive a list Vantry already holds. Each worker also sees a much smaller context, which improves attention on the clause being checked and cuts per-call input against R3. The merge is ordinary TypeScript.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-07",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D6", "D4"],
+      "question": "Citations are enabled, but findings come back with `char_location` objects and the console's `page` field is empty, so every finding is rejected. To save tokens the pipeline extracts PDF text on the worker and sends it as plain-text blocks. What restores page-level provenance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the plain-text blocks but instruct the model to convert each returned `char_location` into a page number using a character-offset-to-page table the worker builds during extraction.",
+          "correct": false,
+          "explanation": "Offset arithmetic is deterministic work that belongs in TypeScript, not in a model asked to do lookup against a table it must hold in context. It is also solving the wrong problem: the mapping could be computed on the worker after the response, so nothing about it requires a model. Meanwhile the pipeline is still sending text-only blocks, so the page images that drawing findings depend on remain absent.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        },
+        {
+          "key": "B",
+          "text": "Send the package as a PDF `document` block referenced by `file_id` with citations enabled, so each page is processed as text and image and citations return `page_location` with start and end page numbers.",
+          "correct": true,
+          "explanation": "Citation granularity follows the block type: plain-text blocks can only ever yield `char_location`, while PDF document blocks yield `page_location` with `start_page_number` and `end_page_number`, which drop straight into the console's `page` field and satisfy R2. Sending the PDF also restores the per-page image that pre-extraction discarded, so a callout or revision cloud on a drawing is visible again — the clause option C leaves broken. Referencing by `file_id` keeps the payload small despite the richer content, and `cited_text` is not billed as output.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        },
+        {
+          "key": "C",
+          "text": "Split the extracted text into one plain-text document block per page and use each block's index as the page number, so `char_location` citations resolve to a single page without changing the extraction pipeline.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is genuinely clever and would work for text findings: one block per page makes the document index a page number, so the console's `page` field can be populated correctly and cheaply. It does not meet **R5**, because pre-extracted text carries no page image, so dimension callouts, stamped revisions and anything drawn rather than typed are invisible to the model — the exact drawing findings reviewers already distrust. It also keeps a text extractor between Vantry and its own source documents, where column and table order routinely scramble.",
+          "citation": { "title": "PDF support", "url": "https://platform.claude.com/docs/en/build-with-claude/pdf-support" }
+        },
+        {
+          "key": "D",
+          "text": "Add a `page` property to the findings JSON schema and require the model to populate it from the page header text it can read at the top of each extracted page.",
+          "correct": false,
+          "explanation": "A schema guarantees the field is present, not that its value is right, so a confidently transcribed but wrong page number would pass validation and still fail a reviewer opening the sheet. R2 asks for traceability, which means a link the API produced rather than a number the model wrote. Structured outputs and citations solve different halves of this problem and are meant to be combined.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-08",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Each of the twelve concurrent section workers receives the same 90-page governing specification division — about 180,000 tokens — followed by that worker's section instruction and the relevant submittal pages. Cost is $1.34 per submittal. How should the worker prompt be assembled?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put the section instruction first so the model knows what it is looking for before it starts reading, then the specification division, then the submittal pages, with a `cache_control` breakpoint at the end.",
+          "correct": false,
+          "explanation": "This inverts the documented ordering: long documents should precede the query, because a model reading the instruction first still has to process the whole division afterwards and performs worse on retrieval when the question comes early. It also destroys the cache, since the per-worker instruction sits at the front of the prefix, so all twelve workers write a fresh 180,000-token entry instead of reading a shared one. Both halves of the change work against R3.",
+          "citation": { "title": "Claude prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Have a preliminary call condense the 180,000-token division into a 4,000-token digest of its requirements, then give each of the twelve workers the digest instead of the full division.",
+          "correct": false,
+          "explanation": "A digest paraphrases, and a paraphrase cannot support R2: a non-conformance has to be traceable to the clause and page it came from, which a summary no longer contains. It also adds a serial call ahead of the fan-out, spending latency from the R1 budget to produce a lossier input. Compression is the wrong lever when the exact wording is the deliverable.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Put the shared specification division first with a `cache_control` breakpoint at its end, then the worker's section instruction and submittal pages, so all twelve workers read one cached prefix.",
+          "correct": true,
+          "explanation": "Caching matches an exact prefix from the start of the request, so putting the division ahead of anything worker-specific means one worker writes the 180,000-token entry and the other eleven read it at a fraction of base input price — the single largest lever available against R3. It also follows the documented ordering of documents before the query, which improves retrieval on long inputs. Option D reaches for the same saving by deleting content, but that costs R2, whereas this keeps every clause available for citation. Warming the entry with one worker before releasing the rest avoids twelve simultaneous misses.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Give each worker only its own specification section rather than the whole division, cutting shared input to almost nothing and removing the need to cache anything at all across the twelve concurrent calls.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is the biggest single cost reduction on the table and is exactly right for sections that stand alone, which many do. It does not meet **R2**, because specification sections cross-reference constantly — a submittal clause governed by Section 07 84 00 routinely defers to fire-rating criteria stated in another section — and a worker that cannot see the referenced text cannot cite the clause its finding actually rests on. Those findings are then rejected by the console as unsourced. Caching gets the saving without narrowing what a worker can cite.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-09",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "A worker sets `thinking: {\"type\": \"enabled\", \"budget_tokens\": 12000}`, copied from an old sample; on the current model the request now errors. The team also has no visibility into how much of each response is reasoning. What configuration should the workers use?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use `thinking: {\"type\": \"adaptive\"}`, control depth with `output_config: { effort: \"medium\" }`, and track reasoning volume through `usage.output_tokens_details.thinking_tokens`.",
+          "correct": true,
+          "explanation": "`{\"type\": \"enabled\", \"budget_tokens\": N}` is deprecated and errors on current models; `adaptive` is the current form, and depth is expressed as effort nested under `output_config`, which defaults to `\"high\"`. `medium` is the documented balance point for routine agentic work, which is what a single specification-section check is, and it keeps latency inside R1 across twelve concurrent workers. That is what separates it from option B: `max` buys deliberation Vantry's per-section task does not need and bills it as output tokens against R3. Reading `usage.output_tokens_details.thinking_tokens` gives the per-review visibility the team is missing.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "B",
+          "text": "Use `thinking: {\"type\": \"adaptive\"}` with `output_config: { effort: \"max\" }` so each worker reasons exhaustively about its section and Vantry misses as few non-conformances as possible.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The syntax here is entirely correct — adaptive thinking with effort nested under `output_config` — and on a genuinely hard clause interpretation `max` is the right call, so this is a defensible default for a quality-first team. It does not meet **R3** or **R1**: thinking tokens are billed as output, and twelve workers reasoning at maximum on every submittal multiplies the largest output term in a budget already 2.4 times over, while adding seconds to the slowest worker that sets the whole review's latency. Effort should be tuned down until evals show quality slipping, not pinned at the ceiling.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "C",
+          "text": "Keep the `enabled` thinking type but raise `budget_tokens` to 24,000, since the error indicates the worker ran out of reasoning budget partway through a long specification section.",
+          "correct": false,
+          "explanation": "The request is rejected because the `enabled` form with `budget_tokens` is no longer accepted on current models, not because the number was too small, so a larger value fails identically. Diagnosing a schema rejection as a budget exhaustion also hides the real migration the team needs to do. Reasoning depth is now expressed through effort, and there is no top-level token budget for it.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Move the depth control to a top-level `effort: \"medium\"` parameter alongside `max_tokens`, and read reasoning volume from `usage.thinking_tokens` on the response.",
+          "correct": false,
+          "explanation": "There is no top-level `effort` parameter — it is nested inside `output_config` — so this request is rejected for an unknown field. The reported path is wrong too: thinking-token accounting lives at `usage.output_tokens_details.thinking_tokens`, and reading a non-existent property in TypeScript yields `undefined`, which would quietly log zero for every review. Both mistakes are the kind that only surface in production dashboards.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-10",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D6", "D5"],
+      "question": "Before rolling out from 3 pilot projects to all 61, Vantry's quality director asks how the team will know that a prompt or model change has not started missing non-conformances that engineers used to catch. What should the team build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have project engineers mark each finding useful or not in the console, and track weekly precision per specification division, alerting when it drops below the pilot baseline.",
+          "correct": false,
+          "explanation": "Thumbs on displayed findings can only measure precision, because a non-conformance the model never reported is never shown to anyone and so is never rated. The quality director's question is specifically about misses, which is the one thing this instrument is structurally blind to. It is worth keeping as a live signal, but it cannot answer the question asked.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Run each candidate release past a Claude-based judge that scores a sample of SpecCheck's outputs for plausibility and correct citation formatting, gating promotion on the judge's average score.",
+          "correct": false,
+          "explanation": "A judge scoring the model's own outputs has no record of what should have been found, so like the thumbs signal it measures the findings that exist rather than the ones that are absent. Grading citation formatting is genuinely useful for R2 compliance, but formatting and completeness are different properties. Judges are strongest when they compare an output against a known-good reference, which this design does not supply.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Assemble 600 historically adjudicated submittals whose human verdicts are on record, score recall and precision per specification division against them, and gate every release in CI on a fixed threshold.",
+          "correct": true,
+          "explanation": "Recall against known verdicts is the only one of these instruments that can see a miss, because the labelled set records non-conformances the model may fail to report. Breaking the score down per specification division localises a regression to the division that caused it, and running it in CI makes the guarantee survive the next prompt edit or model swap rather than expiring with the release that established it. Option D chases the same realism with live traffic but pays for it twice over, which R3 cannot absorb; a fixed offline set costs the same every run. Vantry already owns the labels in its review history.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Shadow every candidate release against the last 5,000 production submittals for two weeks, running it alongside the live pipeline and diffing the two sets of findings before promoting the change.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Shadow running is the most faithful test available — real packages, real drawings, real scan quality — and diffing findings does surface regressions a curated set might miss. It does not meet **R3**: reviewing 5,000 submittals twice adds a second full inference bill per release, roughly $2,750 at the target unit cost, against a budget with no headroom at all. It also puts a fortnight in front of every prompt change, which is untenable during a rollout to 58 further projects. Shadow mode belongs after an offline gate, not instead of one.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-11",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D7", "D8"],
+      "question": "Vantry's platform engineers work on `speccheck-api` in Claude Code. Several added the old tenant-wide `fieldstack-mcp` months ago with `claude mcp add --scope user`, so their sessions still expose `fieldstack_search`. How should the repository guarantee that sessions see only the scoped Fieldstack tools?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put the `claude mcp add --scope user` command for the new scoped server in the repository README and ask every platform engineer to run it once on their machine before their next session.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is how most teams start, it takes a minute per engineer, and it does get the scoped server in front of everyone. It does not meet **R6**, because user scope is stored in each engineer's `~/.claude.json` rather than in version control: it loads in all their projects, it is invisible to review, and — decisively — adding the new server does not remove the old one, so `fieldstack_search` remains available alongside it. A guarantee cannot depend on every engineer having run the right command and no wrong ones.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "B",
+          "text": "Commit a project-scoped `.mcp.json` declaring only the scoped Fieldstack server, and run sessions with `--strict-mcp-config` so no user-scoped server is loaded alongside it.",
+          "correct": true,
+          "explanation": "A project-scoped `.mcp.json` at the repository root is shared through version control, so the server definition is reviewed like any other change and is identical for every engineer who clones the repo. On its own that still leaves each engineer's user-scoped entries loading in parallel, which is exactly the gap option A cannot close; `--strict-mcp-config` limits the session to the configuration explicitly supplied, so the legacy tenant-wide server does not appear. Together they make R6 a property of the repository rather than of anyone's laptop. Engineers still approve the project server on first use.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "C",
+          "text": "List the legacy server name under `disabledMcpjsonServers` in the project's `.claude/settings.json`, which blocks it regardless of the permission mode the session runs in.",
+          "correct": false,
+          "explanation": "`disabledMcpjsonServers` blocks servers declared in a `.mcp.json` file, and the legacy server is not declared there — it lives in each engineer's user-scoped `~/.claude.json`, which this setting does not govern. The result is a control that reads as if it works, passes review, and changes nothing. The setting is the right tool for opting out of a project-scoped server the team does not want.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "D",
+          "text": "Define a `submittal-reviewer` subagent in `.claude/agents/` whose tool allowlist names only the scoped Fieldstack tools, and route Fieldstack work through that subagent.",
+          "correct": false,
+          "explanation": "A subagent's allowlist constrains that subagent, not the session that spawned it, so the main conversation keeps every user-scoped tool it had before. It also depends on someone choosing to delegate, which makes the restriction advisory. Subagents are for isolating context and specialising behaviour, not for defining a security boundary.",
+          "citation": { "title": "Subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS2-12",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D3", "D4"],
+      "question": "Vantry wins a transit programme using design-assist procurement, where submittals arrive before the specification is complete and may invoke arbitrary referenced standards and other sections. The submittal register no longer lists the applicable sections, so the twelve-way fan-out has nothing to fan out on. What structure fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the fixed fan-out and add a thirteenth catch-all worker that receives the entire specification book and the whole package, tasked with finding anything the twelve named sections missed.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This preserves a pipeline that already works and needs almost no new code, and a catch-all really would catch references the register omits. It does not meet **R3**: the catch-all worker carries the whole specification book on every submittal, and because its prefix differs from the twelve section workers' shared prefix it gets no benefit from their cache, so it alone can cost more than the other twelve combined. Loading everything into one worker also reproduces the attention problem the fan-out was built to solve. The shape of the work has changed, not just its volume.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Let each of the twelve section workers call a specification-lookup tool whenever it meets a cross-reference, following the chain of referenced standards on its own until it is satisfied.",
+          "correct": false,
+          "explanation": "Twelve workers independently chasing references duplicate each other's lookups, and reference chains in construction standards nest deeply enough that the loop has no natural bound — neither the request count nor the latency of the slowest worker can be predicted, which puts R1 and R3 out of control together. It also leaves no single component with a view of the whole package, so the register cannot be reconstructed. Autonomy without a coordinator is the failure mode orchestration exists to prevent.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Fall back to a single request per design-assist submittal carrying the package and the full specification book, accepting a slower review for this procurement route than for the standard one.",
+          "correct": false,
+          "explanation": "This is the 140-second design that the fan-out replaced, reintroduced for the packages with the most content to read, so R1 is missed by a wider margin than before. Sending the full book uncached on every submittal also breaks R3 for exactly the projects with the highest submittal volume. Accepting a known-failing design for a subset of traffic is not a fallback; it is an outage with a schedule.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Add an orchestrator that reads the package index and specification table of contents, determines which sections and referenced standards apply, dispatches a worker per section, and synthesises the results.",
+          "correct": true,
+          "explanation": "Orchestrator-workers is the pattern for exactly this condition: the subtasks cannot be listed in advance, so a model has to decide the decomposition before the workers can run. The orchestrator reads only the index and table of contents rather than the full package, keeping its pass short enough that the workers still finish inside R1, and it is the one component with the whole-package view that option B's independent workers lack. It is also the right answer here for the reason it was the wrong answer for standard submittals — there the register already supplied the decomposition. The section workers, their cached prefix and the merge step are reused unchanged.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    }
+  ]
+}

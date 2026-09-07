@@ -1,0 +1,322 @@
+{
+  "examId": "ccdv-f-exam2",
+  "domainId": "D5",
+  "domainName": "Model Selection and Optimization",
+  "questions": [
+    {
+      "id": "V2-D5-01",
+      "question": "An e-commerce company runs a product-catalog tagger on Claude Sonnet 5. Each request stuffs a 300,000-token merchandising handbook into the system prompt and sets output_config.effort to \"low\". To cut cost, an engineer swaps the model ID to Claude Haiku 4.5 and reruns the job. Every request now fails. What must change for the job to run on Haiku 4.5?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Nothing structural — Haiku 4.5 needs a beta header to unlock its 1M-token context window, and the header is the only missing piece.",
+          "correct": false,
+          "explanation": "Haiku 4.5's context window is 200K tokens and there is no beta header that raises it. The 1M-token window belongs to the Claude 5 family models. Adding a header would not make a 300K-token prompt fit.",
+          "citation": { "title": "Models overview", "url": "https://platform.claude.com/docs/en/models/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Raise effort from \"low\" to \"high\", because smaller models require a higher effort setting to process large system prompts reliably.",
+          "correct": false,
+          "explanation": "Effort is a behavioral signal about how much reasoning to spend, not a capacity control, and it has no bearing on whether a prompt fits the context window. Haiku 4.5 does not accept the effort parameter at any level.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "C",
+          "text": "Trim the prompt to fit Haiku 4.5's 200K-token context window and remove the effort field, which Haiku 4.5 does not support.",
+          "correct": true,
+          "explanation": "Two Haiku 4.5 constraints are being violated at once. Its context window is 200K tokens, so a 300K-token system prompt exceeds it, and effort is supported only on the Claude 5 family, so passing output_config.effort to Haiku 4.5 is invalid. Both must be fixed.",
+          "citation": { "title": "Models overview", "url": "https://platform.claude.com/docs/en/models/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Lower max_tokens below Haiku 4.5's 64,000-token output ceiling; the oversized input is trimmed automatically to fit.",
+          "correct": false,
+          "explanation": "The API never silently trims input. A request whose input alone exceeds the context window returns a validation error rather than being truncated. max_tokens governs only the response length, so changing it does not address a 300K-token prompt.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D5-02",
+      "question": "A fleet-telematics company pins claude-opus-4-1-20250805 across several internal services. Anthropic announces that the model is deprecated with a retirement date 60 days out. The team is not certain which services still call it. What should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Do nothing urgent — deprecated models continue serving traffic indefinitely; deprecation only means the model no longer receives updates.",
+          "correct": false,
+          "explanation": "Deprecated is a distinct lifecycle stage from retired. A deprecated model still serves traffic, but a retirement date has been announced, and once that date passes requests to the model ID fail. Waiting guarantees an outage.",
+          "citation": { "title": "Model deprecations", "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations" }
+        },
+        {
+          "key": "B",
+          "text": "Migrate to the announced replacement before the retirement date, using the Console usage export to find keys still on the old ID.",
+          "correct": true,
+          "explanation": "Anthropic publishes a recommended replacement for each deprecated model and gives at least 60 days' notice before retirement, after which requests to that model ID fail. The Console's usage page can be filtered by model and exported as CSV to find exactly which keys and workspaces still depend on it.",
+          "citation": { "title": "Model deprecations", "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations" }
+        },
+        {
+          "key": "C",
+          "text": "Switch the pinned IDs to dateless aliases such as claude-opus-4-1 so the services automatically roll forward to the newest Opus release.",
+          "correct": false,
+          "explanation": "Anthropic's model IDs are pinned snapshots — including the dateless IDs introduced from Claude 4.6 onward — so they never silently roll forward to a different model. A dateless ID for a deprecated generation is retired on the same schedule as its dated form.",
+          "citation": { "title": "Model deprecations", "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations" }
+        },
+        {
+          "key": "D",
+          "text": "Rely on automatic routing: after retirement, requests naming a retired model are transparently served by its successor.",
+          "correct": false,
+          "explanation": "There is no transparent re-routing. After the retirement date, requests specifying a retired model return an error, which is why Anthropic advises testing the replacement and cutting over during the notice period.",
+          "citation": { "title": "Model deprecations", "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D5-03",
+      "question": "A payroll SaaS submits 40,000 year-end tax-summary requests through the Message Batches API, one per employee, in employee-ID order. When the batch ends, the ingestion code zips the streamed results against the original request array by position. QA reports summaries attached to the wrong employees. What is the fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Re-sort the results by their created_at timestamp, which restores the original submission order.",
+          "correct": false,
+          "explanation": "Timestamps reflect when each request finished processing, not its position in the submitted array, so sorting by them does not reconstruct submission order. The API provides an explicit correlation key for this purpose instead.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "B",
+          "text": "Cap each batch at 1,000 requests, since ordering is only guaranteed for small batches.",
+          "correct": false,
+          "explanation": "Ordering is not guaranteed at any batch size. A batch may contain up to 100,000 requests or 256 MB, and results from a small batch can be returned out of order just as easily as from a large one.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Poll until processing_status is \"ended\" before reading results; reading early is what scrambled the ordering.",
+          "correct": false,
+          "explanation": "Waiting for processing_status to become \"ended\" is required before results are available, but it does not impose an ordering guarantee. Even a fully completed batch returns its results in arbitrary order.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "Match each result back to its employee by custom_id rather than by array position.",
+          "correct": true,
+          "explanation": "Batch results may be returned in any order and are explicitly not guaranteed to match the order of the submitted requests. Each request carries a custom_id that is echoed on its result, and matching on that key is the documented way to correlate output with input.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D5-04",
+      "question": "A field-service SaaS generates repair write-ups with Claude Sonnet 5. Responses average 1,200 output tokens and technicians stare at a spinner for roughly 25 seconds before any text appears. Total generation time is acceptable to the business; the complaint is purely that nothing appears until the end. What change best addresses the complaint?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set stream: true and render text_delta events as they arrive.",
+          "correct": true,
+          "explanation": "Streaming does not make total generation faster, but it removes the wait before the first visible token, which is exactly the perceived-latency problem described. Anthropic recommends streaming as the primary lever when users are waiting on long responses.",
+          "citation": { "title": "Reducing latency", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        },
+        {
+          "key": "B",
+          "text": "Add speed: \"fast\" with the fast-mode beta header to raise the output token rate on Sonnet 5.",
+          "correct": false,
+          "explanation": "Fast mode is available only on Claude Opus 5 and Opus 4.8, so requesting it on Sonnet 5 is invalid. It also raises output tokens per second rather than shortening time to first token, which is the actual complaint.",
+          "citation": { "title": "Fast mode (research preview)", "url": "https://platform.claude.com/docs/en/build-with-claude/fast-mode" }
+        },
+        {
+          "key": "C",
+          "text": "Set temperature to 0 so the model commits to tokens faster and stops exploring alternatives.",
+          "correct": false,
+          "explanation": "Temperature affects sampling diversity, not generation speed, and on Claude 4.7 and later a non-default temperature returns a 400 error. This would break the integration without improving responsiveness.",
+          "citation": { "title": "Reducing latency", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency" }
+        },
+        {
+          "key": "D",
+          "text": "Move the write-ups to the Message Batches API to take advantage of its higher throughput.",
+          "correct": false,
+          "explanation": "Batches are asynchronous with results returned within 24 hours, which is far worse for a technician waiting at a job site. Batch processing optimizes cost for offline workloads, not interactive responsiveness.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D5-05",
+      "question": "An architecture firm caches a 120,000-token building-code reference as a prompt prefix on Claude Opus 5. Designers query it in bursts, but gaps between bursts often reach 20 minutes, so most requests miss the cache and pay full input price. The prefix itself never changes. What is the most cost-effective change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Split the reference across all four cache breakpoints so at least part of it survives past the five-minute window.",
+          "correct": false,
+          "explanation": "Additional breakpoints let you cache multiple prefix boundaries, but every 5-minute entry expires on the same clock. Splitting the same content across breakpoints does not extend any entry's lifetime past its TTL.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the five-minute cache and fire a small keep-alive request every four minutes; cache reads are free, so the refresh costs nothing.",
+          "correct": false,
+          "explanation": "Cache reads are heavily discounted at 0.1x base input price, but they are not free. Polling a 120,000-token prefix every four minutes around the clock would cost far more than simply paying for a longer TTL.",
+          "citation": { "title": "Pricing", "url": "https://platform.claude.com/docs/en/about-claude/pricing" }
+        },
+        {
+          "key": "C",
+          "text": "Set the cache_control TTL to \"1h\"; the higher write price is recovered after roughly two cache hits.",
+          "correct": true,
+          "explanation": "A one-hour cache write costs 2x base input price versus 1.25x for five minutes, while reads stay at 0.1x. Because a miss costs full price, the extra 0.75x paid at write time is recovered after about two additional hits — easily achieved with 20-minute gaps.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Move the reference out of the prompt and into the Message Batches API, since batch discounts cannot be combined with prompt caching.",
+          "correct": false,
+          "explanation": "The premise is wrong: the 50% batch discount does combine with prompt caching. More importantly, batching is asynchronous and unsuitable for interactive designer queries.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D5-06",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A genomics platform assembles very large prompts on Claude Opus 5 by concatenating patient variant tables until the payload approaches the model's 1M-token context window. Before shipping, the team wants to know exactly how the API behaves at the boundary. Which TWO statements are correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The 1M-token window on Opus 5 requires a long-context beta header and is billed at a premium input rate above 200K tokens.",
+          "correct": false,
+          "explanation": "On the Claude 5 family the 1M-token context window is the default, needs no beta header, and is billed at the model's standard input rate. The header-and-premium-tier arrangement applied to an earlier long-context beta, not to Opus 5.",
+          "citation": { "title": "Models overview", "url": "https://platform.claude.com/docs/en/models/overview" }
+        },
+        {
+          "key": "B",
+          "text": "If the input alone exceeds the context window, the request fails with a 400 invalid_request_error stating the prompt is too long.",
+          "correct": true,
+          "explanation": "Input that does not fit is rejected at validation time rather than truncated. The API returns a 400 invalid_request_error whose message reports that the prompt is too long, so oversized payloads must be caught client-side before the call.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "C",
+          "text": "When a conversation grows past the window, the API drops the oldest messages first so the request can still succeed.",
+          "correct": false,
+          "explanation": "The Messages API is stateless and never silently discards turns; managing history is the caller's responsibility. Anthropic provides explicit opt-in mechanisms such as context editing and compaction for this, not automatic FIFO eviction.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "D",
+          "text": "Any request whose input_tokens plus max_tokens exceeds the window is rejected up front, so max_tokens must be sized to the remaining headroom.",
+          "correct": false,
+          "explanation": "That validation behavior applied to older models. On Claude 4.5 and later the request is accepted even when input plus max_tokens exceeds the window; the model simply generates until it runs out of room.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "E",
+          "text": "If generation reaches the context window mid-response, the message ends with stop_reason: \"model_context_window_exceeded\".",
+          "correct": true,
+          "explanation": "Because oversized max_tokens no longer causes up-front rejection, a response can run out of window while generating. That case is surfaced as the stop reason model_context_window_exceeded, and the client should treat the content as truncated rather than complete.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D5-07",
+      "question": "An ad-tech firm enables adaptive thinking on its campaign-copy service and output spend triples, even though the visible copy is the same length as before. An engineer sets the thinking display to \"omitted\" and the invoice does not change. Which field should the team read to attribute the increase?",
+      "options": [
+        {
+          "key": "A",
+          "text": "usage.cache_creation_input_tokens, which records the reasoning trace the model writes before answering.",
+          "correct": false,
+          "explanation": "That field counts tokens written into a prompt cache entry and is an input-side metric, unrelated to thinking. It would not move simply because thinking was enabled.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "usage.output_tokens_details.thinking_tokens, the thinking portion already counted inside output_tokens.",
+          "correct": true,
+          "explanation": "Thinking tokens are billed as output tokens and are reported separately under output_tokens_details.thinking_tokens, which is always less than or equal to output_tokens. Setting display to \"omitted\" only hides the trace from the response — the tokens are still generated and still billed.",
+          "citation": { "title": "Steering thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost" }
+        },
+        {
+          "key": "C",
+          "text": "The budget_tokens value echoed back on the thinking configuration, which equals what was consumed.",
+          "correct": false,
+          "explanation": "budget_tokens belongs to the deprecated enabled-thinking configuration and, even when it applied, was a ceiling rather than a measure of consumption. Adaptive thinking has no such budget field to read.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "D",
+          "text": "The length of the returned thinking content blocks, which is the only available measure once display is set to \"omitted\".",
+          "correct": false,
+          "explanation": "Counting characters in returned blocks is unreliable and impossible once the trace is omitted, which is precisely why usage reports the count explicitly. When streaming, the thinking token count arrives on the final message_delta.",
+          "citation": { "title": "Steering thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D5-08",
+      "question": "A legal-intake assistant caches a 60,000-token playbook as a prefix on Claude Opus 5. To save money, it sends routine turns at effort \"medium\" and escalates complex turns to \"xhigh\". Turns arrive seconds apart, but cache_read_input_tokens is 0 on nearly every request. Why, and what should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Cache entries are scoped per conversation, so a multi-turn session must re-write the prefix on each turn; nothing can be done.",
+          "correct": false,
+          "explanation": "Cache entries are not scoped to a conversation — any request whose prefix matches exactly can read the entry, which is the whole point of caching a shared playbook. The observed misses have a different cause.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "A 60,000-token prefix exceeds the maximum cacheable prefix length on Opus 5; split it across breakpoints.",
+          "correct": false,
+          "explanation": "The documented figure is a minimum, not a maximum — Opus 5 requires at least 512 tokens for a prefix to be cacheable. A 60,000-token prefix is comfortably above that threshold.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "The five-minute TTL is being exhausted between turns; switch cache_control to a one-hour TTL.",
+          "correct": false,
+          "explanation": "Turns arrive seconds apart, so the five-minute TTL is never close to expiring. A longer TTL would raise the write price without fixing a miss that is not caused by expiry.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Changing top-level effort invalidates the cache; hold output_config.effort constant across turns.",
+          "correct": true,
+          "explanation": "The resolved effort value is rendered into the prompt itself, so alternating between \"medium\" and \"xhigh\" produces a different prefix and starts a new cache entry each time. Keeping top-level effort fixed preserves the prefix, and per-message effort exists as a beta for callers that must vary it mid-conversation.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D5-09",
+      "question": "A quant research firm runs Claude Opus 5 at output_config.effort \"xhigh\" for derivative-pricing analysis. For a latency-sensitive endpoint the team wants the same model with no reasoning overhead, so it adds thinking: {\"type\": \"disabled\"} while leaving effort at \"xhigh\". Every request returns 400. What is the correct fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Lower effort to \"high\" or below on that endpoint, since thinking can only be disabled at effort \"high\" or lower.",
+          "correct": true,
+          "explanation": "On Claude Opus 5 the \"xhigh\" and \"max\" effort levels require thinking, so pairing them with thinking disabled is rejected with a 400. Reducing effort to \"high\" or lower makes disabling thinking a valid combination and also lowers latency.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "B",
+          "text": "Use thinking: {\"type\": \"enabled\", \"budget_tokens\": 0} instead, which is the supported way to request zero reasoning.",
+          "correct": false,
+          "explanation": "The enabled-with-budget_tokens configuration is deprecated on current models and returns an error; adaptive thinking replaced it. Even historically, budget_tokens had a minimum well above zero.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Set output_config.effort to \"none\", which turns off both reasoning and the extra latency it adds.",
+          "correct": false,
+          "explanation": "The supported effort levels are low, medium, high, xhigh, and max, with high as the default. There is no \"none\" level, so this value is invalid.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "D",
+          "text": "Keep effort at \"xhigh\" and set the thinking display to \"omitted\", which prevents the reasoning tokens from being generated.",
+          "correct": false,
+          "explanation": "Omitting the display only removes the thinking blocks from the response body. The tokens are still generated, still billed, and still add latency, so this does not achieve the goal.",
+          "citation": { "title": "Steering thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost" }
+        }
+      ]
+    }
+  ]
+}

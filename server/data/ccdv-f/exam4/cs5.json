@@ -1,0 +1,200 @@
+{
+  "examId": "ccdv-f-exam4",
+  "caseId": "CS5",
+  "caseTitle": "Redline Auto Group — connected-vehicle service advisor",
+  "caseScenario": "Redline Auto Group runs 68 franchised dealerships across the US Midwest and operates a connected-car companion app with 410,000 enrolled vehicles. Its ServiceAdvisor feature reads a vehicle's diagnostic trouble codes and service history and produces a plain-language explanation for the owner and for the service-lane tablet. The backend is a set of Go 1.23 services on Azure Container Apps calling the Messages API directly; the clients are a Kotlin Android app, a Swift iOS app, and a React tablet console. Six engineers maintain the repository and all of them work in Claude Code.\n\nFour problems came out of the last release review. The ServiceAdvisor system prompt has grown to roughly 6,000 words of rules accumulated over nine months, and a newly added hybrid-battery rule appears to have stopped an older EV-range rule from firing. The app's section renderer breaks on about one response in twenty-five because the model's output structure varies between runs. Two owners received responses quoting a dollar figure for a repair, which the dealer group is not permitted to do outside a signed estimate. And the regression suite is 30 hand-written cases, which passed a release that measurably regressed on hybrid vehicles.",
+  "caseRequirements": [
+    "R1: Every ServiceAdvisor response must populate the app's four fixed sections (symptom, likely cause, recommended action, estimated labour hours) and the client must be able to reject any response that does not.",
+    "R2: A ServiceAdvisor response must never state a currency amount; only labour hours drawn from the published flat-rate table may be quoted.",
+    "R3: Any change to the ServiceAdvisor prompt must be validated against at least 300 historical repair orders with coverage of all four powertrain types (gasoline, diesel, hybrid, battery-electric) before release.",
+    "R4: A new engineer's first Claude Code session in the ServiceAdvisor repository must have the repo conventions and the DTC schema in context without the engineer taking any explicit action.",
+    "R5: Likely-cause accuracy on the regression suite must stay at or above 90 percent for every powertrain stratum, including vehicles with long service histories."
+  ],
+  "questions": [
+    {
+      "id": "V4-CS5-01",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D4", "D2"],
+      "question": "Investigation confirms the 6,000-word system prompt contains a hybrid-battery rule that directly contradicts an older EV-range rule, and at least four other rule pairs conflict. How should the team proceed?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the most recently added rules to the top of the system prompt, since instructions appearing earlier are weighted more heavily than later ones.",
+          "correct": false,
+          "explanation": "There is no documented rule that earlier system-prompt instructions outrank later ones, so reordering is a guess dressed as a fix. Two instructions that contradict each other still contradict each other after being reordered; the model is simply left to pick one, which is the non-determinism the team is already seeing.",
+          "citation": { "title": "Claude prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Resolve each contradictory pair explicitly, restructure the rest into a short task description plus delimited reference sections, and land the edits incrementally with measurement.",
+          "correct": true,
+          "explanation": "Contradictions have to be resolved at the source, because a model given two mutually exclusive rules will satisfy one of them unpredictably. Delimiting the reference material separates stable data from instructions and makes future edits reviewable. Landing the edits one at a time is what distinguishes this from option C: R3 requires validation against 300 repair orders covering all four powertrains, and an incremental sequence attributes each regression to the edit that caused it.",
+          "citation": { "title": "Claude prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Rewrite the system prompt from scratch as a clean, minimal instruction set capturing current dealer-group policy, and release it as one change that clears nine months of accumulated debt.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The direction is right and a minimal, coherent prompt is the destination the team needs to reach. But it does not meet R3: a wholesale rewrite released as one change cannot be validated edit-by-edit against the 300 repair orders spanning all four powertrain types, so any regression it introduces is indistinguishable from the dozens of other simultaneous changes. That is exactly how the hybrid regression reached production.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Set output_config effort to max so the model has enough reasoning budget to notice the conflicting rules and reconcile them itself on each request.",
+          "correct": false,
+          "explanation": "More reasoning effort does not tell the model which of two conflicting policies the dealer group actually intends; it makes the arbitrary choice more elaborately justified, not more correct. Changing the resolved effort level also renders differently into the prompt and starts a new cache prefix, so it raises cost and latency at the same time.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS5-02",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D6", "D7"],
+      "question": "The Go service currently asks for markdown and splits on headings, which fails on roughly one response in twenty-five, and two responses have quoted a dollar figure. Which response contract satisfies both R1 and R2?",
+      "options": [
+        {
+          "key": "A",
+          "text": "An output_config json_schema with all four fields required, estimated_labour_hours typed as a number enumerated to the flat-rate values, and no free-text field able to carry currency.",
+          "correct": true,
+          "explanation": "Structured outputs constrain generation to the schema, so all four sections are present by construction and the client can reject anything that fails validation, satisfying R1. Typing labour hours as an enumerated number rather than prose makes a dollar figure unrepresentable in the field that would naturally carry one, which is the structural guarantee R2 needs and the one option B gives up by keeping a free-text action field.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "B",
+          "text": "An output_config json_schema with all four fields required, recommended_action left as free text so the advisor's wording stays readable, and a system rule forbidding the model from stating prices.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a genuine improvement and fully satisfies R1: the four sections are guaranteed and the renderer stops breaking. But it does not meet R2, because a free-text recommended_action field can hold any string, and a system rule is guidance rather than a constraint on what the field may contain. The two price quotes came out of exactly that kind of prose field, so the failure mode survives the change.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "C",
+          "text": "Keep markdown but pin the four heading strings exactly, then parse with a strict regex and retry once when a heading is missing or a currency symbol appears.",
+          "correct": false,
+          "explanation": "Pinned headings reduce the failure rate without eliminating it, so the renderer still breaks and the retry doubles latency on the worst requests. Regex-screening for a currency symbol also misses the many ways a price can be written in prose, leaving R2 dependent on the completeness of a denylist.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "D",
+          "text": "Prefill the assistant turn with an opening brace and the first field name so the model is committed to the object shape from its first token.",
+          "correct": false,
+          "explanation": "Assistant prefill is no longer a valid technique on current Claude models and should never be the basis of a production output contract; structured outputs and output_config.format are the documented replacements. Committing the opening tokens would also say nothing about whether the remaining three required sections appear, so R1 would still be unenforced.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS5-03",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D6", "D8"],
+      "question": "New engineers on the ServiceAdvisor repository spend their first sessions re-describing the Go service layout and the DTC code schema to Claude Code, and two of them shipped changes that ignored the repo's error-wrapping convention. Which configuration satisfies R4?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have each engineer record the repo conventions and DTC schema in their user-level ~/.claude/CLAUDE.md so the context follows them across every project they work on.",
+          "correct": false,
+          "explanation": "User-level memory is per-machine and per-person, so a new engineer starts with an empty file and the conventions are never inherited from the repository. It also leaks ServiceAdvisor-specific context into unrelated projects, which is the opposite of the scoping the memory hierarchy is designed for.",
+          "citation": { "title": "Manage Claude's memory", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Define a service-advisor subagent whose system prompt carries the repo conventions and DTC schema, and tell engineers to delegate ServiceAdvisor work to it.",
+          "correct": false,
+          "explanation": "A subagent's system prompt applies only inside the delegated context, so the main session an engineer actually types in still lacks the conventions. The approach also depends on every engineer remembering to delegate, which is the explicit action R4 rules out.",
+          "citation": { "title": "Subagents", "url": "https://code.claude.com/docs/en/agent-sdk/subagents" }
+        },
+        {
+          "key": "C",
+          "text": "Add a /dtc-context slash command in .claude/commands/ that loads the schema and conventions, and document it as the first step of the onboarding checklist.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Project-scoped slash commands live in the repository, so they are shared with everyone who clones it, and this would reliably deliver the right context. But it does not meet R4, which requires the conventions and schema to be present without the engineer taking any explicit action; here the context arrives only if someone remembers to run the command, and an onboarding checklist is precisely the manual step R4 removes.",
+          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+        },
+        {
+          "key": "D",
+          "text": "Check a CLAUDE.md into the repository root holding the conventions and importing the DTC schema file, so it is read automatically at the start of every session in that repo.",
+          "correct": true,
+          "explanation": "Project memory at the repository root is loaded automatically when a session starts in that directory, so a newly cloned checkout carries the conventions with no action from the engineer, which is what R4 requires. Importing the schema file keeps a single source of truth that changes with the code. Unlike option C, nothing depends on the engineer knowing a command exists.",
+          "citation": { "title": "Manage Claude's memory", "url": "https://code.claude.com/docs/en/memory" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS5-04",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D6", "D2"],
+      "question": "The 30-case suite passed a release that regressed on hybrids. The fleet is roughly 71 percent gasoline, 17 percent diesel, 6 percent hybrid and 6 percent battery-electric, and 40,000 historical repair orders are available with recorded flat-rate labour hours. Which suite satisfies R3?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the 30 cases but have a master technician review every failing output in detail, since expert judgement finds defects that automated scoring misses.",
+          "correct": false,
+          "explanation": "Anthropic's evaluation guidance is that a larger volume of imperfect cases beats a small set of carefully reviewed ones, because coverage of the input distribution is what surfaces regressions. Thirty cases also sit an order of magnitude below the 300-order floor R3 states, so the gate fails the requirement on its face regardless of review quality.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Build a stratified suite of 400 repair orders, 100 per powertrain, grade labour hours by numeric comparison to the recorded flat rate, and gate on per-stratum pass rates.",
+          "correct": true,
+          "explanation": "Deliberate stratification is what guarantees the coverage of all four powertrain types R3 demands; recorded flat-rate hours give an exact numeric target, so most of the suite needs no model grader at all. Gating on per-stratum rates rather than an aggregate is the decisive difference from option C, because a hybrid regression cannot hide behind a healthy gasoline majority.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Sample 1,000 repair orders at random from the 40,000 available and grade every response with a binary LLM judge running on a different model, gating on an overall pass rate above 96 percent.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A thousand cases graded by a separate judge model is far stronger than the current suite and follows the guidance to prefer volume. But it does not meet R3: a random draw from a fleet that is 6 percent hybrid yields around 60 hybrid cases whose failures are invisible inside a 96 percent aggregate, and R3 requires demonstrated coverage of all four powertrain types rather than whatever the sample happens to contain.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Ship prompt changes to two dealerships first and gate the wider release on whether service advisors override the recommendation more often than the current baseline.",
+          "correct": false,
+          "explanation": "A dealership canary measures the change only after real owners have received the affected recommendations, whereas R3 requires validation before release. Two dealerships also see very few hybrids in a release window, so the regression this is meant to catch would likely never appear in the sample.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS5-05",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "The service-lane tablet now sends 24 months of repair orders, about 40,000 tokens, on every request. Cost rose sharply and the per-stratum suite shows likely-cause accuracy falling on vehicles with long service histories. Which change addresses both?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep sending all 24 months but raise max_tokens so the model has room to work through the longer history before writing the four sections.",
+          "correct": false,
+          "explanation": "max_tokens governs how much the model may generate, not how well it attends to a crowded input, so it does nothing about the accuracy drop. Allowing longer output also gives the model more room to pad the four sections, which does not help the tablet and costs more per request.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the full 24-month history but move it behind a cache_control breakpoint per vehicle, so repeat visits within the TTL re-read it at cache-read pricing instead of full input price.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Per-vehicle caching is well-targeted and would genuinely cut the cost increase for vehicles seen more than once inside the TTL. But it does not meet R5, because caching changes what a token costs and not how many are in the window: the model still reasons over 40,000 tokens of mostly-irrelevant history, so likely-cause accuracy stays below the 90 percent floor on exactly the long-history vehicles the per-stratum suite flagged.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Retrieve only the prior repair orders whose DTC family matches the active codes, and put the flat-rate table and instructions in a stable cached prefix ahead of them.",
+          "correct": true,
+          "explanation": "Anthropic's context-engineering guidance is to find the smallest set of high-signal tokens, because response quality degrades as irrelevant context accumulates; filtering by DTC family removes the noise that is depressing likely-cause accuracy and is what restores the 90 percent floor R5 sets. The flat-rate table and instructions are identical across requests, so they belong in a cached prefix where they cost roughly a tenth to re-read. Unlike option B, this reduces the window rather than only discounting it.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Keep the full history and add an instruction telling the model to consider only the repair orders relevant to the current diagnostic trouble codes.",
+          "correct": false,
+          "explanation": "Asking the model to ignore most of its input is an aspiration, not a mechanism: the tokens are still processed and still billed, so the cost increase is untouched and the crowding that degraded accuracy remains. Context curation belongs in the retrieval step that assembles the request, not in a sentence appended to it.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    }
+  ]
+}

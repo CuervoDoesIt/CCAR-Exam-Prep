@@ -229,6 +229,16 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 .option.runner-up .expl-verdict { color: var(--amber); }
 .pal-case-start { margin-left: 14px; }
 
+/* Multiple-response ("select TWO") items */
+.select-hint {
+  display: inline-block; margin: -8px 0 14px; padding: 4px 10px; border-radius: 999px;
+  background: #24344f; border: 1px solid var(--blue); color: #cfe0ff;
+  font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em;
+}
+/* Started but incomplete — kept visually distinct from answered so the palette
+   never implies a select-two question is done after a single pick. */
+.pal-partial { background: #3a3320; color: #ffce8a; border-color: #c07820; }
+
 @media (max-width: 640px) {
   .score-hero { flex-direction: column; gap: 10px; text-align: center; }
   .exam-header { flex-direction: column; align-items: flex-start; }

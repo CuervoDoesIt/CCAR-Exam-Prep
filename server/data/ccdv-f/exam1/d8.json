@@ -1,0 +1,220 @@
+{
+  "examId": "ccdv-f-exam1",
+  "domainId": "D8",
+  "domainName": "Tools and MCPs",
+  "questions": [
+    {
+      "id": "V1-D8-01",
+      "question": "An insurance claims service sends a Messages request with a get_policy tool. The response comes back with \"stop_reason\": \"tool_use\" and a block {\"type\":\"tool_use\",\"id\":\"toolu_01X9\",\"name\":\"get_policy\",\"input\":{\"policy_id\":\"P-4471\"}}. The developer runs the lookup and gets a JSON record. What must the next request append to messages?",
+      "options": [
+        {
+          "key": "A",
+          "text": "An assistant message whose content is a tool_result block carrying the record, since the application is continuing Claude's own turn.",
+          "correct": false,
+          "explanation": "The Claude API integrates tools into the ordinary user/assistant structure: assistant messages carry tool_use blocks, and user messages carry tool_result blocks. Putting a tool_result in an assistant message inverts that contract and is rejected.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "B",
+          "text": "A user message whose content starts with {\"type\":\"tool_result\",\"tool_use_id\":\"toolu_01X9\",\"content\":\"...\"}.",
+          "correct": true,
+          "explanation": "The documented round trip is to reply with a user-role message containing a tool_result block whose tool_use_id echoes the id from the tool_use block. That id is what matches the result to the call, and the result must immediately follow the assistant's tool use message.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "A message with role \"tool\" whose name field is set to \"get_policy\" and whose content is the record.",
+          "correct": false,
+          "explanation": "A dedicated tool role exists in some other vendors' APIs but not in the Claude API, which has only user and assistant roles. Results travel as tool_result content blocks inside a user message.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "A plain user text message describing the policy record in prose, because Claude parses the values either way and the id is only for logging.",
+          "correct": false,
+          "explanation": "Leaving a tool_use block unanswered produces the 400 error about tool_use ids found without tool_result blocks immediately after. The tool_use_id is a required correlation field, not a log annotation, and matters especially when several calls are outstanding.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D8-02",
+      "question": "A B2B SaaS billing agent exposes five read tools plus send_invoice. During a read-only \"audit mode\" the product team wants send_invoice unavailable while the read tools stay callable. An engineer proposes adding \"tool_choice\": {\"type\": \"none\"} to audit-mode requests. Evaluate the proposal.",
+      "options": [
+        {
+          "key": "A",
+          "text": "It works as intended, because none only suppresses tools whose schema declares side effects and leaves read tools reachable.",
+          "correct": false,
+          "explanation": "The API has no notion of a tool declaring side effects; nothing in a tool definition marks it as a write. tool_choice operates on the whole tools array, not on individual tools' semantics.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "B",
+          "text": "Almost right: change it to {\"type\": \"none\", \"name\": \"send_invoice\"} so the exclusion targets one named tool.",
+          "correct": false,
+          "explanation": "Only the tool type of tool_choice accepts a name field, and it forces that tool rather than excluding it. There is no per-tool exclusion form of tool_choice, so this request shape is invalid.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "Use {\"type\": \"any\"} instead, and add a sentence to send_invoice's description telling Claude that it must never be called during an audit-mode conversation.",
+          "correct": false,
+          "explanation": "any forces a tool call without constraining which tool, so it increases rather than decreases the chance of an invoice being sent. Descriptions influence selection but are not an access control.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "D",
+          "text": "It backfires: none prevents Claude from using any tool at all. Omit send_invoice from the tools array on audit-mode requests and leave tool_choice at auto.",
+          "correct": true,
+          "explanation": "The documented meaning of none is that Claude is prevented from using any tools, so the five read tools would go dark too. Availability is controlled by what you put in the tools array on that request; tool_choice only governs whether and how strongly a call is required.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D8-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A fintech team uses Claude Code. They want their repository's ledger MCP server configured so every engineer gets it automatically on clone, and one developer separately wants a personal scratch server available in all of her own projects. Which TWO statements about MCP configuration are correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Project-scoped MCP servers are declared in .claude/mcp.json at the repository root.",
+          "correct": false,
+          "explanation": "There is no .claude/mcp.json. The .claude directory holds Claude Code settings, commands, and agents; the project MCP file lives at the repository root as .mcp.json, one level above .claude.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "B",
+          "text": "Project-scoped servers are declared in .mcp.json at the repository root, under an mcpServers object, and that file is checked into version control for the team.",
+          "correct": true,
+          "explanation": "Project scope is exactly the documented mechanism for sharing servers: claude mcp add --scope project writes an mcpServers entry into .mcp.json at the project root, and the file is committed so teammates get it on clone. Claude Code still asks each user to approve project servers before they run.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "C",
+          "text": "Adding an mcpServers block to .claude/settings.json is the supported way to share servers with the whole team.",
+          "correct": false,
+          "explanation": "settings.json governs Claude Code behaviour such as permissions, hooks, and environment, and is not where MCP servers are defined. Mixing the two is a common misconception; server definitions belong in .mcp.json or the user-level configuration.",
+          "citation": { "title": "Claude Code settings", "url": "https://code.claude.com/docs/en/settings" }
+        },
+        {
+          "key": "D",
+          "text": "Documenting each server's command and URL under an \"## MCP Servers\" heading in CLAUDE.md registers it, because project memory is loaded into every session before the first turn.",
+          "correct": false,
+          "explanation": "CLAUDE.md is prose context injected into the model's prompt; it cannot launch a subprocess or open an HTTP transport. Server registration is configuration read by the client, not instructions read by the model.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "E",
+          "text": "Running claude mcp add --scope user stores the server in ~/.claude.json, making it available in all of that developer's projects.",
+          "correct": true,
+          "explanation": "User scope is the documented answer for a personal server that should follow you between repositories: it is stored in ~/.claude.json and loads in every project. It stays private to that machine and is never shared through version control.",
+          "citation": { "title": "Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D8-04",
+      "question": "A travel platform's agent receives one assistant turn containing three tool_use blocks with ids toolu_01, toolu_02, and toolu_03 for three independent read-only lookups. The application runs them concurrently and all three succeed. How should the results be sent back?",
+      "options": [
+        {
+          "key": "A",
+          "text": "One user message containing three tool_result blocks, each keyed to its tool_use_id, placed before any text content.",
+          "correct": true,
+          "explanation": "The docs state that you return one tool_result for each tool_use block, all together in the next user message, matched by tool_use_id. Every tool_result must also precede any text block in that message, or the request fails with a 400.",
+          "citation": { "title": "Parallel tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "B",
+          "text": "Three consecutive user messages, one tool_result each, sent in the order Claude emitted the calls so the model can process them one at a time.",
+          "correct": false,
+          "explanation": "Splitting results across turns leaves tool_use ids unanswered in the first user message and produces the missing-tool_result error. The protocol expects all outstanding results in the single user message that immediately follows the assistant turn.",
+          "citation": { "title": "Parallel tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "C",
+          "text": "One user message with a single tool_result that concatenates all three outputs, reusing toolu_01 as the tool_use_id.",
+          "correct": false,
+          "explanation": "Each tool_use id needs its own tool_result; one merged block leaves toolu_02 and toolu_03 unanswered and destroys the mapping between call and output. Claude then cannot tell which payload answers which request.",
+          "citation": { "title": "Parallel tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "D",
+          "text": "One user message that opens with a text block summarising what ran, followed by the three tool_result blocks.",
+          "correct": false,
+          "explanation": "Text is allowed in that user message, but only after all tool_result blocks. Leading with text is the classic cause of the error \"tool_use ids were found without tool_result blocks immediately after\".",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D8-05",
+      "question": "The same travel platform later finds that its seat-hold and payment tools share mutable state, so it wants Claude to make at most one tool call per response while still letting Claude answer in plain text when no tool is needed. Which request change achieves this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a top-level \"disable_parallel_tool_use\": true field alongside the tools array in the request body.",
+          "correct": false,
+          "explanation": "The docs are explicit that this flag is not a top-level request parameter. Sending it at the top level is an unrecognized field rather than a working control, so parallel calls keep happening.",
+          "citation": { "title": "Parallel tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "B",
+          "text": "Set \"parallel_tool_calls\": false on each individual tool definition next to name and input_schema.",
+          "correct": false,
+          "explanation": "parallel_tool_calls is not a field in the Claude API's tool definition, which accepts name, description, input_schema and a documented set of optional properties. Parallelism is a request-level behaviour, not a per-tool one.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "Set \"tool_choice\": {\"type\": \"auto\", \"disable_parallel_tool_use\": true}.",
+          "correct": true,
+          "explanation": "The flag lives inside the tool_choice object, and with type auto it means Claude calls at most one tool per response while remaining free to answer in text instead. That matches the requirement of serializing stateful tools without forcing a call.",
+          "citation": { "title": "Parallel tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use" }
+        },
+        {
+          "key": "D",
+          "text": "Set \"tool_choice\": {\"type\": \"tool\", \"name\": \"hold_seat\"} so only one named tool can be invoked on any turn.",
+          "correct": false,
+          "explanation": "The tool type forces that specific tool on every turn, which removes the model's ability to answer in text or to pick payment when that is what is needed. It constrains which tool, not how many, and is the wrong lever for this problem.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D8-06",
+      "question": "A logistics agent ships three tools named lookup, lookup2, and search_v2. Each has a one-line description like \"looks things up\" and a single parameter called id. Offline evals show Claude picks the wrong tool on 40% of trajectories. Which change should the team make first?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send every request with \"tool_choice\": {\"type\": \"any\"} so Claude is forced to commit to a tool instead of hesitating between the three.",
+          "correct": false,
+          "explanation": "any guarantees that some tool is called but does nothing to make the right one obvious among lookalikes. Forcing calls against an ambiguous tool set simply produces more confident wrong calls.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "B",
+          "text": "Give each tool a 3-4 sentence description covering what it does and when not to use it, rename id to shipment_id, and namespace the names by service.",
+          "correct": true,
+          "explanation": "Anthropic calls detailed descriptions by far the most important factor in tool performance, recommending at least three to four sentences that state when a tool should and should not be used. Unambiguous parameter names such as shipment_id over id, plus service prefixes on names, remove the remaining selection ambiguity.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "Raise max_tokens substantially so the model has more room to reason about which of the three tools applies before emitting a call.",
+          "correct": false,
+          "explanation": "max_tokens caps output length and cannot resolve an underdetermined choice; if a human engineer cannot say which of three tools applies, neither can the agent. The fix belongs in the tool definitions, not the decoding budget.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Drop the tools entirely and preload all three underlying data sets into the system prompt on every turn, so the model never has to make a selection decision at all.",
+          "correct": false,
+          "explanation": "This trades a selection problem for a context problem, spending tokens on data the task may not need and going stale between turns. It also puts third-party content into the system prompt, the channel that should carry only your own trusted instructions.",
+          "citation": { "title": "Writing effective tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    }
+  ]
+}

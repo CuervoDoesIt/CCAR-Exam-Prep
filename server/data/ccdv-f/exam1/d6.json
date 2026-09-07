@@ -1,0 +1,220 @@
+{
+  "examId": "ccdv-f-exam1",
+  "domainId": "D6",
+  "domainName": "Prompt and Context Engineering",
+  "questions": [
+    {
+      "id": "V1-D6-01",
+      "question": "During code review of an HR platform's Claude integration, a reviewer sees the request built as messages: [{\"role\": \"system\", \"content\": \"You are an HR policy assistant...\"}, {\"role\": \"user\", ...}] with no other top-level fields. What should the reviewer say?",
+      "options": [
+        {
+          "key": "A",
+          "text": "It works but wastes tokens, because a system-role message is re-tokenized on every turn while the top-level system parameter is cached automatically by the API.",
+          "correct": false,
+          "explanation": "The top-level system parameter is not cached automatically; caching requires an explicit cache_control breakpoint, or the top-level automatic-caching form. The real objection is structural, not a token-efficiency nuance.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Move the instructions to the top-level system parameter; there is no \"system\" role for input messages in the Messages API.",
+          "correct": true,
+          "explanation": "The Messages API reference states directly that if you want a system prompt you use the top-level system parameter, because there is no \"system\" role for input messages. The parameter accepts either a plain string or an array of text blocks, which is what lets you attach a cache breakpoint to it.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages" }
+        },
+        {
+          "key": "C",
+          "text": "Keep the message but move it to the end of the messages array, so the persona instructions are the most recent thing the model reads before generating.",
+          "correct": false,
+          "explanation": "Recency ordering does not rescue an unsupported construction, and persona and role instructions belong in the system parameter regardless of position. Anthropic's guidance is that setting a role in the system prompt is what focuses Claude's behavior and tone.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Convert it into the first user message instead, since instructions only influence behavior when they arrive in a user turn that the model must respond to.",
+          "correct": false,
+          "explanation": "Instructions do not need to sit in a user turn to take effect; the system parameter exists precisely to carry standing instructions across the whole conversation. Folding a persona into a user message also mixes durable configuration with per-request content.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D6-02",
+      "question": "A logistics team's shipment-extraction service ends every request with a prefilled assistant turn containing the characters {\" so Claude opens with a JSON object. After pinning a Claude 4.6 model, those requests start returning 400 errors. What is the documented replacement for this use of prefill?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the {\" characters into stop_sequences, which makes the model begin its response with that string rather than halt when it produces it.",
+          "correct": false,
+          "explanation": "stop_sequences end generation when Claude emits one of the listed strings; they never force a response to start with anything. Using them this way would truncate the reply at the first brace instead of shaping it.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Copy the prefill text verbatim into the top-level system parameter, which reproduces prefill semantics on models that no longer accept a prefilled assistant turn.",
+          "correct": false,
+          "explanation": "A system prompt is an instruction, not a partial completion, so pasting {\" there constrains nothing. Where an instruction is the right migration, Anthropic's example is a directive such as \"Respond directly without preamble\", not a fragment of the intended output.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Append the same fragment as a final user message, because the restriction applies to assistant-role content anywhere in the conversation and user turns are exempt.",
+          "correct": false,
+          "explanation": "The premise misstates the rule: only a prefilled assistant message on the last turn is rejected, and adding assistant messages elsewhere in the conversation is unaffected. A stray {\" in the user turn is just confusing input with no formatting power.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Use structured outputs: pass output_config.format with type \"json_schema\" and the schema the extraction must satisfy.",
+          "correct": true,
+          "explanation": "Prefilled responses on the last assistant turn are unsupported from Claude 4.6 onward, and the documented migration for format-forcing prefills is the structured outputs feature, which constrains responses to a given JSON schema. Anthropic also notes that current models follow a described output structure reliably when simply told to, so a plain instruction plus retries is a valid lighter-weight fallback.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D6-03",
+      "question": "A due-diligence tool sends four supplier contracts totalling about 60,000 tokens in one request. The prompt currently opens with \"Extract every termination clause\" and then appends the contract text as one undifferentiated blob. Extractions routinely miss clauses from the later contracts. Which change follows Anthropic's long-context guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put the contracts near the top, above the query and instructions, and wrap each in document tags with document_content and source subtags.",
+          "correct": true,
+          "explanation": "For inputs of 20k tokens or more, Anthropic advises placing longform data at the top, above the query, instructions, and examples, noting that queries at the end improved response quality by up to 30 percent in tests with complex multidocument inputs. Wrapping each document with source and content subtags also gives the model unambiguous boundaries to cite and reason over.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Repeat the extraction instruction between each contract so the task stays fresh in the model's attention as it reads through the material.",
+          "correct": false,
+          "explanation": "Interleaving copies of the instruction adds tokens and blurs the boundary between instructions and source material, which is the ambiguity XML structuring exists to remove. The documented ordering is documents first, then a single query at the end.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Split the work into four separate requests, one contract each, because a single request cannot reliably reason across multiple documents in one context window.",
+          "correct": false,
+          "explanation": "Anthropic's long-context guidance is written specifically for multidocument prompts, so the premise is false. Splitting also destroys cross-contract comparisons, which is often the point of a due-diligence pass.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Leave the ordering alone and move the extraction instruction into the top-level system parameter, since system content receives more attention than message content.",
+          "correct": false,
+          "explanation": "The system parameter is the right home for standing behavior, but there is no documented attention premium that offsets bad long-context ordering. The measured effect here comes from placing the long documents ahead of the query, not from which field the query lives in.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D6-04",
+      "question": "An analytics team runs on a model with adaptive thinking. Their prompt instructs Claude to \"work step by step inside <scratchpad> tags before giving the answer,\" and the application strips the scratchpad before display. A reviewer asks how this relates to the model's thinking feature. Which statement is accurate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The scratchpad instruction is what activates thinking; without a prompt like it, an adaptive-thinking model would never emit a thinking content block at all.",
+          "correct": false,
+          "explanation": "Adaptive thinking is governed by the thinking parameter and by effort plus query complexity, not by wording in the prompt. Prompting can steer how often Claude thinks, but it is not the switch that turns the feature on.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "B",
+          "text": "They are one mechanism under two names, so the scratchpad reasoning is returned inside thinking blocks and billed at input token rates like the rest of the prompt.",
+          "correct": false,
+          "explanation": "Prompted scratchpad reasoning arrives as ordinary text blocks, and genuine thinking blocks are a distinct content type. Either way the tokens Claude generates are billed as output, not input, so the pricing claim is wrong as well.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Chain-of-thought prompting yields ordinary text the caller must strip, whereas thinking is a model feature returning thinking blocks steered by effort.",
+          "correct": true,
+          "explanation": "The distinction is where the reasoning lives and who controls it: a scratchpad is content you asked for and must parse out yourself, while thinking blocks are produced by the thinking configuration and calibrated by the effort parameter and query complexity. Recognising which one you are using determines whether you tune a prompt or tune a parameter.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Prompted reasoning is incompatible with the thinking feature and the combination returns a 400 error, so the scratchpad instruction has to be removed before the model will respond.",
+          "correct": false,
+          "explanation": "There is no such incompatibility; Anthropic even suggests putting thinking tags inside few-shot examples so Claude generalises the reasoning style into its own thinking. The redundancy may waste tokens, but it is a tuning question, not an API error.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D6-05",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A DevOps agent runs unattended for hours across hundreds of tool calls. Engineers notice it forgets decisions made early in the run, and long sessions eventually hit the context limit. Which TWO techniques does Anthropic's context-engineering guidance recommend for this situation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Compaction: summarize the conversation so far and continue from that summary, dropping the superseded turns.",
+          "correct": true,
+          "explanation": "Compaction summarizes the context and reinitiates the window from the summary, which is what lets a run continue past the limit without losing key decisions. Server-side compaction implements this by emitting a compaction block and automatically dropping all content prior to it on later requests.",
+          "citation": { "title": "Compaction", "url": "https://platform.claude.com/docs/en/build-with-claude/compaction" }
+        },
+        {
+          "key": "B",
+          "text": "Raise max_tokens to the model's maximum so that more of the run's history fits inside the available context window.",
+          "correct": false,
+          "explanation": "max_tokens caps output for a single turn; it does not enlarge the context window or affect how much history is retained. Raising it changes nothing about recall over a long run.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "C",
+          "text": "Preload every runbook, dashboard export, and log file at session start so the agent never has to fetch anything mid-run.",
+          "correct": false,
+          "explanation": "This is the failure mode the guidance warns about: as token count grows, recall degrades, an effect known as context rot. Anthropic's rule is the smallest possible set of high-signal tokens, not maximal stuffing.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Just-in-time retrieval: hold lightweight identifiers in context and load the underlying data at runtime through tools.",
+          "correct": true,
+          "explanation": "Rather than pre-loading everything, agents can keep lightweight references and dynamically load data into context at runtime using tools. That keeps the working set small and high-signal, which directly counteracts the recall decay that comes with a bloated window.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "E",
+          "text": "Attach a long-context beta header to extend the window past the model's default, which is the supported route to a larger working memory.",
+          "correct": false,
+          "explanation": "On every model with a 1M-token context window, 1M is the default and no beta header is required. More window would not fix the problem anyway, since accuracy and recall degrade as token count grows regardless of the ceiling.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D6-06",
+      "question": "A SaaS support-triage prompt describes twelve ticket categories in prose paragraphs. Accuracy on ambiguous tickets is poor and the label format drifts between runs. Which change best matches Anthropic's guidance on using examples?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add one flawless worked example of the highest-volume category, so the model has a single unambiguous template to imitate on every ticket it sees.",
+          "correct": false,
+          "explanation": "One example is too few and too narrow: Anthropic recommends three to five, and warns that examples must be diverse enough that Claude does not pick up unintended patterns. A single high-volume case invites the model to over-apply that category.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Relocate the category descriptions into the system parameter and set output_config.effort to \"max\", which reliably eliminates output format drift.",
+          "correct": false,
+          "explanation": "Effort scales how many tokens Claude spends, not how closely it matches a format, and max effort mainly adds cost on a routine classification task. Format adherence comes from examples, schema-constrained structured outputs, or an enum-typed tool.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "C",
+          "text": "Pass the twelve category names as the stop_sequences array so generation can only terminate on a valid label and invalid ones become impossible.",
+          "correct": false,
+          "explanation": "stop_sequences halt generation when a listed string appears; they do not restrict the vocabulary or validate a label. Claude could still emit an invented category and simply not stop.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "D",
+          "text": "Add three to five diverse examples covering edge cases, each wrapped in example tags inside an enclosing examples block.",
+          "correct": true,
+          "explanation": "Examples are among the most reliable ways to steer output format, tone, and structure, and the documented recipe is three to five that are relevant, diverse, and structurally tagged. Wrapping each in an example tag inside an examples block keeps Claude from confusing demonstrations with instructions.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    }
+  ]
+}

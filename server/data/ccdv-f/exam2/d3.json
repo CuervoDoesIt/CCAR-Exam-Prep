@@ -1,0 +1,75 @@
+{
+  "examId": "ccdv-f-exam2",
+  "domainId": "D3",
+  "domainName": "Claude Code",
+  "questions": [
+    {
+      "id": "V2-D3-01",
+      "question": "A payments team requires that git push --force is never executed from Claude Code, whatever Claude decides. A developer configured a PostToolUse hook with matcher \"Bash\" that inspects the command and exits 2, yet force pushes still reach the remote. Which configuration actually blocks the call?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the PostToolUse hook but emit permissionDecision \"deny\" in its JSON output instead of exiting with code 2.",
+          "correct": false,
+          "explanation": "PostToolUse fires after the tool has already executed, so no return value can undo the push. permissionDecision is a PreToolUse field precisely because that is the event where the call has not run yet.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://code.claude.com/docs/en/hooks" }
+        },
+        {
+          "key": "B",
+          "text": "Move the hook to PreToolUse with matcher \"Bash\" and if \"Bash(git push *)\"; exit 2 blocks the call there, as does permissionDecision \"deny\".",
+          "correct": true,
+          "explanation": "PreToolUse is the event that runs before a tool call, and on it exit code 2 blocks the call whether or not JSON is printed. Returning permissionDecision \"deny\" with exit 0 blocks it declaratively, and the optional if field narrows the matcher to the specific command pattern.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://code.claude.com/docs/en/hooks" }
+        },
+        {
+          "key": "C",
+          "text": "Write \"never force push\" into the project CLAUDE.md, which Claude Code loads into context at the start of every session in every checkout of the repository.",
+          "correct": false,
+          "explanation": "CLAUDE.md is treated as context rather than enforced configuration, so it steers Claude without guaranteeing compliance. The documentation points directly at a PreToolUse hook when an action must be blocked regardless of what Claude decides.",
+          "citation": { "title": "How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "D",
+          "text": "Add a UserPromptSubmit hook that scans the submitted prompt for \"push --force\" and exits 2.",
+          "correct": false,
+          "explanation": "UserPromptSubmit fires once per turn on what the user typed, and the user rarely types the command that Claude later composes. Gating the prompt leaves the actual Bash tool call unguarded.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://code.claude.com/docs/en/hooks" }
+        }
+      ]
+    },
+    {
+      "id": "V2-D3-02",
+      "question": "A data-platform team wants a /triage command that every teammate gets from the repository checkout. Invoking it should pull the output of gh issue view for the issue number the user passes into context, and that gh call should run without a permission prompt. Which artefact does this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A committed .claude/commands/triage.md whose frontmatter sets allowed-tools: Bash(gh *) and whose body embeds !`gh issue view $ARGUMENTS`.",
+          "correct": true,
+          "explanation": "A markdown file at .claude/commands/<name>.md creates /name for anyone with the checkout, and command files support the same frontmatter and body features as skills. The !`command` syntax runs the shell command before Claude sees the content, allowed-tools pre-approves it, and $ARGUMENTS carries the issue number through.",
+          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+        },
+        {
+          "key": "B",
+          "text": "The same file placed at ~/.claude/commands/triage.md, because personal commands take precedence over project ones and are therefore the more reliable location for a shared team command.",
+          "correct": false,
+          "explanation": "Personal definitions do win a name collision, but precedence is not the requirement here: a file under the home directory belongs to one machine and never arrives with the repository. Project scope is what shares a command with the team through source control.",
+          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+        },
+        {
+          "key": "C",
+          "text": "A \"commands\" block in .claude/settings.json naming the command and the shell command it should run.",
+          "correct": false,
+          "explanation": "Settings files configure things such as permissions, hooks, and environment values; they are not where commands are declared. Inventing a key there simply leaves the setting unread and no /triage defined.",
+          "citation": { "title": "Claude Code settings", "url": "https://code.claude.com/docs/en/settings" }
+        },
+        {
+          "key": "D",
+          "text": "A \"## /triage\" section in the project CLAUDE.md listing the steps to follow when the user asks for a triage.",
+          "correct": false,
+          "explanation": "CLAUDE.md loads in every session as instructions, but it registers no invokable command, runs no shell before the turn, and pre-approves no tools. The gh call would still stop for a permission prompt.",
+          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+        }
+      ]
+    }
+  ]
+}

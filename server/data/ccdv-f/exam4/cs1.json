@@ -1,0 +1,460 @@
+{
+  "examId": "ccdv-f-exam4",
+  "caseId": "CS1",
+  "caseTitle": "Cadenzo — \"Liner Notes\" in-app music assistant",
+  "caseScenario": "Cadenzo is a music streaming service with 38 million monthly listeners across 41 markets. Its backend for AI features is `liner-notes-svc`, a Python 3.12 service built on the official `anthropic` Python SDK, deployed as an AWS ECS Fargate task set behind an ALB, streaming responses over SSE to the iOS, Android and web players. Two surfaces call it: the in-app Liner Notes panel, which answers listener questions about the currently playing track, and an internal editorial console where 60 staff curators generate and publish long-form playlist blurbs.\n\nEvery request assembles a 62,000-token prefix — Cadenzo's editorial style guide, its licensing do-not-say list, and the JSON schema for a `catalog_lookup` tool that fronts an internal gRPC catalog service. On top of that prefix the service appends the retrieved corpus passages for the specific release plus a short listener header. The build is six weeks old and was written before the team had any production load data.\n\nSince a marketing push in March the on-call channel has collected four recurring symptoms. The panel shows nothing for roughly two seconds and then paints the entire answer at once. The monthly Anthropic invoice has grown to $58,000 against a $40,000 plan. About 3% of streams stop part-way through with an error frame after partial text has already reached the device. And legal has flagged two published blurbs that asserted a release year absent from the licensed corpus. The mobile players are on a three-week App Store cadence, so the next two sprints have to ship server-side only.",
+  "caseRequirements": [
+    "R1: p95 time-to-first-token for the Liner Notes panel must be under 600 ms, and the full answer must finish streaming within 4 seconds.",
+    "R2: Total Anthropic API spend must fall to $40,000 per month or less at current traffic, with no reduction in sessions served.",
+    "R3: Every factual claim in a generated blurb about a track, artist or release date must be traceable to a specific span of the licensed corpus supplied in that request.",
+    "R4: No listener-identifying data — email address, device ID or precise location — may appear in any request sent to the Anthropic API; only the opaque `listener_hash` is permitted.",
+    "R5: Anything shipping in the next two sprints must be server-side only; the iOS, Android and web players cannot be changed before the next three-week release.",
+    "R6: The `blurbs/published/` manifest in the editorial console repository must not be modifiable unless the licensing-terms checker passes, and the block must be automatic rather than a team convention."
+  ],
+  "questions": [
+    {
+      "id": "V4-CS1-01",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D1", "D5"],
+      "question": "The Liner Notes panel paints nothing for about two seconds and then renders the whole answer. `liner-notes-svc` calls `client.messages.create(...)` with no `stream` argument, waits for the completed `Message`, and serialises it into a single SSE frame. Which server-side change addresses the symptom?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Switch to `client.messages.stream(...)` and forward each `content_block_delta` carrying a `text_delta` to the SSE connection as it arrives, accumulating `input_json_delta.partial_json` fragments separately until `content_block_stop`.",
+          "correct": true,
+          "explanation": "Streaming emits `message_start`, then per-block `content_block_start` / `content_block_delta` / `content_block_stop` events, so the first `text_delta` can reach the device within a few hundred milliseconds instead of after the whole generation. Tool-call arguments arrive as `input_json_delta` fragments whose `partial_json` is not valid JSON until the block closes, so those must be buffered and parsed at `content_block_stop` rather than forwarded. That is the distinction option B never gets to make: B keeps a single blocking call, so time-to-first-token stays equal to total generation time and R1 is still missed. The SSE contract with the players is unchanged, so R5 holds.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the single non-streaming `messages.create` call but move the panel to the fastest small model in the family and cap `max_tokens` at 300, so the completed response comes back and can be painted far sooner than the two seconds listeners currently sit through.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a reasonable latency lever and it would genuinely cut wall-clock time, since a smaller model generates faster and a lower `max_tokens` bounds how long generation can run. It does not meet **R1**, though: with a non-streaming call, time-to-first-token *is* total generation time, so even a fast model returning in 1.4 s p95 is more than double the 600 ms ceiling. Capping `max_tokens` at 300 also introduces a new defect, because responses that hit the cap come back with `stop_reason: \"max_tokens\"` and are truncated mid-sentence. Streaming is what decouples first token from last token.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "Return an empty 200 immediately and have the player poll a new `/liner-notes/{id}/result` endpoint every 250 ms until the generated answer is ready to display.",
+          "correct": false,
+          "explanation": "Polling does not make the model produce its first token any sooner; it only moves the same two-second wait behind a different transport, so R1 is untouched. It also requires the iOS, Android and web players to learn a new request pattern, which R5 explicitly rules out for the next two sprints. The Messages API already supports incremental delivery natively through server-sent events, so building a polling layer adds latency and code for no benefit.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages" }
+        },
+        {
+          "key": "D",
+          "text": "Set `stream: true` on the request but continue reading the response only after the `message_stop` event has arrived, then emit the fully assembled text in one SSE frame as the service does now.",
+          "correct": false,
+          "explanation": "This turns streaming on at the wire level while discarding its only benefit: the service still blocks until the terminal `message_stop` event before writing anything to the device. Time-to-first-token is unchanged, so R1 still fails, and the change adds SSE parsing complexity for no user-visible gain. The value of streaming comes from relaying `content_block_delta` events as they arrive, not from setting the flag.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-02",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Usage reports show `cache_creation_input_tokens` of about 62,000 on nearly every request and `cache_read_input_tokens` close to zero, even though `cache_control` is set. The `system` array is ordered: listener header (containing `listener_hash` and the current timestamp), style guide, do-not-say list — with `cache_control` on the last block. What fixes the cache miss rate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise the breakpoint's time-to-live to `{\"type\": \"ephemeral\", \"ttl\": \"1h\"}` so the cached prefix survives much longer between one listener request and the next.",
+          "correct": false,
+          "explanation": "A longer TTL only helps when an identical prefix is being re-sent and the entry has expired between uses. Here the prefix is never identical twice, because a fresh timestamp sits in the first system block, so nothing is ever eligible to be read back regardless of lifetime. Paying the 1-hour write premium on a prefix that is invalidated on every request would raise the invoice rather than lower it toward R2.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Add a second `cache_control` breakpoint at the end of the style guide block, leaving the listener header and its timestamp exactly where they are at the top of the `system` array, to give the request two chances to hit a cached prefix.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Multiple breakpoints are a legitimate technique, and a build with distinct stable and semi-stable segments genuinely benefits from more than one. It does not meet **R2** here, because a cached prefix is matched from the very beginning of the request onward, and everything preceding a breakpoint is part of that prefix. With a per-request timestamp in the first system block, both breakpoints are invalidated on every call and the invoice does not move. Placement of volatile content, not the number of breakpoints, is the defect.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Move the listener header and timestamp out of `system` and into the first user message, so the cached prefix starts with static content and the breakpoint marks the end of a span that does not change.",
+          "correct": true,
+          "explanation": "Caching matches on an exact prefix assembled in a fixed order — tools, then `system`, then `messages` — so any variable content placed early poisons everything after it. Relocating the volatile listener header below the style guide and do-not-say list leaves 62,000 unchanging tokens ahead of the breakpoint, which then read back at a fraction of base input price on subsequent requests. That is precisely what option B leaves broken: B multiplies breakpoints while keeping the timestamp on top, so the prefix still differs every call and R2 is unmet. Ordering is the fix; breakpoint count is not.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Move `cache_control` onto the listener header block instead, because the first block in the `system` array is what defines the boundary of the cached prefix.",
+          "correct": false,
+          "explanation": "This inverts how breakpoints work: `cache_control` marks the *end* of the span to be cached, not its start, so putting it on the first block would cache only the listener header. That block is different on every request and is far below the model's minimum cacheable length, so no entry would ever be written or read. The 62,000 tokens the team actually wants cached would then be billed at full input price on every call.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-03",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D2", "D6"],
+      "question": "With the ordering fixed, the top 19 markets hit the cache reliably. In 22 smaller markets, requests arrive 8–20 minutes apart, so the default cache lifetime lapses and each new request rewrites the full 62,000-token prefix. Which change best serves R2 for those markets?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Schedule a synthetic keep-alive request against the same prefix every four minutes in each of the 22 sparse markets, so the five-minute window is refreshed and never lapses during quiet periods.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Cache entries are refreshed on use, so a periodic touch really does keep a prefix warm, and teams do ship this pattern. It does not meet **R2**: 22 markets pinged every four minutes is roughly 7,900 extra billed requests per day, each charging a cache read over 62,000 tokens plus a minimum output, and the scheduler must run whether or not any listener shows up. The team would be adding a standing cost line to close a cost gap. Buying a longer lifetime once per window is cheaper than buying it fifteen times an hour.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Set `cache_control: {\"type\": \"ephemeral\", \"ttl\": \"1h\"}` on the prefix breakpoint so the sparse markets read the cache instead of rewriting it.",
+          "correct": true,
+          "explanation": "The extended one-hour lifetime is designed exactly for traffic whose inter-request gaps exceed the five-minute default. A 1-hour write is billed at a higher multiple of base input price than the default write, but it is paid once per hour instead of once per request, and every intervening call is billed at the much cheaper cache-read rate. Compared with option A, this achieves the same warmth without manufacturing thousands of billable requests whose only purpose is to keep an entry alive, which is why A cannot close the R2 gap. Both entries are also refreshed on use, so busy periods extend the window for free.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Trim the prefix by dropping the do-not-say list so it falls below the model's minimum cacheable token count, avoiding any cache-write charge in the sparse markets.",
+          "correct": false,
+          "explanation": "Below the minimum cacheable length nothing is cached at all, so every token is billed at full input price on every request — strictly worse than paying a write premium once. Removing the licensing do-not-say list also strips the guardrail that keeps generated copy inside Cadenzo's licence terms, which is the opposite of what legal asked for after the flagged blurbs. Avoiding a cache-write line item is not the same as reducing spend.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Route the sparse markets through the Message Batches API, whose 50% discount more than offsets the repeated prefix writes in those regions.",
+          "correct": false,
+          "explanation": "The Batches API is asynchronous, with results typically available within an hour and a 24-hour completion window, so it cannot serve a listener staring at the Liner Notes panel. Applying it to the interactive path would abandon R1 entirely in exchange for a discount. Batch pricing is the right tool for offline generation, not for a request that has a 600 ms first-token budget.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-04",
+      "primaryDomain": "D8",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "For \"who else played on this record\", Claude returns three parallel `tool_use` blocks for `catalog_lookup`. Two gRPC calls succeed; the third times out. `liner-notes-svc` sends back a user message containing the two successful `tool_result` blocks plus a text block explaining the third failed, and the API responds 400. What is the correct continuation?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Discard the assistant turn and replay the original user message so Claude re-issues all three `catalog_lookup` calls, this time against a pre-warmed gRPC connection pool that is far less likely to time out under catalogue load.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Replaying from a known-good state is a defensible recovery strategy, and warming the connection pool does address the underlying timeout. It does not meet **R1**, though: a full replay throws away a completed generation and pays for a second one plus a second tool round trip, which pushes the panel well past its 4-second ceiling on exactly the requests that were already slow. It also re-bills the input tokens for the whole turn, working against R2. Reporting the failure back through the normal tool channel lets the existing turn finish.",
+          "citation": { "title": "Tool use with Claude", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "B",
+          "text": "Remove the timed-out `tool_use` block from the assistant message before appending the two `tool_result` blocks, so the number of requests and results lines up and the 400 goes away.",
+          "correct": false,
+          "explanation": "Rewriting the assistant turn to hide a block Claude actually emitted desynchronises the conversation from what the model produced, and on models that return signed reasoning content it can invalidate the turn outright. It also destroys the signal the model needs: it will not learn that one lookup failed, so it may answer confidently from the two partial results. Tool failures are meant to be reported, not edited out of history.",
+          "citation": { "title": "Defining and implementing tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "Return the two successful `tool_result` blocks in the user message and describe the timeout in the `system` prompt of the follow-up request so Claude knows one lookup is unavailable.",
+          "correct": false,
+          "explanation": "The 400 is caused by a missing `tool_result` for an outstanding `tool_use_id`, and nothing written into `system` satisfies that structural requirement, so the request still fails. The system prompt is also the wrong channel for per-turn state: it sits at the top of the cached prefix, so mutating it per request destroys the prompt cache the team has just spent two questions repairing. Tool outcomes belong in `tool_result` blocks keyed to their originating call.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages" }
+        },
+        {
+          "key": "D",
+          "text": "Send all three results in one user message as `tool_result` blocks, each carrying its originating `tool_use_id`, with the timed-out one marked `\"is_error\": true` and the timeout message as its content.",
+          "correct": true,
+          "explanation": "Every `tool_use` block in an assistant turn must be answered by a `tool_result` block with a matching `tool_use_id` in the immediately following user message, and that is why the current two-of-three payload is rejected. Failures are expressed in-band by setting `is_error` to true and putting the error text in the content, which lets Claude acknowledge the gap and answer from the two lookups that did return. Unlike option A, this finishes the turn already in flight rather than paying for a second full generation, so the 4-second budget in R1 survives. One extra request completes the exchange.",
+          "citation": { "title": "Defining and implementing tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-05",
+      "primaryDomain": "D7",
+      "secondaryDomains": ["D2", "D8"],
+      "question": "A privacy audit finds two R4 breaches: the listener's free-text question is forwarded verbatim and listeners sometimes paste their account email into it, and the `catalog_lookup` `input_schema` still carries an optional `device_id` property that Claude populates from the listener header. What enforces R4?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a system-prompt rule forbidding Claude from repeating email addresses or device identifiers, and run a PII scanner over every response before any SSE frame is written back to the player, suppressing the answer whenever a pattern matches.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Output scanning is worthwhile defence in depth and a system-prompt rule does reduce how often such values are echoed, so this would improve Cadenzo's posture. It does not meet **R4**, which governs what is *sent to* the Anthropic API, not what comes back: by the time a system instruction is evaluated or a response is scanned, the email and device ID have already been transmitted in the request body. A control that runs after egress cannot prevent egress. R4 requires the data never to be serialised into the request in the first place.",
+          "citation": { "title": "Reduce hallucinations and enforce guardrails", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks" }
+        },
+        {
+          "key": "B",
+          "text": "Delete `device_id` from the tool's `input_schema` and run a deterministic redaction pass over the fully serialised request body — `system`, `messages` and `tools` alike — immediately before the SDK call.",
+          "correct": true,
+          "explanation": "A model can only emit a tool argument the schema declares, so removing `device_id` from `input_schema` closes that leak at its source rather than asking the model to decline a field it has been handed. Redacting the serialised body covers the other vector, because the listener's pasted email arrives in a `messages` block that no schema governs. This sits ahead of the network call, which is the difference from option A: A inspects the response and therefore cannot satisfy R4, which is an egress rule. The opaque `listener_hash` still passes through untouched.",
+          "citation": { "title": "Defining and implementing tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "C",
+          "text": "Enable `output_config.format` with a JSON schema whose properties contain no PII fields, so the model has no structural way to return an email address or a device identifier.",
+          "correct": false,
+          "explanation": "Structured outputs constrain the shape of what the model generates; they say nothing about what the request carried into the model's context. The email would still be transmitted in the user message and the device ID in the tool arguments, so both R4 breaches remain untouched. Constraining a response schema is an output-formatting feature, not a data-egress control.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "D",
+          "text": "Insert a Claude-based classifier call that reads the listener's raw question first, identifies any personal data, and rewrites the text before the main generation request is assembled.",
+          "correct": false,
+          "explanation": "The classifier is itself an Anthropic API call, so the raw question containing the listener's email is transmitted in order to decide that it should not be transmitted — R4 is violated by the control designed to enforce it. It also adds a full extra round trip in front of a 600 ms first-token budget, which puts R1 at risk. Deterministic pattern-based redaction inside the service costs microseconds and never leaves the VPC.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-06",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "The editorial console handles four job types — blurb generation, tag cleanup, translation QA, and licensing rewrite — and today concatenates all four instruction sets into one prompt, leaving Claude to infer which applies. Curators report drifting formats and instructions bleeding between job types. Which restructuring fits the console best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a routing step: a cheap classifier call labels the job type, then dispatches to one of four specialised prompts, each with its own cached prefix and its own output schema.",
+          "correct": true,
+          "explanation": "Routing is the documented workflow for inputs that fall into distinct categories handled better in isolation, and it removes the cross-contamination directly by never showing the translation rules to a licensing rewrite. Each of the four prompts also gets a shorter, stable prefix that caches independently, which helps R2 rather than hurting it. Against option C, the decisive difference is bounded cost: routing spends one small classification call and one generation, whereas an open agent loop re-sends a growing transcript on every iteration and cannot be forecast against a $40,000 ceiling. Anthropic's guidance is to reach for the simplest structure that works.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the single combined prompt but wrap the four instruction sets in `<blurb>`, `<tags>`, `<translation>` and `<licensing>` XML sections so Claude can locate the relevant one.",
+          "correct": false,
+          "explanation": "XML sectioning genuinely improves how reliably a model can find a referenced span, so this would reduce format drift somewhat, but all four instruction sets remain in context on every call and can still bleed into each other. It also leaves every job paying input tokens for three sets of instructions it will not use, which pushes against R2. Structure inside an overloaded prompt is a smaller lever than not sending the irrelevant instructions at all.",
+          "citation": { "title": "Claude prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Expose all four jobs as tools alongside `catalog_lookup` and let Claude run an open agent loop, choosing which job to perform, calling the catalog as needed, and deciding for itself when the work is finished.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "An autonomous loop is a legitimate design and would handle genuinely open-ended editorial work that routing cannot anticipate, so it is not a naive answer. It does not meet **R2**: an agent loop re-sends the entire accumulated transcript on each iteration, so a job that takes six turns bills the growing context six times, and the number of turns is not knowable in advance. Cadenzo's four job types are known and closed, which is exactly the condition under which a fixed workflow beats an agent. Autonomy is worth paying for only when the task genuinely needs it.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Run all four instruction sets in parallel on every submission and show the curator the four candidate outputs, letting a human pick the one that matches the job.",
+          "correct": false,
+          "explanation": "This quadruples billed generations on a surface that is already over budget, which is indefensible against R2 when the job type is known before the request is even made. It also transfers the routing decision to the curator, adding review effort to a workflow the console exists to speed up. Parallelisation is valuable for genuinely independent subtasks, not for producing three outputs that will always be discarded.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-07",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D5", "D1"],
+      "question": "Now that the panel streams, about 3% of streams emit an `error` event with `\"type\": \"overloaded_error\"` after partial text has already been forwarded to the device, leaving a half-written answer the player cannot recover from. R5 blocks any player change this sprint. What should `liner-notes-svc` do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send the partial text back as a prefilled assistant turn and ask Claude to continue writing from the point where the stream was cut off.",
+          "correct": false,
+          "explanation": "Assistant prefill is not a supported technique on current Claude models and must not be built into new code; the documented ways to steer output shape are structured outputs, `output_config.format`, system-prompt instruction and XML output tags. Even setting that aside, continuing from a truncated fragment produces seam artefacts and duplicated clauses in copy that legal already reviews. A clean retry produces a coherent answer; a stitched one does not.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "B",
+          "text": "Buffer the entire generation server-side and begin writing SSE frames to the device only once `message_stop` has arrived, so a mid-stream failure can be retried invisibly before the listener ever sees a partial answer.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This does solve the stated symptom cleanly and needs no player change, which makes it genuinely tempting: the listener never sees a broken answer because nothing is shown until the generation is known to be complete. It does not meet **R1**, because buffering to `message_stop` makes time-to-first-token equal to total generation time — reinstating the exact two-second blank panel that question one was written to remove. Trading a 600 ms first-token guarantee for a 3% failure case is the wrong side of that bargain. The failure has to be handled without giving up incremental delivery.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "C",
+          "text": "Raise `max_retries` to 8 on the SDK client constructor and let the library's built-in retry logic transparently recover from the overloaded condition.",
+          "correct": false,
+          "explanation": "SDK automatic retries apply to request-level failures such as connection errors, 429s and 5xx responses received before a stream is established. Once the API has returned 200 and events are flowing, an `error` event arriving mid-stream is delivered to the application, and reconnecting is the caller's responsibility. Raising `max_retries` therefore changes nothing for this 3%, and a value of 8 risks amplifying load during the overload conditions that caused it.",
+          "citation": { "title": "Errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "D",
+          "text": "Catch the `error` event in the stream handler, emit the sentinel SSE frame the players already render as a retry state, and reissue the request once with jitter inside the remaining 4-second budget.",
+          "correct": true,
+          "explanation": "`overloaded_error` is a transient server-side condition and is retryable, and handling it in the stream consumer is where the event is actually surfaced. Reusing a sentinel frame the shipped players already understand keeps the fix inside R5 while giving the listener a coherent state instead of a truncated sentence, and bounding the single retry with jitter keeps the turn inside the 4-second ceiling in R1. That is what option B gives up: B guarantees completeness by destroying time-to-first-token, whereas this keeps both. If the budget is exhausted the service falls back to a stored editorial blurb.",
+          "citation": { "title": "Streaming Messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-08",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D3", "D6"],
+      "question": "Legal has flagged two blurbs asserting a release year absent from the licensed corpus. Before the sourcing changes reach all 60 curators, how should the team establish that generated blurbs actually satisfy R3?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Roll the change out to 10% of curators for two weeks and track the console's thumbs-down rate, promoting to everyone once that rate stays below 1% across the cohort and rolling back automatically if legal flags another blurb.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "A canary with real users on real catalogue data surfaces problems synthetic sets miss, and thumbs-down telemetry is worth keeping. It does not meet **R3**, which demands that *every* claim be traceable: a rate measured across a cohort says nothing about any individual blurb, and curators only flag errors they happen to recognise, so an invented 1974 reissue date passes silently. It also produces no per-item verdict, so it cannot feed the automatic publication gate R6 requires. Population telemetry and an item-level guarantee are different instruments.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Have three senior curators review the next 40 blurbs and sign off before the change is enabled for the wider editorial team.",
+          "correct": false,
+          "explanation": "A one-off human review gives a snapshot rather than a repeatable measurement, so the next prompt or model change starts from zero evidence again. Forty hand-checked items are also far too few to detect a defect occurring in low single-digit percentages, which is the rate legal is worried about. Expert review is valuable for calibrating a grader, not for serving as the grader.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Build a held-out set of 400 blurbs paired with their source corpora and a programmatic grader that fails any blurb naming an entity or date absent from the supplied spans, then run it in CI against a fixed pass threshold.",
+          "correct": true,
+          "explanation": "R3 is a checkable property — every claim maps to a supplied span — which makes it gradeable by code rather than by opinion, and a held-out set large enough to see a 3% defect rate gives the statistic legal is asking for. Running it in CI on a fixed threshold turns the guarantee into a regression test that survives the next prompt or model change. Option A cannot do this: it measures how often curators complain, not whether any given blurb is sourced, and yields nothing the R6 gate can act on. The same grader can then be wired into that gate.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Compare `usage.output_tokens_details.thinking_tokens` before and after the change, treating an increase as evidence that the model is reasoning more carefully about its sources.",
+          "correct": false,
+          "explanation": "That field does report thinking-token consumption accurately, but reasoning volume is not a measure of factual grounding — a model can think at length and still assert an unsupported release year. Optimising a proxy metric also invites the wrong change, since raising effort raises cost against R2 with no demonstrated accuracy gain. R3 needs an outcome measure comparing claims against source spans.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-09",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D4", "D6"],
+      "question": "The grader from the previous decision needs a machine-readable link from each sentence of a blurb to the corpus passage that supports it, and the console wants to show curators that link inline. Which request-side change gives them span-level provenance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send each corpus passage as a `document` content block with `citations: {\"enabled\": true}`, then read the `citations` array attached to each returned text block, using `cited_text` and `char_location`.",
+          "correct": true,
+          "explanation": "With citations enabled, Claude returns text blocks annotated with the exact document index and character range that supports them, so the mapping is produced by the API rather than asserted in prose. `cited_text` is not billed as output tokens, which keeps the feature affordable against R2 while giving the grader something it can verify mechanically against the supplied spans. This is where option B falls short: B's markers are ordinary generated text, so they can point confidently at the wrong passage and still validate. The console can render `char_location` as an inline highlight with no player change.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        },
+        {
+          "key": "B",
+          "text": "Instruct Claude in the system prompt to append a `[source: N]` marker after each factual sentence, then verify in post-processing that every referenced N corresponds to a passage that was actually supplied in the request.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a widely shipped pattern, needs no new API surface, and its post-processing check does catch the worst case of a marker pointing at a passage that does not exist. It does not meet **R3**, because the marker is model-generated prose: verifying that passage 4 was supplied proves nothing about whether the sentence it labels came from passage 4. The unsupported release year would carry a well-formed `[source: 2]` and pass the check unchanged. R3 requires a provenance link the model cannot fabricate.",
+          "citation": { "title": "Citations", "url": "https://platform.claude.com/docs/en/build-with-claude/citations" }
+        },
+        {
+          "key": "C",
+          "text": "Enable `output_config.format` with a JSON schema requiring a `sources` array of passage identifiers alongside the blurb body, so every response is structurally obliged to declare its sources.",
+          "correct": false,
+          "explanation": "Structured outputs guarantee the response conforms to the schema, not that its contents are true, so the model can emit a syntactically perfect `sources` array that does not correspond to where the text came from. It is also coarser than R3 needs: a document-level list gives no character range, so neither the grader nor the console can point at the supporting sentence. Schema conformance and factual provenance are separate properties.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "D",
+          "text": "After generation, embed each blurb sentence and each corpus passage with the Embeddings API and display the nearest passage beneath every sentence in the console.",
+          "correct": false,
+          "explanation": "Nearest-neighbour similarity finds the passage a sentence most resembles, which is not the same as the passage it was derived from; a fabricated release year will still match the release's passage most closely and appear supported. The approach also adds a second post-processing service and its latency without producing an authoritative link. R3 asks for provenance, and similarity search is a retrieval tool, not a provenance record.",
+          "citation": { "title": "Embeddings", "url": "https://platform.claude.com/docs/en/build-with-claude/embeddings" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-10",
+      "primaryDomain": "D5",
+      "secondaryDomains": ["D2", "D1"],
+      "question": "Caching and routing have brought spend from $58,000 to $47,000. Instrumentation shows the panel is 91% of calls — short factual questions answered from the cached prefix plus a few hundred tokens of corpus — while the console is 9% and long-form. Which change closes the remaining $7,000 without breaking R1?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Lower `max_tokens` on the panel from 1,024 to 256 so each answer is capped and output spend drops by roughly three quarters across 91% of traffic.",
+          "correct": false,
+          "explanation": "`max_tokens` is a ceiling, not a target: panel answers are already short, so most requests never approach 1,024 and lowering the cap saves nothing on them. What it does change is the tail, where longer answers now terminate with `stop_reason: \"max_tokens\"` and reach the listener truncated mid-sentence. The saving is illusory and the regression is real.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the frontier model on both surfaces and set `output_config: { effort: \"low\" }` so the model spends markedly fewer thinking tokens on the panel's short factual questions.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Lowering effort is a real and correctly specified lever — it is nested under `output_config` and defaults to `\"high\"` — and it does reduce thinking tokens on questions that do not need deliberation. It does not meet **R2** on its own: the panel's bill is dominated by input, namely cached-prefix reads plus fresh corpus passages on every call, and thinking is a small slice of a small output. Trimming a minority of a minority cannot recover $7,000. The per-token price of the model handling 91% of traffic is the term that actually matters.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Move the editorial console onto the Message Batches API to collect the 50% batch discount on its long-form generations.",
+          "correct": false,
+          "explanation": "The console is a human-in-the-loop tool where a curator waits for a draft, and batch results are typically available within an hour with a 24-hour window, so this would make the tool unusable. It is also aimed at the wrong 9%: even a full 50% cut on the smaller surface leaves most of the $7,000 gap open. Batch pricing suits offline generation, which the console is not.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "Route the panel to the smallest model in the family, keeping the cached prefix and corpus passages intact, and leave the long-form console path on the larger model.",
+          "correct": true,
+          "explanation": "Choosing per-surface is the documented approach: the panel answers short, well-scoped questions from supplied context, which is the profile the smallest model handles at a fraction of the per-token price, while the console's long-form judgement stays on the larger one. Because the panel is 91% of calls, the change moves the dominant cost term rather than trimming its edges — the reason option B cannot reach $40,000 despite being a correctly used parameter. It also helps R1, since the smaller model reaches first token sooner. The eval set from the earlier decision gates the swap.",
+          "citation": { "title": "Choosing a model", "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-11",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D7", "D4"],
+      "question": "The editorial console repository is developed with Claude Code, and last month an agent-assisted refactor wrote directly into `blurbs/published/` without the licensing checker ever running. Which change satisfies R6?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Document the rule in `CLAUDE.md` and add a `/publish` slash command under `.claude/commands/` that runs the licensing checker first and only then writes the manifest entry.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is good practice and genuinely raises the floor: `CLAUDE.md` is loaded into context automatically, and a `/publish` command makes the correct path the easy path. It does not meet **R6**, which requires the block to be automatic rather than conventional — `CLAUDE.md` is instruction the model may deprioritise, and a slash command only fires when someone invokes it. A direct `Edit` on `blurbs/published/`, exactly the refactor that caused last month's incident, bypasses both. R6 needs an enforcement point on the write itself.",
+          "citation": { "title": "Manage Claude's memory", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Register a `PreToolUse` hook in `.claude/settings.json` matching `Edit|Write` that runs the checker against the target path and exits with status 2 to deny the call when the check fails.",
+          "correct": true,
+          "explanation": "`PreToolUse` hooks fire before a tool call is executed, and exiting with status 2 blocks the call outright while feeding stderr back to Claude as the reason. Because it is registered in settings and matched on the tool name, it applies to every `Edit` and `Write` regardless of how the session reached that point — the deterministic enforcement R6 asks for. That is the gap in option A: a slash command and a memory file guide behaviour, whereas a hook is shell code the model cannot talk its way past. The same checker binary the CI eval calls can be reused here.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://code.claude.com/docs/en/hooks" }
+        },
+        {
+          "key": "C",
+          "text": "Register a `PostToolUse` hook that runs the licensing checker after each write and prints a clear warning into the transcript whenever the manifest entry fails the check.",
+          "correct": false,
+          "explanation": "`PostToolUse` runs after the tool call has already completed, so the non-compliant manifest entry exists on disk by the time the warning appears. R6 requires that the manifest not be modifiable unless the check passes, which is a pre-condition, not a notification. Post-hoc hooks are the right choice for formatting or logging, not for a gate.",
+          "citation": { "title": "Claude Code hooks reference", "url": "https://code.claude.com/docs/en/hooks" }
+        },
+        {
+          "key": "D",
+          "text": "Define a `licensing-reviewer` subagent in `.claude/agents/` with its own tool allowlist and instruct the main session to consult it before touching the published manifest.",
+          "correct": false,
+          "explanation": "Subagents isolate context and specialise behaviour, which is useful for review work, but consulting one is still a modelled decision rather than an enforced control. Nothing stops the main session from editing the manifest without delegating, so the failure mode from last month recurs. R6 calls for a mechanism that fires on the write, not for a reviewer that must be invited.",
+          "citation": { "title": "Subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        }
+      ]
+    },
+    {
+      "id": "V4-CS1-12",
+      "primaryDomain": "D1",
+      "secondaryDomains": ["D2", "D5"],
+      "question": "Marketing commits to \"Cadenzo Rewind\": one 200-word personalised recap for each of 38 million listeners, produced during a ten-day window ending 1 December, drawing on listening history already in the warehouse. It must not degrade the live panel. How should the pipeline be built?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Reuse the live streaming path at high concurrency, scaling the Fargate service to 400 tasks for the ten days and letting the existing retry logic absorb any overload responses that come back.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "The code already exists, it is battle-tested, and horizontal scaling is the obvious first instinct — this would in fact produce 38 million recaps. It does not meet **R2** or **R1**. It forgoes the 50% batch discount on the single largest generation workload Cadenzo will ever run, and because rate limits are enforced per organisation, the recap flood competes with the panel for the same requests-per-minute and input-tokens-per-minute pools, so the panel's p95 degrades exactly when marketing is driving traffic to it. Offline work should not share an interactive quota.",
+          "citation": { "title": "Rate limits", "url": "https://platform.claude.com/docs/en/api/rate-limits" }
+        },
+        {
+          "key": "B",
+          "text": "Give each recap its own agent loop that queries listening-history tools repeatedly until it decides it has gathered enough material, then writes the 200 words.",
+          "correct": false,
+          "explanation": "The warehouse already holds every fact a recap needs, so there is nothing for an agent to discover — the loop adds turns, tokens and latency to retrieve data a deterministic query returns in one step. Multiplied across 38 million listeners, unbounded turns make the bill unforecastable against R2. Anthropic's guidance is to reserve agent loops for tasks whose steps genuinely cannot be enumerated in advance.",
+          "citation": { "title": "Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Aggregate each listener's statistics deterministically in the warehouse pipeline, then submit one fully composed request per listener to the Message Batches API, polling `processing_status` and reading results as each batch ends.",
+          "correct": true,
+          "explanation": "Splitting the work into a deterministic aggregation step followed by a single generation call per listener is the cheapest structure that meets the brief, and the Batches API gives a 50% discount on both input and output for exactly this asynchronous profile. Batches accept up to 100,000 requests each, most complete well within an hour against a 24-hour window, and results stay retrievable for 29 days — comfortably inside a ten-day run. Crucially it is metered separately from the interactive path, which is what option A cannot offer and why A drops R2: it shares the organisation's rate-limit pool and degrades the panel. Recaps can be generated market by market as data lands.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "Submit the 38 million requests to the standard Messages API with `service_tier: \"auto\"` so they draw on spare priority capacity and fall back to standard capacity automatically.",
+          "correct": false,
+          "explanation": "`auto` is already the default service tier, so this changes nothing about how the requests are handled and delivers no discount toward R2. It also leaves the recap traffic on the same synchronous path and the same rate-limit pools as the listener-facing panel, so the interference problem is untouched. Service tiers govern which capacity a synchronous request draws on; they are not a mechanism for cheap bulk offline generation.",
+          "citation": { "title": "Service tiers", "url": "https://platform.claude.com/docs/en/api/service-tiers" }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "examId": "ccdv-f-exam1",
+  "domainId": "D4",
+  "domainName": "Eval, Testing, and Debugging",
+  "questions": [
+    {
+      "id": "V1-D4-01",
+      "question": "An insurance team wants a regression gate that runs on every prompt change to their claims-summarisation endpoint. Today they have 12 examples a subject-matter expert grades by hand, which takes two days. An engineer proposes 300 sampled production claims scored by a rubric-driven Claude grader plus a string check for the policy number. What should they build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the 12 expert-graded examples as the gate, because any automated grader introduces enough noise to make a pass or fail signal untrustworthy in CI.",
+          "correct": false,
+          "explanation": "Anthropic's guidance is the opposite: prioritise volume over quality, because more questions with slightly lower-signal automated grading beat fewer hand-graded ones. Twelve cases also cannot detect a regression that affects a small slice of traffic.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Replace the eval set with an end-to-end smoke test that asserts a 200 response and a non-empty summary body, then rely on customer reports for quality regressions.",
+          "correct": false,
+          "explanation": "A liveness check measures that the endpoint responds, not that the summaries are correct, so every quality regression ships silently. Evals are meant to mirror the real task, which for this endpoint means grading summary content.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Build the 300-case automated set, sample it to mirror the production claim mix, and add edge cases such as empty and overlong claims.",
+          "correct": true,
+          "explanation": "The documented approach is to design evals that mirror your real-world task distribution while deliberately including edge cases, and to automate grading wherever possible so the set can be large. A code check for the policy number plus an LLM grader for the rubric is exactly the code-graded and LLM-graded mix the guidance describes.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Skip CI gating entirely and hold the whole corpus for a quarterly manual review session, on the grounds that only a human grader can be trusted to judge summary quality.",
+          "correct": false,
+          "explanation": "Human grading is the least scalable option and is reserved for cases automation genuinely cannot cover; a rubric and an exact string match cover much of this task. A quarterly review also cannot gate a prompt change, so regressions reach production for up to three months.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        }
+      ]
+    }
+  ]
+}

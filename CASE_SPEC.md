@@ -1,8 +1,11 @@
 # CASE_SPEC.md — Hard Mode (Case-Study) Exam Authoring Contract
 
-This governs **CCAR-P Mock Exam 3** and **CCAR-P Mock Exam 4** only.
+This governs **CCAR-P Mock Exams 3 and 4** and **CCDV-F Mock Exams 3 and 4**.
 It does **not** apply to `ccar-f/exam1`, `ccar-f/exam2`, `ccar-p/exam1`, `ccar-p/exam2`,
 which are frozen and must never be edited.
+
+Sections 1, 3 (field rules), 4 and 5 apply to both certifications. Section 2 differs per
+certification; see §2 for CCAR-P and §2b for CCDV-F.
 
 For anything not specified here, `CONTENT_SPEC.md` still applies (citation domains,
 factual-accuracy rules, plausible distractors, no answer-length giveaways).
@@ -74,6 +77,62 @@ Domain names (use verbatim):
 
 ---
 
+## 2b. Exam shape — CCDV-F hard mode
+
+| | |
+|---|---|
+| Question count | **53** |
+| Time limit | **120 minutes** |
+| Passing score | **720** scaled (`100 + correct/total × 900`) |
+| Structure | **4 full cases × 12 questions + 1 mini-case × 5 questions** |
+
+Files: `server/data/ccdv-f/exam3/cs1.json` … `cs5.json`
+       `server/data/ccdv-f/exam4/cs1.json` … `cs5.json`
+(`cs1`–`cs4` are 12 questions each; `cs5` is the 5-question mini-case.)
+`id` prefix is `V3-` for exam 3 and `V4-` for exam 4.
+
+### Domain allocation (must match exactly)
+
+**This allocation deliberately departs from the official blueprint.** On the real CCDV-F,
+Claude Code is 2 items and Eval/Testing is 1 item — proportionally correct but far too thin
+to study from. Hard mode over-weights both. The two *domain* exams
+(`ccdv-f/exam1`, `ccdv-f/exam2`) remain blueprint-exact, so Real Mode section scoring
+against the real thing is still faithful there.
+
+| Case | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | Total |
+|------|----|----|----|----|----|----|----|----|-------|
+| cs1  | 2 | 3 | 1 | 1 | 2 | 1 | 1 | 1 | 12 |
+| cs2  | 2 | 3 | 1 | 1 | 2 | 1 | 1 | 1 | 12 |
+| cs3  | 2 | 3 | 1 | 1 | 2 | 1 | 1 | 1 | 12 |
+| cs4  | 2 | 3 | 1 | 1 | 2 | 1 | 1 | 1 | 12 |
+| cs5  | 0 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 5  |
+| **Total** | **8** | **13** | **5** | **5** | **8** | **6** | **4** | **4** | **53** |
+
+Domain names (use verbatim — these are Anthropic's own wording):
+
+- `D1` Agents and Workflows
+- `D2` Applications and Integration
+- `D3` Claude Code
+- `D4` Eval, Testing, and Debugging
+- `D5` Model Selection and Optimization
+- `D6` Prompt and Context Engineering
+- `D7` Security and Safety
+- `D8` Tools and MCPs
+
+### CCDV-F flavour
+
+Cases must pose **implementation** problems, not architecture-review problems. The client
+brief should establish a codebase, an SDK, a deployment target, and concrete failure
+symptoms. Good CCDV-F case questions ask which parameter to change, which error to handle,
+which call sequence is correct, or why a given payload misbehaves. Reserve pure
+"which pattern should we adopt" framing for at most a couple of questions per case — that
+is the Architect track's register.
+
+Multiple-response items are **not** permitted here (see `CONTENT_SPEC.md`); the `runnerUp`
+mechanic is inherently a single-answer contrast.
+
+---
+
 ## 3. File schema
 
 ```json
@@ -122,8 +181,9 @@ Domain names (use verbatim):
 - `caseRequirements` — 4 to 6 entries, each prefixed `R1:`, `R2:`, … They are the
   scoring rubric the questions are written against. Requirements must be concrete and
   checkable (a number, a boundary, a compliance rule), never vague aspirations.
-- `id` — `P3-CS{n}-{nn}` for exam 3, `P4-CS{n}-{nn}` for exam 4, `nn` zero-padded from `01`.
-- `primaryDomain` — one of `D1`–`D7`; drives section scoring.
+- `id` — `P3-CS{n}-{nn}` / `P4-CS{n}-{nn}` for CCAR-P, `V3-CS{n}-{nn}` / `V4-CS{n}-{nn}`
+  for CCDV-F; `nn` zero-padded from `01`.
+- `primaryDomain` — `D1`–`D7` for CCAR-P, `D1`–`D8` for CCDV-F; drives section scoring.
 - `secondaryDomains` — 1–3 other domain ids, no duplicates, must not include the primary.
 - `options` — exactly 4, keys `A`–`D` in order; exactly one `correct: true`; exactly one
   `runnerUp: true` on a **non-correct** option.

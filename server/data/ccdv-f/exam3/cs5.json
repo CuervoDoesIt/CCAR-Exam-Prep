@@ -1,0 +1,199 @@
+{
+  "examId": "ccdv-f-exam3",
+  "caseId": "CS5",
+  "caseTitle": "Plotpoint — commercial lease abstraction pipeline",
+  "caseScenario": "Plotpoint is a proptech vendor whose lease abstraction service turns scanned commercial leases into a structured 22-field abstract that flows into its customers' asset-management systems. Its customers are institutional landlords holding roughly 240,000 leases in total, and the pipeline processes that volume once a year plus new signings. The service is a TypeScript worker running on AWS Lambda behind SQS, built on the official @anthropic-ai/sdk, and it charges a flat per-lease fee that leaves a thin margin.\n\nThe extraction prompt has grown organically. It is now a 400-line system prompt that mixes the role definition, the full 22-field schema, fourteen worked examples taken from one landlord's standard office leases, and around sixty accumulated edge-case rules. The lease text itself is appended to the very end of the user turn, after the question. Recall on clauses that appear late in a 60-page lease has been drifting downward, and retail percentage-rent and ground-lease structures are handled poorly.\n\nTwo further problems have surfaced. About 3.8% of abstracts omit a key entirely when the corresponding clause is absent from the lease, which crashes the customer-side loader that expects all 22 keys. And a prompt change merged on a Friday dropped percentage-rent recall from 91% to 62% without anyone noticing for a week, because reviewers grade abstracts by reading a handful of them rather than scoring a fixed set.",
+  "caseRequirements": [
+    "R1: Every lease abstract must populate all 22 schema keys, with an absent clause recorded as an explicit null and never as a missing key or a guessed value.",
+    "R2: p95 abstraction latency must stay under 25 seconds for a 60-page lease.",
+    "R3: Per-lease abstraction cost must stay at or below $0.34 across 240,000 leases per year.",
+    "R4: No prompt change may be merged unless the frozen 300-lease regression set has been scored field by field, with per-field thresholds that fail the build."
+  ],
+  "questions": [
+    {
+      "id": "V3-CS5-01",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D2", "D4"],
+      "question": "Recall on clauses appearing after roughly page 40 of a 60-page lease has been declining. The current request puts the 400-line system prompt first, then a user turn containing the extraction question followed by the full lease text. How should the prompt be restructured?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the lease text into the system prompt so it is treated as authoritative operator-supplied context rather than as user-supplied content the model may weigh less heavily.",
+          "correct": false,
+          "explanation": "The system prompt is for role and behavioural instructions; document content belongs in the user turn, and there is no documented weighting difference that would improve late-page recall. It would also make the prompt prefix change on every lease, destroying any chance of caching the stable portion.",
+          "citation": { "title": "Giving Claude a role with a system prompt", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/system-prompts" }
+        },
+        {
+          "key": "B",
+          "text": "Put the lease at the top of the user turn inside document tags with document_content and source subtags, and place the extraction instruction and question after it.",
+          "correct": true,
+          "explanation": "The documented long-context guidance is to place long documents near the top of the prompt, above the query, instructions and examples, and to wrap each document in document tags with document_content and source subtags. That is the direct remedy for degrading recall on late material, and it costs nothing extra in tokens, so R2 and R3 are untouched. Option D (runner-up) also lifts per-field accuracy but pays for the lease four times over.",
+          "citation": { "title": "Long context prompting tips", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/long-context-tips" }
+        },
+        {
+          "key": "C",
+          "text": "Have the model produce a two-page structured summary of the lease first, then run the 22-field extraction against that summary instead of against the original document text.",
+          "correct": false,
+          "explanation": "Abstraction fields turn on exact clause wording — notice periods, escalation formulas, exclusivity carve-outs — and a summarisation step is precisely where that detail is lost. It would trade a recall problem for a fidelity problem and add a second model call to every lease.",
+          "citation": { "title": "Long context prompting tips", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/long-context-tips" }
+        },
+        {
+          "key": "D",
+          "text": "Split the 22 fields across four calls — economics, term, options, and covenants — each with a short focused prompt and the complete lease attached, then merge the four partial abstracts in the worker.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Decomposing a broad extraction into focused sub-tasks is a genuine accuracy technique and would likely raise per-field quality, particularly on the covenant fields. It does not meet R3: the 60-page lease is the overwhelming majority of the input tokens, and re-sending it four times roughly quadruples input cost on all 240,000 leases, which a $0.34 per-lease ceiling cannot absorb.",
+          "citation": { "title": "Long context prompting tips", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/long-context-tips" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS5-02",
+      "primaryDomain": "D6",
+      "secondaryDomains": ["D4", "D2"],
+      "question": "All fourteen worked examples in the prompt are standard office leases from a single landlord. The abstractor performs well on that landlord's portfolio and poorly on retail percentage-rent structures, ground leases, and subleases. What change should the team make to the examples?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the fourteen and add twenty more sampled from the last quarter of production leases, each wrapped in example tags, so the model sees a much broader range of drafting styles before it reads the lease.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "More examples genuinely does help, sampling from production keeps the distribution honest, and wrapping each in example tags is the documented structuring advice — this would improve the weak categories. It fails R3, though: thirty-four full lease abstracts sit ahead of every one of the 240,000 leases as fixed input, and that standing overhead pushes per-lease cost past the $0.34 ceiling before the lease itself is counted.",
+          "citation": { "title": "Use examples (multishot prompting)", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/multishot-prompting" }
+        },
+        {
+          "key": "B",
+          "text": "Remove the examples altogether and replace them with a precise prose description of each of the 22 fields, including the wording patterns that typically signal each clause type.",
+          "correct": false,
+          "explanation": "Examples are among the most effective levers available for a structured extraction task, because they demonstrate edge-case handling that prose descriptions state abstractly and the model applies inconsistently. Removing them would regress the office-lease performance the service currently relies on.",
+          "citation": { "title": "Use examples (multishot prompting)", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/multishot-prompting" }
+        },
+        {
+          "key": "C",
+          "text": "Leave the examples as they are but move them below the lease text, so that the most recently read content before the answer is the demonstration of the expected output format.",
+          "correct": false,
+          "explanation": "This inverts the documented ordering: long documents belong at the top of the prompt, above the query, instructions and examples. It would also leave the actual defect untouched, since the examples still cover only one lease archetype.",
+          "citation": { "title": "Long context prompting tips", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/long-context-tips" }
+        },
+        {
+          "key": "D",
+          "text": "Replace them with a smaller, deliberately diverse set that covers percentage rent, ground lease and sublease structures alongside the office case, each wrapped in example tags.",
+          "correct": true,
+          "explanation": "Example effectiveness turns on relevance and diversity, not count: fourteen near-identical office leases teach one archetype fourteen times, while a handful spanning the failing structures teaches the model what varies. A smaller set also shrinks the fixed prefix carried by every lease, so it works with R3 rather than against it, and shortens the prompt against R2. Option A (runner-up) improves coverage too, but by growing the standing per-lease overhead.",
+          "citation": { "title": "Use examples (multishot prompting)", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/multishot-prompting" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS5-03",
+      "primaryDomain": "D2",
+      "secondaryDomains": ["D6", "D4"],
+      "question": "About 3.8% of abstracts omit a key entirely when the lease has no corresponding clause — an abstract for a lease with no renewal option simply has no option_to_renew key — and the customer-side loader throws. The abstract is currently produced by asking for JSON in the prompt and calling JSON.parse. What should the team ship?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set output_config.format to a json_schema that lists all 22 properties as required and types each one to permit null, so an absent clause is emitted as an explicit null.",
+          "correct": true,
+          "explanation": "Structured outputs constrain sampling to the supplied JSON Schema, so marking all 22 properties required makes an omitted key impossible rather than merely unlikely, and typing each to permit null gives the model a correct way to say the clause is absent. That is what R1 asks for — an explicit null, never a missing key — and it costs one schema definition rather than a per-lease workaround. Option C (runner-up) stops the loader crashing but cannot tell an absent clause from a missed one.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "B",
+          "text": "Add stop_sequences containing the closing brace so generation halts cleanly once the twenty-second field has been written and no trailing commentary can corrupt the object.",
+          "correct": false,
+          "explanation": "Generation would stop at the first closing brace, which in a 22-field object with nested rent-schedule objects truncates the JSON partway through, and the stop sequence itself is excluded from the returned text. This creates malformed output rather than preventing it, and says nothing about missing keys.",
+          "citation": { "title": "Messages API", "url": "https://platform.claude.com/docs/en/api/messages" }
+        },
+        {
+          "key": "C",
+          "text": "Keep the current prompt and add a normalisation step in the worker that walks the 22-key template and inserts null for any key the model did not emit before the abstract reaches the loader.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a cheap, dependable fix for the immediate outage and it guarantees the loader always receives 22 keys, which is why teams reach for it first. It does not meet R1: the requirement distinguishes an absent clause from a guessed or missed one, and backfilling nulls collapses those two cases — a renewal option the model simply failed to extract is recorded as a lease with no renewal option, silently and permanently.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "D",
+          "text": "Prefill the assistant turn with the opening brace and the full list of 22 keys so the model has no choice but to complete every field in order.",
+          "correct": false,
+          "explanation": "Assistant prefill is not a supported technique on current Claude models and cannot be relied on to shape output; structured outputs and output_config.format are the documented replacements. Prefilling the keys would also invite the model to fill them with plausible values rather than nulls, which is the opposite of what R1 requires.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS5-04",
+      "primaryDomain": "D4",
+      "secondaryDomains": ["D6", "D2"],
+      "question": "The Friday prompt change dropped percentage-rent recall from 91% to 62% while overall abstract quality looked unchanged to reviewers. Fourteen of the 22 fields have a single unambiguous ground-truth value; the other eight are free text. How should the regression set be scored?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Sample twenty abstracts after each release and have a lease analyst review them against the source documents, escalating anything that looks wrong to the engineer who made the change.",
+          "correct": false,
+          "explanation": "A post-release sample of twenty is both too late and too small: a regression confined to one field type in a minority of leases will usually not appear at all, which is exactly how the percentage-rent drop survived a week. R4 asks for a gate before merge, not an inspection afterwards.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Have an LLM grader read each generated abstract alongside the ground-truth abstract and return a single 0-to-10 quality score, then fail the build if the mean across the 300 leases falls below the recorded baseline.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a real, cheap-to-build eval and it does put an automated gate in front of the merge, which is more than the team has today. It fails R4 all the same: that requirement calls for field-by-field scoring with per-field thresholds, and a single averaged score is precisely what hid this regression — a 29-point collapse on one field among 22 barely moves a mean, so the build would have gone green.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Score the 300-lease set per field — exact match on the fourteen deterministic fields, an LLM grader on a different model for the eight free-text ones — and fail the build when any single field drops below its threshold.",
+          "correct": true,
+          "explanation": "Matching the grading method to the field type is what makes the signal trustworthy: deterministic fields like commencement date have one right answer and should be graded exactly, while free-text fields need a rubric-driven grader, run on a different model so it does not inherit the extraction prompt's blind spots. Per-field thresholds are what surface a single-field collapse that an aggregate average conceals, which is exactly what R4 specifies. Option B (runner-up) automates the gate but averages the regression away.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Serialize each new abstract and the previous release's abstract to JSON and compare them with exact string equality, failing the build on any difference across the 300 leases.",
+          "correct": false,
+          "explanation": "Whole-blob string comparison flags benign differences such as key ordering or free-text rewording, so the gate is noisy from the first run and gets disabled. It also cannot say whether a genuine difference is an improvement or a regression, which is the only question that matters here.",
+          "citation": { "title": "Create strong empirical evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        }
+      ]
+    },
+    {
+      "id": "V3-CS5-05",
+      "primaryDomain": "D3",
+      "secondaryDomains": ["D4", "D6"],
+      "question": "Every prompt change requires the same eight steps: check out the frozen set, run the scorer, diff per-field scores against the baseline, and update the changelog. Engineers run them from memory in Claude Code and routinely skip the diff. What should the team add to the repository?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Write the eight steps into the repository's CLAUDE.md under a review-checklist heading, so the sequence is loaded into context at the start of every Claude Code session in the project.",
+          "correct": false,
+          "explanation": "CLAUDE.md supplies context, not execution: the steps are present in the session but nothing runs them and nothing notices when the diff is skipped. Documenting a checklist is what the team effectively has now, in a different file.",
+          "citation": { "title": "Manage Claude's memory", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Commit the eight steps as a custom slash command in .claude/commands/, taking the prompt file path through $ARGUMENTS, so every engineer invokes the identical sequence explicitly.",
+          "correct": true,
+          "explanation": "Slash commands are the mechanism for a repeatable prompt workflow: the file lives in .claude/commands/ in the repository, so it is version-controlled and reviewed like code, and $ARGUMENTS lets one definition serve every prompt file. Because invocation is explicit, the diff step cannot be quietly dropped, which is what R4 needs — and the same script is what CI runs to enforce the per-field thresholds. Option C (runner-up) keeps the workflow in the repo too, but leaves it to the model to decide whether to run it.",
+          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+        },
+        {
+          "key": "C",
+          "text": "Define a review subagent in .claude/agents/ whose description tells Claude when to delegate, so the scoring run happens in its own context window and does not flood the main session with output.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a well-motivated design — a subagent has its own context window, so a 300-lease scoring run does not consume the main thread's context, and the definition is committed alongside the code. It does not meet R4: delegation to a subagent is model-initiated and discretionary, triggered by Claude judging the description to match, so a review can simply not happen and no build fails when it does not.",
+          "citation": { "title": "Subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Keep a snippet of the eight steps in the team's wiki and paste it into the session at the start of each review, since the text is identical every time and needs no tooling to maintain.",
+          "correct": false,
+          "explanation": "A pasted snippet is unversioned, drifts from the scorer it describes the moment either changes, and depends entirely on the engineer remembering to paste it — the same failure mode as running the steps from memory. It also cannot be invoked by CI.",
+          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+        }
+      ]
+    }
+  ]
+}

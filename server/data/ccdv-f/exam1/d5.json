@@ -1,0 +1,322 @@
+{
+  "examId": "ccdv-f-exam1",
+  "domainId": "D5",
+  "domainName": "Model Selection and Optimization",
+  "questions": [
+    {
+      "id": "V1-D5-01",
+      "question": "A payments company's reconciliation service has always sent \"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 10000}. After pinning a current-generation Claude model, every request fails with a 400 error saying \"thinking.type.enabled\" is not supported. The team still wants a way to dial reasoning depth up and down. What is the correct migration?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep \"type\": \"enabled\" but lower budget_tokens below 1,024 so the newer model accepts the smaller allocation and stops rejecting the request.",
+          "correct": false,
+          "explanation": "Two things are wrong here. budget_tokens has a documented minimum of 1,024 tokens and the API rejects smaller values, and on models that use adaptive thinking the whole \"type\": \"enabled\" mode returns a 400 error regardless of the budget you pass.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "B",
+          "text": "Remove the thinking object entirely and set temperature to 0, since deterministic sampling prevents the model from spending tokens on internal reasoning.",
+          "correct": false,
+          "explanation": "temperature is a sampling parameter that shapes randomness in token selection; it has no bearing on whether Claude produces thinking blocks. On current models a non-default temperature is itself rejected with a 400 error, so this substitution makes the failure worse rather than better.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Drop budget_tokens, set thinking: {\"type\": \"adaptive\"}, and control reasoning depth with output_config.effort.",
+          "correct": true,
+          "explanation": "This is the documented mapping: remove budget_tokens, switch the thinking type to adaptive, and move depth control to output_config.effort. Expect a behavioral change too, not just a syntax change, because Claude now decides per request whether and how much to think instead of thinking against a fixed budget every time.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Move budget_tokens under output_config, because thinking configuration relocated into that object when adaptive thinking shipped.",
+          "correct": false,
+          "explanation": "output_config carries effort and the structured-output format, not a thinking token budget; there is no output_config.budget_tokens field. Inventing a parameter path produces a validation error, and the real depth control on adaptive models is the effort level.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D5-02",
+      "question": "A trading desk streams Claude Opus 5 responses into a chat panel, and traders complain that text renders too slowly once generation begins. An engineer adds \"speed\": \"fast\" with the fast-mode-2026-02-01 beta header. What should the team expect from that change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Up to 2.5x higher output tokens per second at premium pricing, with the same model weights and unchanged intelligence.",
+          "correct": true,
+          "explanation": "Fast mode runs the same model on a faster inference configuration, delivering up to 2.5x higher output tokens per second on Claude Opus 5 and Claude Opus 4.8. The docs state explicitly that there is no change to intelligence or capabilities, and that the speed is billed at premium rates.",
+          "citation": { "title": "Fast mode (research preview)", "url": "https://platform.claude.com/docs/en/build-with-claude/fast-mode" }
+        },
+        {
+          "key": "B",
+          "text": "A faster time to first token, which is the metric that governs how long a streamed response waits before the very first characters appear on screen.",
+          "correct": false,
+          "explanation": "The documentation is explicit that fast mode's benefits are focused on output tokens per second, not time to first token. TTFT is dominated by prompt processing, so a request that feels slow to start will still feel slow to start under fast mode.",
+          "citation": { "title": "Fast mode (research preview)", "url": "https://platform.claude.com/docs/en/build-with-claude/fast-mode" }
+        },
+        {
+          "key": "C",
+          "text": "A lower effective cost per token, because a faster inference configuration serves more requests per unit of hardware time and Anthropic passes that efficiency back to the caller.",
+          "correct": false,
+          "explanation": "Fast mode is priced at a multiplier on standard rates across the full context window, so it costs more per token rather than less. It is a latency purchase, and it also carries its own dedicated rate limits separate from standard Opus limits.",
+          "citation": { "title": "Fast mode (research preview)", "url": "https://platform.claude.com/docs/en/build-with-claude/fast-mode" }
+        },
+        {
+          "key": "D",
+          "text": "Shallower reasoning on hard prompts, because fast mode reaches its speed target by cutting how much the model thinks before it answers.",
+          "correct": false,
+          "explanation": "Speed and reasoning depth are independent dimensions. Fast mode changes the inference configuration only; the control over how much Claude reasons is output_config.effort, which scales every output token including thinking.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D5-03",
+      "question": "A legal-research API resells Claude output at a fixed per-query price, so finance treats the maximum billable output tokens per response as a contractual ceiling. The team currently limits spend only by setting output_config.effort to \"medium\". What must they add to guarantee the ceiling?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set effort to \"low\", which acts as a hard per-request token cap once Claude has spent that allowance on the response.",
+          "correct": false,
+          "explanation": "Effort levels are behavioral signals, not allowances that stop generation at a number. Lowering effort makes responses terser on average, but it cannot promise that any individual response stays under a specific token count.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "B",
+          "text": "Populate stop_sequences with the closing phrases the model typically uses, so generation reliably halts at a predictable length on every query.",
+          "correct": false,
+          "explanation": "A stop sequence halts generation only when the model happens to emit that exact string, which is not guaranteed and produces stop_reason \"stop_sequence\" when it does. It gives no upper bound on a response that never emits the phrase.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "Move the workload to a smaller model tier such as Haiku, since lower-cost models cannot generate enough tokens to breach the ceiling.",
+          "correct": false,
+          "explanation": "Model tier changes the price per token, not the number of tokens a response may contain; Claude Haiku 4.5 still supports a large maximum output. Changing tiers to enforce a budget also gives up capability for a guarantee it does not actually provide.",
+          "citation": { "title": "Models overview", "url": "https://platform.claude.com/docs/en/models/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Set max_tokens to the ceiling, because effort is soft guidance while max_tokens is a strict limit.",
+          "correct": true,
+          "explanation": "Anthropic's guidance separates the two controls precisely this way: lower effort when you want cheaper responses on average, and use max_tokens when you need a hard ceiling on spend. max_tokens bounds all output tokens for the turn, thinking included, and the response reports stop_reason \"max_tokens\" if the ceiling is reached.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D5-04",
+      "question": "A claims-processing pipeline asks Claude for a long structured report. About 5% of responses arrive with \"stop_reason\": \"max_tokens\" and JSON that is cut off mid-object; the pipeline currently parses the text immediately and logs a schema error. What is the correct handling?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Retry the identical request with exponential backoff, treating max_tokens as a transient capacity condition that generally clears on the second or third attempt.",
+          "correct": false,
+          "explanation": "max_tokens is deterministic, not transient: it means the response reached the limit the caller specified, so an identical retry will usually truncate again at the same place. Backoff is the right tool for 429 and 5xx responses, not for a stop reason.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Branch on stop_reason before parsing, then raise max_tokens or continue the response, and mark the output as incomplete.",
+          "correct": true,
+          "explanation": "The documented remedy for stop_reason \"max_tokens\" is to raise max_tokens or continue the response, and the docs also advise appending a notice so downstream readers know the output is incomplete. Checking stop_reason before parsing turns a confusing schema error into an accurate truncation signal.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "Treat the response as a refusal and route the request to a fallback model, because max_tokens and refusal both mean Claude stopped before completing the task it was asked to do.",
+          "correct": false,
+          "explanation": "These are distinct stop reasons with distinct remedies. \"refusal\" means Claude declined to respond and is the case where reading stop_details and retrying on a fallback model applies; \"max_tokens\" simply means the caller's output limit was reached.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "D",
+          "text": "Move to a model with a 1M-token context window, since max_tokens truncation happens when the accumulated input no longer fits inside the window.",
+          "correct": false,
+          "explanation": "Input that overflows the window produces a 400 \"prompt is too long\" error, or stop_reason \"model_context_window_exceeded\" when generation fills the window. \"max_tokens\" is a separate condition caused entirely by the output limit set on the request.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D5-05",
+      "question": "A retail support bot prepends a 30,000-token policy manual to every request, then appends the shopper's message and a current timestamp as the final content block. The engineer placed the single cache_control breakpoint on that final block. Every response shows cache_creation_input_tokens and never a cache read. What explains this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The policy manual sits below the model's minimum cacheable prefix length, so caching never engages; splitting it into several smaller cached blocks would bring each one over the threshold.",
+          "correct": false,
+          "explanation": "Minimums are on the order of 1,024 to 4,096 tokens depending on the model, so a 30,000-token manual is comfortably cacheable. Splitting it into smaller blocks would move each piece toward the minimum rather than past it.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "The five-minute entries are expiring between requests; setting ttl to \"1h\" fixes it, since time to live rather than breakpoint position determines whether a prefix is reused.",
+          "correct": false,
+          "explanation": "A longer TTL helps only when a genuinely matching prefix is being written and then aging out. Here the prefix hash differs on every call, so no lookup can ever match no matter how long entries survive.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "cache_control is only valid on the top-level system field, so a breakpoint attached to a message content block is ignored by the API.",
+          "correct": false,
+          "explanation": "Breakpoints are valid on tool definitions, system blocks, and message content blocks alike, and up to four may be set per request. The problem is where this breakpoint sits, not that message-level breakpoints are unsupported.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Marking a block writes a hash of the prefix ending at that block, and the timestamp makes it unique every call; move the breakpoint to the last identical block.",
+          "correct": true,
+          "explanation": "A cache write covers everything up to and including the marked block, so including volatile content in that prefix guarantees a miss on the next request. The rule is to place cache_control on the last block whose prefix is identical across requests, leaving the changing content after it.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D5-06",
+      "question": "An insurance carrier must classify 80,000 archived claim notes overnight. Nothing is user-facing, results feed a morning report, and cost per note is the binding constraint. Which execution path best fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Submit the notes through the Message Batches API, which processes requests asynchronously at 50% off standard token prices.",
+          "correct": true,
+          "explanation": "The Message Batches API is designed for exactly this shape of work: high volume, no need for immediate responses, and a documented 50% cost reduction with increased throughput. A batch may hold up to 100,000 requests, and results are retrieved by polling processing_status until it reads \"ended\".",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "B",
+          "text": "Fan the notes out as synchronous Messages requests across many worker threads and request a rate limit increase, since concurrency achieves the same throughput at the same per-token price.",
+          "correct": false,
+          "explanation": "Concurrency can raise throughput but it does nothing about price, and the batch discount is precisely the lever this workload needs. Anthropic positions batch processing as the pattern for large volumes where immediate responses are not required.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Use the Batches API and additionally set \"speed\": \"fast\" on each request so the overnight run completes sooner.",
+          "correct": false,
+          "explanation": "Fast mode is explicitly not available with the Batch API, so the request would not run as intended. It is also the wrong instinct economically: fast mode is premium-priced for latency, and this job has all night to finish.",
+          "citation": { "title": "Fast mode (research preview)", "url": "https://platform.claude.com/docs/en/build-with-claude/fast-mode" }
+        },
+        {
+          "key": "D",
+          "text": "Concatenate all 80,000 notes into one synchronous request so the model classifies them in a single pass and the prompt overhead is paid only once.",
+          "correct": false,
+          "explanation": "That volume of text overflows any context window, and input that exceeds the window returns a 400 invalid_request_error. Batching sends many independent requests, which also keeps one bad note from failing the entire job.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D5-07",
+      "question": "A B2B SaaS team runs a document-review agent on Claude Opus 5 at the default effort level. Accuracy on their eval set clears the target with room to spare, but cost and latency are roughly 40% over budget. What does Anthropic's model-selection guidance suggest trying first?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Switch straight to Claude Haiku 4.5, because moving down a tier is the only change that reduces cost and latency at the same time.",
+          "correct": false,
+          "explanation": "A tier change is a valid option but it is a larger, riskier step than the guidance recommends first, and it forfeits capability the team may still need. It is also not the only lever, since effort trades intelligence for latency and cost within a single model.",
+          "citation": { "title": "Choosing the right model", "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model" }
+        },
+        {
+          "key": "B",
+          "text": "Turn on prompt caching for the stable prefix and change nothing else, since cache reads shorten output generation time in proportion to the tokens they replace.",
+          "correct": false,
+          "explanation": "Prompt caching is worth doing, but it discounts repeated input tokens; it does not speed up output token generation, which is where this agent's latency and output spend sit. Cached prefixes also still occupy the context window.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Step output_config.effort down to medium or low and re-run the evals, since tuning effort is often a better lever than switching models.",
+          "correct": true,
+          "explanation": "Anthropic's guidance says outright that tuning effort is often a better lever than switching models, because effort trades intelligence for latency and cost within one model. With headroom on the eval set, stepping down and re-measuring is the cheapest experiment available.",
+          "citation": { "title": "Choosing the right model", "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model" }
+        },
+        {
+          "key": "D",
+          "text": "Raise max_tokens well above current usage so the model never has to compress its answer, which cuts the retries that are inflating the bill.",
+          "correct": false,
+          "explanation": "max_tokens is a ceiling, not a target: raising it does not make responses longer or shorter by itself, and it certainly does not reduce cost. If retries were the problem the fix would be handling stop_reason properly, not enlarging an unused limit.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D5-08",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A fintech team's cost model estimated spend by counting only the characters in user messages, and the real invoice is several times higher. They are now auditing what actually gets billed. Which TWO statements about token accounting are correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Tool definitions in the tools array are request metadata rather than prompt content, so they are not billed as input tokens.",
+          "correct": false,
+          "explanation": "Tool definitions are rendered into the prompt and count toward the context window like any other input. This is why Anthropic publishes guidance on managing tool context and offers deferred tool definitions for large tool sets.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "B",
+          "text": "The system prompt, every message in the conversation history, and all tool definitions count toward the context window and are billed as input.",
+          "correct": true,
+          "explanation": "The docs state that everything in the request counts toward the context window: the system prompt, every message including tool results, images, and documents, and the tool definitions. Estimating from user text alone therefore undercounts by the entire prompt scaffolding plus the accumulated history.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "C",
+          "text": "Setting the thinking display field to \"omitted\" means the hidden reasoning is never returned and therefore never billed.",
+          "correct": false,
+          "explanation": "The documentation is blunt about this: you are still charged for the full thinking tokens, and omitting reduces latency, not cost. The signature field still carries the encrypted reasoning for multi-turn continuity even when the text is withheld.",
+          "citation": { "title": "Thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/thinking" }
+        },
+        {
+          "key": "D",
+          "text": "Once a cached prefix is read back, those tokens stop occupying the context window, which is what makes caching effective on very long prompts.",
+          "correct": false,
+          "explanation": "Cached prompt prefixes still occupy the context window; prompt caching changes what you pay for those tokens, not whether they count. Cache reads are billed at a fraction of the base input price, and cache_read_input_tokens is reported separately in usage.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "E",
+          "text": "Thinking tokens are billed as output tokens when generated and count against max_tokens for that turn.",
+          "correct": true,
+          "explanation": "Thinking tokens are a subset of max_tokens, are billed as output tokens, and count toward rate limits. Because adaptive thinking varies its allocation per request, a workload whose estimate ignored reasoning entirely will see output spend swing in ways the character count never predicted.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D5-09",
+      "question": "A healthcare vendor is moving a 180,000-token prompt from an older Claude model to a current one. Before cutting over they need to confirm the prompt still fits the window and to re-forecast input cost. What is the correct approach?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Reuse the input_tokens figure measured against the old model, since tokenization is shared across the Claude family and a given string always yields the same count.",
+          "correct": false,
+          "explanation": "Claude 4.7 and later models use a newer tokenizer under which the same input text produces roughly 30 percent more tokens. Anthropic explicitly warns against reusing counts measured on an earlier model to estimate cost or context fit.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        },
+        {
+          "key": "B",
+          "text": "Call the token counting endpoint with the new model ID, since counts are tokenizer-specific and it also counts system prompts, tools, and images.",
+          "correct": true,
+          "explanation": "The endpoint counts under the tokenizer of whichever model you pass, and it accepts the same structured inputs as a real request, so the estimate reflects the system prompt, tool definitions, images, and PDFs too. It is free to use, which makes counting the same request against both models the recommended way to measure a migration delta.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        },
+        {
+          "key": "C",
+          "text": "Divide the character count by four, because Anthropic documents four characters per token as the exact conversion for English-language prompts on all models.",
+          "correct": false,
+          "explanation": "No such exact conversion is published, and any rule of thumb breaks on code, markup, and non-English text. Anthropic's documented method is the token counting endpoint, which returns an estimate close to what the Messages API will actually bill.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        },
+        {
+          "key": "D",
+          "text": "Send the real prompt with max_tokens set to 1 and read usage.input_tokens from the reply, since counting tokens is billed at the same input rate anyway.",
+          "correct": false,
+          "explanation": "The premise is wrong: token counting is free to use, subject only to its own requests-per-minute limits, while a real Messages call bills every input token. Sending live patient data purely to measure length is also unnecessary exposure when a dedicated endpoint exists.",
+          "citation": { "title": "Token counting", "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting" }
+        }
+      ]
+    }
+  ]
+}

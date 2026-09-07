@@ -1,0 +1,612 @@
+{
+  "examId": "ccdv-f-exam1",
+  "domainId": "D2",
+  "domainName": "Applications and Integration",
+  "questions": [
+    {
+      "id": "V1-D2-01",
+      "question": "An online tutoring platform streams Claude's explanation into a student's browser. The renderer must open and close a paragraph element at the right moments, so the engineer needs to know exactly which server-sent events wrap a single content block. Ignoring ping events, what does the API emit for one content block?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A single content_block event whose text field already holds the finished block.",
+          "correct": false,
+          "explanation": "No such event type exists in the SSE stream. Text arrives incrementally as content_block_delta events that the client concatenates, which is the entire point of streaming: the client can render before generation finishes.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "B",
+          "text": "message_start, then one content_block_delta, then message_stop, repeated once for every block.",
+          "correct": false,
+          "explanation": "message_start and message_stop bracket the whole response exactly once each, not each block. message_start carries a Message object with an empty content array, and message_stop terminates the stream after all blocks have closed.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "C",
+          "text": "content_block_start, then one or more content_block_delta events, then content_block_stop.",
+          "correct": true,
+          "explanation": "Each content block is delivered as a content_block_start, a series of content_block_delta events, and a content_block_stop. Every block carries an index matching its position in the final Message content array, so a renderer can open on start and close on stop.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "D",
+          "text": "content_block_start, then a message_delta carrying each chunk of text, then content_block_stop.",
+          "correct": false,
+          "explanation": "message_delta reports top-level changes to the Message object, such as the final stop_reason and cumulative usage counts. Text fragments never travel in message_delta; they arrive as text_delta objects inside content_block_delta events.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-02",
+      "question": "A travel booking assistant streams responses while using a search_flights tool. The developer sees a content_block_start for a tool_use block, but the block's input object is empty at that point. How do the tool arguments actually reach the client?",
+      "options": [
+        {
+          "key": "A",
+          "text": "As content_block_delta events whose delta.type is input_json_delta, carrying partial_json fragments to concatenate and parse once content_block_stop arrives.",
+          "correct": true,
+          "explanation": "Tool inputs stream as input_json_delta deltas containing partial_json string fragments. You accumulate the fragments and parse the JSON at content_block_stop, or use a partial-JSON parser or the SDK helpers that expose parsed incremental values.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "B",
+          "text": "In a single tool_use_delta event that is emitted once the model has finished choosing every argument value.",
+          "correct": false,
+          "explanation": "There is no tool_use_delta event type. Inventing one leads to clients that silently ignore the real deltas and end up with empty tool inputs. The documented delta types are text_delta, input_json_delta, thinking_delta, and signature_delta.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "C",
+          "text": "As text_delta fragments on the same index, which the client must strip of surrounding prose before parsing as JSON.",
+          "correct": false,
+          "explanation": "text_delta updates a text content block, not a tool_use block. Mixing the two would force fragile string scraping; the API instead gives tool arguments their own delta type so the client always knows what it is accumulating.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "D",
+          "text": "Inside the message_delta event, whose delta object carries the completed tool input alongside the final stop_reason.",
+          "correct": false,
+          "explanation": "message_delta only reports top-level Message changes such as stop_reason, stop_sequence, and cumulative usage. Content, including tool inputs, is always delivered through the content block events at a specific index.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A benefits-support platform caches a 6,000-token policy manual in the system block with cache_control, but usage reports cache_read_input_tokens as 0 on every request. The manual's final line is a generated timestamp, and the service rebuilds its tools array with freshly worded descriptions on each call. Which TWO changes are most likely to produce cache hits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a fifth cache_control breakpoint so a larger share of the prefix becomes eligible for caching.",
+          "correct": false,
+          "explanation": "A request may carry a maximum of four cache breakpoints, so a fifth is not available. More breakpoints would not help anyway: the problem is that the content before the breakpoint changes on every call, so no lookup can match.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Remove the generated timestamp from the cached block so the prefix is byte-identical across requests.",
+          "correct": true,
+          "explanation": "A cache hit requires the prefix up to the breakpoint to match a previously written entry exactly. Anthropic's guidance is to place cache_control on the last block whose content is stable across requests; a per-request timestamp inside that block changes the hash every time, guaranteeing a miss.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Switch the breakpoint to cache_control of type ephemeral with ttl set to 24h so entries survive between daily traffic peaks.",
+          "correct": false,
+          "explanation": "Only two lifetimes exist: the default five-minute ephemeral cache and the one-hour option written as ttl 1h, which is billed at 2x the base input rate. There is no 24-hour TTL, and a longer lifetime would not rescue a prefix that changes on every call.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Stop regenerating the tools array on each request and send stable tool definitions.",
+          "correct": true,
+          "explanation": "Cache prefixes are built in the fixed order tools, then system, then messages. Because a change at one level invalidates that level and everything after it, rewriting tool definitions invalidates the entire cache including the system block, no matter how carefully the manual is marked.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "E",
+          "text": "Reorder the request body so the system field appears after the messages field and is therefore hashed first.",
+          "correct": false,
+          "explanation": "The cache prefix hierarchy is fixed at tools, system, messages and is not influenced by the order of keys in the JSON request body. Rearranging fields changes nothing about how the prefix is assembled or invalidated.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-04",
+      "question": "An insurance claims assistant sends 12 damage photos as base64 image blocks, then continues a 15-turn conversation about them. Request payloads exceed 20 MB and latency climbs with every turn. Which change most directly addresses the cause?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Re-encode the photos as image/tiff before base64 encoding them, since that format compresses inspection photography more efficiently.",
+          "correct": false,
+          "explanation": "Claude accepts only JPEG, PNG, GIF, and WebP, so image/tiff is rejected outright. Even a supported re-encode would not fix the real problem, which is that the full image bytes are resent in the payload on every turn.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "B",
+          "text": "Upload each photo once through the Files API and reference the returned file_id in the image block's source.",
+          "correct": true,
+          "explanation": "Every request resends the whole conversation history, so base64 image data is re-transmitted on each turn. Anthropic recommends uploading once and referencing by file_id, which keeps payloads small no matter how many images accumulate in the history.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "C",
+          "text": "Drop the image blocks from the history after the first turn and rely on Claude remembering what it already saw.",
+          "correct": false,
+          "explanation": "The Messages API is stateless: the model sees only what the current request contains. Removing the image blocks removes the information entirely, and it also invalidates any message-level cache prefix that included them.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "D",
+          "text": "Raise max_tokens so Claude has room to process all twelve images in a single pass.",
+          "correct": false,
+          "explanation": "max_tokens caps only the number of tokens generated in the response and has no effect on request size. The growth here is entirely on the input side, from resending image bytes each turn.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages/create" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-05",
+      "question": "A media company ports a working chatbot to the Claude Messages API and sends messages as an array whose first element has role \"system\" and second has role \"user\". The API returns HTTP 400 invalid_request_error. What is the correct request shape?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send the standing instructions as the first assistant message so that Claude continues on from them.",
+          "correct": false,
+          "explanation": "Input messages accept only the user and assistant roles, so this at least validates, but it misrepresents your instructions as Claude's own prior output. Standing instructions belong in the dedicated system parameter, which is what the model is trained to treat as its brief.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages/create" }
+        },
+        {
+          "key": "B",
+          "text": "Move the instructions into the top-level system parameter; messages accepts only user and assistant roles.",
+          "correct": true,
+          "explanation": "There is no system role for input messages. The system prompt is a top-level request parameter that takes either a string or an array of text blocks, and it sits outside the messages array entirely.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages/create" }
+        },
+        {
+          "key": "C",
+          "text": "Keep the message in place but change its role value from \"system\" to \"developer\".",
+          "correct": false,
+          "explanation": "The Messages API defines exactly two input roles, user and assistant. Any other role value fails validation, so swapping one unsupported string for another produces the same 400 response.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages/create" }
+        },
+        {
+          "key": "D",
+          "text": "Concatenate the instructions onto the first user message, because the API offers no separate channel for standing instructions.",
+          "correct": false,
+          "explanation": "Prepending instructions to a user turn does send them, but the stated reason is false: the API provides a first-class system parameter for exactly this. Keeping instructions in system also makes them a clean, stable prefix for prompt caching.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages/create" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-06",
+      "question": "A logistics dashboard streams Claude output over SSE. The client checks the HTTP status once, sees 200, and renders whatever text arrives. During traffic spikes, users occasionally see answers that stop mid-sentence with no error displayed anywhere. What is the most likely cause and fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A proxy dropped the message_stop event, so add a client-side watchdog that retries after five seconds of silence.",
+          "correct": false,
+          "explanation": "A missing terminator would leave the transcript open rather than truncate the text already rendered, and a blind watchdog retry hides the real signal. The stream itself reports failures, so the client should read them rather than infer them from timing.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        },
+        {
+          "key": "B",
+          "text": "max_tokens is set too low, so generation is cut short whenever the response runs long.",
+          "correct": false,
+          "explanation": "Hitting the token ceiling is a normal, visible outcome: the stream still completes and the message_delta event reports stop_reason max_tokens. That is a stop_reason the client should check, but it does not explain failures that correlate with platform traffic spikes.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "Server-sent events cannot convey errors at all, so the integration must move to non-streaming calls and inspect HTTP status codes.",
+          "correct": false,
+          "explanation": "The stream does carry errors: the API can emit an event named error with a JSON error object mid-stream. Abandoning streaming would also reintroduce dropped-connection risk on long generations.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "D",
+          "text": "An error event carrying overloaded_error arrived after the 200; the client must handle in-stream error events.",
+          "correct": true,
+          "explanation": "Once a streaming response returns 200, later failures do not follow the normal HTTP error path. The API sends them as an SSE error event, for example overloaded_error, which would be a 529 in a non-streaming call, so the client must parse error events and surface them.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-07",
+      "question": "A payments reconciliation service calls Claude in a tight loop. Under load it begins receiving HTTP 429 responses carrying a retry-after header, and the team's wrapper immediately reissues each failed call five times with no delay, which makes the situation worse. What should they do instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Treat the 429 as fatal, fail the reconciliation job, and let an operator rerun it during a quieter period.",
+          "correct": false,
+          "explanation": "A 429 rate_limit_error is a transient capacity signal, not a defect in the request. The documented response is to wait the number of seconds given in retry-after and try again, which a client can do automatically without human intervention.",
+          "citation": { "title": "Rate limits", "url": "https://platform.claude.com/docs/en/api/rate-limits" }
+        },
+        {
+          "key": "B",
+          "text": "Retry on a fixed 100 ms interval so that throughput stays predictable and easy to reason about.",
+          "correct": false,
+          "explanation": "A fixed short interval ignores retry-after, and the header explicitly states that earlier retries will fail. Fixed intervals also synchronise every client into the same retry instant instead of spreading load out.",
+          "citation": { "title": "Rate limits", "url": "https://platform.claude.com/docs/en/api/rate-limits" }
+        },
+        {
+          "key": "C",
+          "text": "Reissue the request with a freshly generated request_id so the API treats the call as new work rather than a repeat.",
+          "correct": false,
+          "explanation": "request_id is assigned by the API and returned in the request-id response header for tracing and support tickets; clients do not set it. It has no bearing on rate-limit accounting, which is measured per organization in requests and tokens per minute.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "D",
+          "text": "Honour retry-after, back off exponentially with jitter, and configure the SDK client's maximum-retries option.",
+          "correct": true,
+          "explanation": "The official SDKs already retry transient failures such as connection errors, rate limits, and 5xx responses with exponential backoff, twice by default, honouring retry-after when present. Each client exposes a maximum-retries option, so tuning that is safer than hand-rolling a loop that ignores the header.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-08",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "An e-commerce team must classify roughly 400,000 product reviews every night, and the results feed a report that runs the next morning. They are evaluating the Message Batches API. Which TWO facts should drive their design?",
+      "options": [
+        {
+          "key": "A",
+          "text": "All batch usage is billed at 50% of standard API prices.",
+          "correct": true,
+          "explanation": "The Batches API charges every request at half the standard input and output rates, which is the primary reason to move latency-tolerant volume onto it. Those savings also stack with prompt caching discounts when requests share a common prefix.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "B",
+          "text": "Setting stream to true inside each batch request lets the pipeline surface partial classifications while the rest of the batch is still processing.",
+          "correct": false,
+          "explanation": "stream is one of the small set of parameters the Batches API does not support, alongside speed and max_tokens of 0. Batch processing is asynchronous by design: you poll processing_status and read results from results_url once the batch has ended.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Results are available once every request finishes or after 24 hours, whichever comes first, and anything unprocessed by then expires.",
+          "correct": true,
+          "explanation": "Most batches complete in under an hour, but the documented guarantee is that results become accessible when all requests finish or at the 24-hour mark. Requests that never reached the model are marked expired and are not billed, so an overnight job fits comfortably inside that window.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "A batch has no size ceiling, so all 400,000 reviews can be submitted together and retrieved as one result set.",
+          "correct": false,
+          "explanation": "A single Message Batch is capped at 100,000 requests or 256 MB, whichever is reached first. A 400,000-review night therefore has to be split across several batches, which is a real constraint on the job's orchestration.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "E",
+          "text": "Batch requests are exempt from rate limits, so the team can submit them as quickly as their infrastructure allows.",
+          "correct": false,
+          "explanation": "The Batches API has its own rate limits: a requests-per-minute limit on the HTTP endpoints and a cap on how many batch requests may sit in the processing queue at once. Heavy submission can also slow processing and push more requests toward the 24-hour expiry.",
+          "citation": { "title": "Rate limits", "url": "https://platform.claude.com/docs/en/api/rate-limits" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-09",
+      "question": "A newsroom's transcript summarizer receives HTTP 200, but the JSON object in the assistant's reply ends part-way through a key name. The response body shows stop_reason set to max_tokens. What does this tell the developer?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Generation was cut off at the max_tokens ceiling; raise the limit or continue the response in a follow-up request.",
+          "correct": true,
+          "explanation": "max_tokens is a successful completion that simply ran out of room, which is why the status is 200 rather than an error. The documented handling is to treat the content as truncated and either increase max_tokens or continue generating from where it stopped.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Claude declined the request on safety grounds, so the code should inspect stop_details before deciding whether to retry.",
+          "correct": false,
+          "explanation": "A declined request surfaces as stop_reason refusal, and only then is stop_details worth reading. Confusing the two leads teams to build safety-fallback logic for what is really a length problem.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "The model's context window filled up, so the only remedy is to shorten the transcript that was sent in.",
+          "correct": false,
+          "explanation": "That condition has its own value, model_context_window_exceeded. Because the reported value is max_tokens, the output budget was the binding constraint, and trimming the input would not change the outcome.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "D",
+          "text": "A configured stop sequence fired mid-object, so the code should read stop_sequence to find out which one matched.",
+          "correct": false,
+          "explanation": "Custom stop sequences produce stop_reason stop_sequence, and only then does the stop_sequence field identify the match. Reading it here would return null and send debugging down the wrong path.",
+          "citation": { "title": "Handling stop reasons", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-10",
+      "question": "A B2B analytics vendor ships a React dashboard that calls the Messages API endpoint directly from the browser, with the API key inlined in the JavaScript bundle so support engineers can reproduce customer issues quickly. What should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the browser call but rotate the key weekly so that any leaked credential has a short useful life.",
+          "correct": false,
+          "explanation": "A key shipped in a bundle is readable by every visitor the moment it deploys, so rotation only shortens an exposure that should not exist. Anthropic's guidance is to store keys in a secrets manager and disable or delete any key suspected of leaking.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the key in the bundle but obfuscate the string and scope the key to a single workspace to contain the damage.",
+          "correct": false,
+          "explanation": "Obfuscation is not a security control; anyone can read the deobfuscated value from a running page. Workspace scoping is a genuine blast-radius control, but it does not make a published secret safe to publish.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        },
+        {
+          "key": "C",
+          "text": "Route the call through a server the vendor controls, which reads the key from a secrets manager into ANTHROPIC_API_KEY.",
+          "correct": true,
+          "explanation": "API keys are static secrets intended for environments where you control secret storage, such as your own backend. The SDKs pick the key up automatically from the ANTHROPIC_API_KEY environment variable, so the browser never has to hold a credential at all.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        },
+        {
+          "key": "D",
+          "text": "Set the key's expiration to three hours and have the dashboard fetch a fresh key from a public endpoint at the start of each session.",
+          "correct": false,
+          "explanation": "An endpoint that hands API keys to anonymous browsers is the original exposure with extra steps. Short expirations limit how long a leaked credential stays usable, but the docs are explicit that expiration is not a substitute for secret hygiene.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-11",
+      "question": "An academic research tool caches a 40,000-token corpus behind a default cache_control breakpoint. The first request reports cache_creation_input_tokens of 40000 and cache_read_input_tokens of 0. A second request 30 seconds later reports the reverse. How were the two requests priced?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The first request's 40,000 tokens were billed at 1.25x the base input rate and the second's at roughly 0.1x.",
+          "correct": true,
+          "explanation": "Writing a five-minute cache entry costs 1.25x the base input price, and reading it back costs about 0.1x on most models. That asymmetry is why caching pays off from the second request onward, and why cache_creation and cache_read are reported as separate usage fields.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Both requests were billed at the ordinary base input rate, because prompt caching improves latency rather than cost.",
+          "correct": false,
+          "explanation": "Caching changes billing directly: cached reads are charged at a fraction of the base input price. Treating it as a latency-only feature causes teams to under-invest in stable prefixes that would cut their bill substantially.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "The first request was free because cache writes are not billed, and the second was billed at 2x because reads carry the premium.",
+          "correct": false,
+          "explanation": "This inverts the model. Writes carry the premium, not reads, and the 2x multiplier belongs to one-hour cache writes specifically; five-minute writes are 1.25x. Reads are always the cheap side of the trade.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Both were billed at 0.1x because the corpus text was byte-identical in each call.",
+          "correct": false,
+          "explanation": "Identical text is what makes the second call a hit, but the first call still had to write the entry, and writes cost more than base input rather than less. The usage fields make this visible: cache_creation_input_tokens is non-zero only on the write.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-12",
+      "question": "A healthcare intake service asks Claude to return a patient-summary object. Roughly 2% of responses fail to parse: a stray sentence before the brace, a missing required field, or a number returned as a string. Which change eliminates schema violations rather than merely reducing their frequency?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set temperature to 0 and repeat the instruction to return only JSON in both the system prompt and the final user turn.",
+          "correct": false,
+          "explanation": "Careful prompting lowers the error rate but offers no guarantee, which is precisely the gap structured outputs were built to close. Anything that leaves parsing failures possible still forces you to keep the retry and error-handling code.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "B",
+          "text": "Send output_config.format with a type of json_schema so constrained decoding enforces the schema.",
+          "correct": true,
+          "explanation": "JSON outputs constrain decoding to the supplied JSON Schema, so responses are always valid and type-safe with required fields present. Schema violations become impossible rather than unlikely, which removes the need for parse-failure retries.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "C",
+          "text": "Wrap the call in a retry loop that re-asks with the parser error appended whenever JSON parsing fails.",
+          "correct": false,
+          "explanation": "This is a symptom treatment that doubles cost and latency on the failing tail and can still fail twice. Structured outputs remove the underlying possibility, which is why the docs present them as an improvement over prompt-and-retry.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "D",
+          "text": "Prefill the assistant turn with an opening brace so that Claude has to continue inside a JSON object.",
+          "correct": false,
+          "explanation": "Prefill only constrains the first characters and says nothing about required fields or value types. It is also unavailable on current models: sending a prefilled final assistant message to Claude 4.6 and later returns a 400 invalid_request_error.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-13",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A freight-tracking backend is adding a retry policy around its Claude client. Which TWO responses should the policy treat as retryable with exponential backoff?",
+      "options": [
+        {
+          "key": "A",
+          "text": "HTTP 400 invalid_request_error raised because a tool's input_schema is malformed.",
+          "correct": false,
+          "explanation": "A 400 reports a problem with the format or content of the request itself, so replaying the identical payload reproduces it exactly. The fix belongs in the code that builds the schema, and retrying only wastes the caller's time budget.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "B",
+          "text": "HTTP 401 authentication_error returned after the service's API key reaches its expiration date.",
+          "correct": false,
+          "explanation": "Expired keys return 401 and cannot be reactivated; a new key must be created and deployed. Retrying a credential failure never succeeds and can mask an operational task that needs a human.",
+          "citation": { "title": "Authentication", "url": "https://platform.claude.com/docs/en/manage-claude/authentication" }
+        },
+        {
+          "key": "C",
+          "text": "HTTP 500 api_error, described in the docs as an unexpected internal failure.",
+          "correct": true,
+          "explanation": "A 500 signals something went wrong inside Anthropic's systems rather than in your request, and the documented handling is to retry with exponential backoff. If it persists, escalate with the request ID from the request-id header.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "D",
+          "text": "HTTP 413 request_too_large when a payload exceeds the 32 MB Messages API limit.",
+          "correct": false,
+          "explanation": "Request size limits are deterministic, so the same oversized body fails every time. The remedy is to shrink the payload, for example by referencing files by file_id instead of embedding base64 data.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "E",
+          "text": "HTTP 529 overloaded_error returned during a period of unusually high platform traffic.",
+          "correct": true,
+          "explanation": "A 529 means the API is temporarily overloaded, a transient capacity condition unrelated to the request's contents. Backing off and retrying is the correct response, and the official SDKs already retry 5xx responses automatically.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-14",
+      "question": "A market-research tool requests a very long report with max_tokens set to 64000 and no streaming. About a third of calls fail after several minutes with either a dropped connection or a 504 timeout_error. What is the documented remedy?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Cut max_tokens to 4096 and stitch ten sequential calls together into one report on the client side.",
+          "correct": false,
+          "explanation": "Chopping the job up adds seams, cost, and orchestration for a problem the transport layer already solves. Anthropic's guidance for large max_tokens values is to stream or batch, not to fragment the request.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "B",
+          "text": "Raise the HTTP client timeout to sixty minutes and leave the request non-streaming.",
+          "correct": false,
+          "explanation": "Intermediate networks drop idle connections regardless of what the client's own timeout says, which is exactly the failure being seen. The SDKs even validate that non-streaming Messages requests are not expected to exceed a ten-minute timeout.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "C",
+          "text": "Retry the failed call automatically, since a 504 timeout_error clears once transient congestion passes.",
+          "correct": false,
+          "explanation": "The timeout here is structural rather than incidental: a generation that long will exceed the window again on the next attempt. The docs point at streaming or the Message Batches API for long-running requests instead.",
+          "citation": { "title": "Claude API errors", "url": "https://platform.claude.com/docs/en/api/errors" }
+        },
+        {
+          "key": "D",
+          "text": "Set stream to true, or submit the job to the Message Batches API and poll for results.",
+          "correct": true,
+          "explanation": "Streaming keeps data flowing so the connection is never idle, and the SDKs can still hand back a complete Message object at the end. The Batches API is the alternative for work over ten minutes because it removes the need for an uninterrupted connection entirely.",
+          "citation": { "title": "Streaming messages", "url": "https://platform.claude.com/docs/en/build-with-claude/streaming" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-15",
+      "question": "A field-service scheduler receives a response with stop_reason set to tool_use containing a tool_use block with id toolu_01A, name book_slot, and an input object. The application executes the booking successfully. What must the next request contain?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The original user message plus a new user message describing the booking outcome in ordinary prose.",
+          "correct": false,
+          "explanation": "Dropping the assistant turn breaks the pairing the model expects between a tool call and its result. Describing the outcome in prose also loses the structured tool_result linkage, which is what tells Claude which call the data answers.",
+          "citation": { "title": "Tool use with Claude", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "B",
+          "text": "The full history, including the assistant turn holding the tool_use block, then a user turn whose tool_result carries tool_use_id toolu_01A.",
+          "correct": true,
+          "explanation": "The documented round trip appends the assistant message containing the tool_use block, then a user message containing a tool_result whose tool_use_id matches the call's id. Claude then uses that result to produce the final answer.",
+          "citation": { "title": "Tool use with Claude", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "C",
+          "text": "A tool_result block sent inside an assistant turn, on the grounds that the assistant is what produced the tool call.",
+          "correct": false,
+          "explanation": "tool_result blocks are always returned in a user turn, because they represent information your application is supplying back to the model. The assistant turn is reserved for what Claude itself generated, including the tool_use block.",
+          "citation": { "title": "Tool use with Claude", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" }
+        },
+        {
+          "key": "D",
+          "text": "Only the tool_result block, since the API retains conversation state on the server keyed by the tool_use id.",
+          "correct": false,
+          "explanation": "The Messages API is stateless: nothing about the prior turn is remembered between calls. Every request must carry the whole conversation, which is also why prompt caching of the stable prefix matters so much in agentic loops.",
+          "citation": { "title": "Messages API reference", "url": "https://platform.claude.com/docs/en/api/messages/create" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-16",
+      "question": "A restaurant-menu digitizer needs to attach a PNG photograph to a user turn as inline base64 data. Which content block is correctly formed for the Messages API?",
+      "options": [
+        {
+          "key": "A",
+          "text": "An image block with media_type and data placed directly on the block alongside type.",
+          "correct": false,
+          "explanation": "Image metadata belongs inside a nested source object, never at the top level of the block. Flattening the fields fails validation because the API cannot determine which of the three source kinds you intended.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "B",
+          "text": "An image block whose source has type base64, a format field set to png, and the data string.",
+          "correct": false,
+          "explanation": "The field is media_type, and its value is a full MIME type such as image/png rather than a bare extension. Supported values are image/jpeg, image/png, image/gif, and image/webp.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "C",
+          "text": "An image block whose source has type base64, media_type image/png, and the base64 data string.",
+          "correct": true,
+          "explanation": "A base64 source requires exactly these three fields: type, media_type, and data. The API supports three source kinds in total, base64, url, and file, and the type value inside source selects which one the remaining fields describe.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        },
+        {
+          "key": "D",
+          "text": "An image block whose source has type file, media_type image/png, and the base64 data string inline.",
+          "correct": false,
+          "explanation": "A file source references content already uploaded to the Files API and carries a file_id instead of inline bytes. Mixing the file source type with an inline data field combines two different mechanisms and is rejected.",
+          "citation": { "title": "Vision", "url": "https://platform.claude.com/docs/en/build-with-claude/vision" }
+        }
+      ]
+    },
+    {
+      "id": "V1-D2-17",
+      "question": "An e-discovery product sends a 180,000-token case file with every question and keeps hitting its input-tokens-per-minute (ITPM) limit. A rate-limit increase will take weeks to approve. Which change raises effective throughput soonest?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Cache the case file behind a cache_control breakpoint, since cache_read_input_tokens do not count toward ITPM on most models.",
+          "correct": true,
+          "explanation": "For most Claude models only uncached input counts against ITPM: input_tokens and cache_creation_input_tokens count, while cache_read_input_tokens do not. A high cache hit rate therefore multiplies effective throughput without any change to the configured limit.",
+          "citation": { "title": "Rate limits", "url": "https://platform.claude.com/docs/en/api/rate-limits" }
+        },
+        {
+          "key": "B",
+          "text": "Lower max_tokens on every request so that fewer tokens are estimated against the per-minute budget.",
+          "correct": false,
+          "explanation": "max_tokens does not factor into rate-limit calculations at all; output limits are evaluated in real time against tokens actually generated. It is also the wrong side of the ledger, since the constraint here is input tokens.",
+          "citation": { "title": "Rate limits", "url": "https://platform.claude.com/docs/en/api/rate-limits" }
+        },
+        {
+          "key": "C",
+          "text": "Issue a second API key inside the same organization and split traffic across the two keys.",
+          "correct": false,
+          "explanation": "Rate limits are enforced at the organization level, so additional keys draw from the same pool. Workspaces can only set limits lower than the organization's, never add headroom on top of it.",
+          "citation": { "title": "Rate limits", "url": "https://platform.claude.com/docs/en/api/rate-limits" }
+        },
+        {
+          "key": "D",
+          "text": "Send requests with inference_geo set to global so they draw from a separate rate-limit pool.",
+          "correct": false,
+          "explanation": "Rate limits are currently shared across all inference_geo values, so requests marked us and global draw from the same allocation. The parameter affects where inference runs, not how much capacity you are entitled to.",
+          "citation": { "title": "Rate limits", "url": "https://platform.claude.com/docs/en/api/rate-limits" }
+        }
+      ]
+    }
+  ]
+}
