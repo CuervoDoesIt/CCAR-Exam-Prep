@@ -1,0 +1,275 @@
+{
+  "examId": "ccar-f-exam3",
+  "caseId": "CS6",
+  "caseTitle": "Alderbrook Museum — cataloguing and provenance research assistant",
+  "caseScenario": "The Alderbrook Museum holds 1.2 million objects, of which about 310,000 have been digitised and photographed. Its collections management system holds a structured record per object, but the underlying evidence lives in forty years of scanned paper: accession files, conservation reports, dealer correspondence, loan agreements and exhibition catalogues. That archive is roughly 4.1 million pages of uneven OCR quality, and nothing in it is indexed by object.\n\nThe digital archive team is three people: two engineers and a digital collections manager. They are building an assistant with two jobs. The first is cataloguing: for the 310,000 digitised objects that have an accession file but only a stub record, the assistant drafts a full catalogue record — title, maker, date, medium, dimensions, credit line and provenance chain. The second is provenance research: a curator asks a question such as whether an object passed through a particular dealer between 1933 and 1945, and the assistant investigates the archive. A serious provenance investigation routinely reads several hundred documents before it can answer.\n\nRegistrars review every drafted record before anything is published, and a record that cannot be traced to a specific page of a specific document is worthless to them — they will not accept a fact they cannot check. Curators use the provenance side interactively during research sessions and abandon a query that stalls. The museum has budgeted $95,000 a year for Claude usage across both jobs, and the team has no ability to hire more engineers this year.",
+  "caseRequirements": [
+    "R1: Every field in a drafted catalogue record must be marked as asserted or inferred, and an asserted field must name the source document id and page it came from.",
+    "R2: The assistant must never write to the collections management system; drafted records go to a registrar review queue and a registrar publishes them.",
+    "R3: A curator's provenance question must return a first answer within 8 seconds p95, measured from the question to the first token displayed.",
+    "R4: A provenance investigation may read up to 400 documents, and findings discovered early in the run must still be reportable with their document id and page intact when the run finishes.",
+    "R5: Annual Claude spend across cataloguing and provenance research must stay within $95,000."
+  ],
+  "questions": [
+    {
+      "id": "F3-CS6-01",
+      "primaryDomain": "D1",
+      "secondaryDomains": [
+        "D5",
+        "D2"
+      ],
+      "question": "A provenance investigation into a 1930s Vienna dealer needs to read roughly 400 documents — auction catalogues, correspondence and loan files — before it can answer. The team is deciding how to structure the run so the answer holds together at the end. Which architecture should they build?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A lead agent that plans the search and spawns provenance workers, each reading a bounded slice of documents in its own context window and returning only dated findings carrying document id and page.",
+          "correct": true,
+          "explanation": "Anthropic's multi-agent research work describes exactly this shape: a lead agent decomposes a research question and subagents explore in parallel, each with its own context window, returning condensed findings rather than raw material. Because each worker returns a small structured finding rather than hundreds of pages, the lead's context stays small enough that the citations discovered in the first slice survive to the end of the run, satisfying R4.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "B",
+          "text": "One agent that reads all 400 documents in a single conversation with server-side compaction enabled, so the transcript is summarised automatically whenever it approaches the context limit.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a reasonable instinct — compaction is designed for exactly this long-running shape and needs almost no engineering. But compaction replaces earlier turns with a model-written summary, and summaries preserve the gist while dropping precise identifiers. A finding from document 40 survives as prose about a Vienna dealer without its document id and page, which is the specific thing R4 requires to still be intact when the run finishes.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A prompt chain that runs the same extraction prompt over each document in turn, feeding each document's output into the next call as accumulated context for the following document.",
+          "correct": false,
+          "explanation": "Prompt chaining fits tasks that decompose into fixed sequential steps where each step genuinely depends on the previous one's output. Reading 400 independent archive documents has no such dependency, and threading every prior result forward means the accumulated context grows with each document until it dominates the window and the run slows to a crawl.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A routing workflow that classifies the curator's question by period and by dealer, then dispatches it to one of several specialised prompts, each tuned for the vocabulary of auction records, of dealer correspondence, or of loan agreements.",
+          "correct": false,
+          "explanation": "Routing is the right pattern when inputs fall into distinct categories that each want different handling, and it may well have a place upstream here. But routing only picks which prompt runs; it does nothing about the volume of documents a single investigation must read, which is the actual problem. The chosen prompt still faces all 400 documents in one context.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS6-02",
+      "primaryDomain": "D2",
+      "secondaryDomains": [
+        "D1",
+        "D4"
+      ],
+      "question": "The engineers are designing the archive search tool the assistant calls during both cataloguing and provenance work. OCR quality varies and a single query can match hundreds of pages. What should the tool return for each hit?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The full OCR text of every matching document, so the model has the complete source and can decide for itself which passages matter without a second call.",
+          "correct": false,
+          "explanation": "Returning everything looks safe but is the classic token-inefficient tool response Anthropic warns against: a single query matching hundreds of pages floods the context with material the model will not use and crowds out the reasoning it needs to do. It also makes the interactive provenance path slow, since the model must ingest all of it before producing a first token.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Document id, page number, a bounded verbatim excerpt with its character offsets, and a document type, with a separate fetch_page tool for pulling the full page when an excerpt looks promising.",
+          "correct": true,
+          "explanation": "Anthropic's tool-writing guidance is to return high-signal, token-efficient context and to let the agent drill down deliberately rather than dumping everything up front. Returning the document id and page as first-class fields alongside a verbatim excerpt means the identifiers R1 demands are carried by the tool contract itself, not reconstructed by the model, and the small response keeps the interactive path inside the 8-second first-token budget R3 sets.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Document id, page number, and a one-sentence summary of the hit written by a cheap model at index time, so responses stay small and the assistant can scan many results quickly.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "This is a defensible design and it does keep responses compact and fast. But a generated summary is not the source text, and when the assistant asserts a maker or a date it will be quoting a paraphrase of an OCR page rather than the page. R1 requires an asserted field to be traceable to the document and page it came from, and a registrar checking the cited page will find wording that does not appear there.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A relevance-ranked list of document ids only, with the model expected to call a separate tool for any document it wants to inspect further.",
+          "correct": false,
+          "explanation": "Ids alone give the model nothing to rank on beyond the tool's own score, so it must fetch documents almost blindly to find out whether they are relevant. That turns one search into a long sequence of fetches, burning both latency and tokens. A useful tool response carries enough context for the agent to make the next decision without a round trip.",
+          "citation": {
+            "title": "Writing effective tools for agents",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS6-03",
+      "primaryDomain": "D4",
+      "secondaryDomains": [
+        "D2",
+        "D1"
+      ],
+      "question": "Drafted catalogue records go into a review queue where registrars check each field. Early trials show the assistant sometimes states a maker confidently with no source behind it, and sometimes omits the marking entirely. Across a backlog of 310,000 objects, how should the team pin the output down?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a second Claude call that reviews each drafted record and rejects any field lacking a source, sending failures back to the drafting model for another attempt.",
+          "correct": false,
+          "explanation": "An evaluator-optimizer loop is a real pattern and it does raise quality, but it is the wrong tool for a shape problem. Whether a record carries a source field is a structural property that can be guaranteed outright, and paying for a second model call plus retries on 310,000 objects spends budget solving something a schema solves for free.",
+          "citation": {
+            "title": "Building effective agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Instruct the model in the system prompt to emit JSON with a source per field, include a worked example of a well-formed record, and validate in the application layer, retrying any record that comes back without a source on an asserted field.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Prompting plus validation is sound engineering and will catch most malformed records, and a competent architect might well stop here. But nothing structurally requires the source field to be present, so the model can still omit it and the system only finds out afterwards. On a 310,000-object backlog every failure costs a full re-draft, and those retries are a direct charge against the R5 budget that constrained decoding would not incur.",
+          "citation": {
+            "title": "Prompt engineering overview",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Prefill the assistant turn with the opening of the record object so the model is forced to continue in the required shape from its first token.",
+          "correct": false,
+          "explanation": "Assistant prefill was once a common trick for steering output format, but it is no longer a supported technique on current Claude models, so this cannot be relied on. The documented replacements are structured outputs, output_config format settings, system-prompt instructions and XML output tags.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use structured outputs with a JSON schema in which every field carries a basis enum of asserted or inferred, and the source document id and page are required whenever the basis is asserted.",
+          "correct": true,
+          "explanation": "Structured outputs use constrained decoding, so the model cannot emit a record that violates the schema — the basis marking and, for asserted fields, the document id and page are guaranteed rather than requested. That makes R1 a property of the contract instead of a behaviour the team has to police, and it removes the retry spend that a validate-and-retry loop would add across 310,000 objects. It also gives the registrar queue R2 mandates a uniform record to review, since every draft arrives with its basis marking already populated rather than sometimes missing.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS6-04",
+      "primaryDomain": "D5",
+      "secondaryDomains": [
+        "D1",
+        "D2"
+      ],
+      "question": "In a long provenance run, findings from the first fifty documents are often the ones that matter — an early dealer invoice can be the pivot of the whole answer. By document 300 the run is near the context limit. How should the team keep early findings reportable?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Cap each investigation at 60 documents and ask the curator to narrow the question further if the assistant runs out of budget before it can answer.",
+          "correct": false,
+          "explanation": "This trades the requirement away rather than engineering for it. R4 explicitly allows an investigation to read up to 400 documents because that is what a serious provenance question demands, and a 60-document ceiling would turn most real curatorial queries into a sequence of manual restarts.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Enable tool result clearing on the investigating agent so that older search and fetch results are dropped from the window once they are no longer the most recent, freeing room for the later documents the investigation still has to read.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Tool result clearing is the lightest-touch context technique available and it is genuinely the right first reach for a long tool-heavy loop. The problem here is that the early citations live only inside those cleared tool results: once dropped, the document id and page behind the pivotal invoice are gone, and nothing outside the window is holding them. R4 requires early findings to still carry their document id and page when the run reports.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Have the agent append each finding — claim, date, document id, page and excerpt — to a findings store outside the context window as it goes, and give it a tool to query that store when it composes the answer.",
+          "correct": true,
+          "explanation": "This is structured note-taking: the agent persists durable state outside the context window and pulls it back deliberately, so what survives is not whatever the window happens to still hold. The early invoice's document id and page are written down the moment they are found, which is what makes them reportable at document 300, and it composes cleanly with clearing the bulky raw tool results.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Raise max_tokens on the investigation calls so the model has more room to work with as the run accumulates documents.",
+          "correct": false,
+          "explanation": "This confuses two different limits. The max tokens setting bounds how long a single response may be; it does nothing about how much prior conversation and tool output the request carries. A run that is running out of room to hold 300 documents needs the input side managed, not a larger output allowance.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F3-CS6-05",
+      "primaryDomain": "D3",
+      "secondaryDomains": [
+        "D1",
+        "D2"
+      ],
+      "question": "The two engineers work on the cataloguing code in Claude Code. The digital collections manager has written thirty pages on how the museum names sources, which the engineers need in full only when they change extraction logic — but the rule that every asserted value names its document and page must hold on every edit under src/cataloguing/. How should this be set up?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Paste the full thirty pages into CLAUDE.md so the standard is always in context and neither engineer has to remember to load it before making a change.",
+          "correct": false,
+          "explanation": "CLAUDE.md is loaded at the start of every session, so thirty pages of reference material would be paid for on every task regardless of relevance. Anthropic's guidance is to keep memory files short and high-signal — a bloated memory file dilutes attention across everything else Claude needs to hold.",
+          "citation": {
+            "title": "Manage Claude's memory",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Put the short source-naming rule in a path-scoped rules file matched to src/cataloguing/, and package the thirty-page reference as a skill the engineers invoke when they change extraction logic.",
+          "correct": true,
+          "explanation": "This splits the two by how they are needed. A path-scoped rule loads automatically whenever files under that path are in play, so the always-on requirement is present on every cataloguing edit without being present on unrelated work. The thirty-page reference sits in a skill whose body is only pulled in when invoked, keeping it out of context the rest of the time.",
+          "citation": {
+            "title": "Manage Claude's memory",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Package both the source-naming rule and the thirty-page reference together as a single skill the engineers invoke at the start of any cataloguing task.",
+          "correct": false,
+          "runnerUp": true,
+          "explanation": "Bundling them is tidy and keeps the reference out of context until it is wanted, which is half the problem solved well. But a skill body loads only when the skill is invoked — by an engineer explicitly, or by Claude judging it relevant to the prompt — rather than automatically whenever a matching file is touched. R1 has to hold on every asserted value the cataloguing code produces, and a rule that applies only when something elects to invoke it is not the guarantee a path-scoped rule gives.",
+          "citation": {
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep both documents as separate markdown files and reference them from CLAUDE.md with @ imports, so the content stays in its own files rather than inflating the memory file.",
+          "correct": false,
+          "explanation": "An @ import in CLAUDE.md is not lazy loading — the imported file's contents are pulled in when the memory file is read at session start, exactly as if they had been pasted inline. The file layout is tidier, but the thirty pages still occupy context on every session.",
+          "citation": {
+            "title": "Manage Claude's memory",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    }
+  ]
+}

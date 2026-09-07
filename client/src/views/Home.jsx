@@ -7,6 +7,21 @@ function fmtDuration(s) {
   return `${m}m ${s % 60}s`;
 }
 
+const CERT_INFO = {
+  'CCAR-F': {
+    label: 'CCAR-F · Architect Foundations',
+    blurb: 'Core mechanics: agentic loop, tool use & MCP, Claude Code, prompting, context management.',
+  },
+  'CCAR-P': {
+    label: 'CCAR-P · Architect Professional',
+    blurb: 'Enterprise architecture: solution design, integration, evaluation, governance, lifecycle.',
+  },
+  'CCDV-F': {
+    label: 'CCDV-F · Developer Foundations',
+    blurb: 'Implementation: request and response shapes, SDK usage, parameters, error handling, evals.',
+  },
+};
+
 export default function Home({ onStart }) {
   const [exams, setExams] = useState(null);
   const [attempts, setAttempts] = useState([]);
@@ -20,15 +35,18 @@ export default function Home({ onStart }) {
   if (error) return <div className="panel error-panel">Cannot reach the study server: {error}. Start it with <code>npm start</code> in <code>server/</code>.</div>;
   if (!exams) return <div className="panel">Loading exams…</div>;
 
-  const certs = [
-    { id: 'CCAR-F', label: 'CCAR-F · Foundations', blurb: 'Core mechanics: agentic loop, tool use & MCP, Claude Code, prompting, context management.' },
-    { id: 'CCAR-P', label: 'CCAR-P · Professional', blurb: 'Enterprise architecture: solution design, integration, evaluation, governance, lifecycle.' },
-  ];
+  // Derived from what the server actually serves rather than hardcoded: a
+  // hardcoded list silently dropped the whole CCDV-F track once, so a cert the
+  // API knows about can never again be invisible here. Order follows the API.
+  const certs = [...new Set(exams.map((e) => e.cert))].map((id) => ({
+    id,
+    ...(CERT_INFO[id] ?? { label: id, blurb: '' }),
+  }));
 
   return (
     <div className="home">
       <section className="hero-copy">
-        <h1>Interactive CCAR Mock Exams</h1>
+        <h1>Interactive Claude Certification Mock Exams</h1>
         <p>
           Two ways to study: <strong>Learning Mode</strong> explains every answer choice with Anthropic
           documentation citations. <strong>Real Mode</strong> simulates the actual exam — timed, no hints,

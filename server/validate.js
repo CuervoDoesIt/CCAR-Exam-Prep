@@ -37,10 +37,25 @@ const CCDV_CASE_ALLOCATION = {
   cs5: { D2: 1, D3: 1, D4: 1, D6: 2 },
 };
 
+// CCAR-F hard mode stays blueprint-exact (14/13/11/12/10): its five domains are
+// already evenly weighted on the real exam, so there is no thin domain to
+// compensate for the way CCDV-F's D3/D4 needed.
+const CCAR_F_CASE_ALLOCATION = {
+  cs1: { D1: 3, D2: 2, D3: 2, D4: 2, D5: 2 },
+  cs2: { D1: 3, D2: 3, D3: 2, D4: 2, D5: 1 },
+  cs3: { D1: 3, D2: 2, D3: 2, D4: 2, D5: 2 },
+  cs4: { D1: 2, D2: 3, D3: 2, D4: 2, D5: 2 },
+  cs5: { D1: 2, D2: 2, D3: 2, D4: 3, D5: 2 },
+  cs6: { D1: 1, D2: 1, D3: 1, D4: 1, D5: 1 },
+};
+
+const CCAR_F_DOMAINS = ["D1", "D2", "D3", "D4", "D5"];
 const CCAR_P_DOMAINS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7"];
 const CCDV_F_DOMAINS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"];
 
 const EXPECTED_CASES = {
+  "ccar-f/exam3": { prefix: "F3", allocation: CCAR_F_CASE_ALLOCATION, domainIds: CCAR_F_DOMAINS },
+  "ccar-f/exam4": { prefix: "F4", allocation: CCAR_F_CASE_ALLOCATION, domainIds: CCAR_F_DOMAINS },
   "ccar-p/exam3": { prefix: "P3", allocation: CASE_ALLOCATION, domainIds: CCAR_P_DOMAINS },
   "ccar-p/exam4": { prefix: "P4", allocation: CASE_ALLOCATION, domainIds: CCAR_P_DOMAINS },
   "ccdv-f/exam3": { prefix: "V3", allocation: CCDV_CASE_ALLOCATION, domainIds: CCDV_F_DOMAINS },
