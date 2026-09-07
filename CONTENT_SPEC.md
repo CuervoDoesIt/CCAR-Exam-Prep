@@ -117,7 +117,7 @@ Rules:
 8. Keep question text under ~90 words; option text under ~35 words.
 9. Valid JSON — no trailing commas, no comments. Validate mentally before writing.
 
-## Volatile facts (re-verified 2026-09-06)
+## Volatile facts (re-verified 2026-09-07)
 
 These have all changed recently enough that memorised knowledge is likely wrong. Re-fetch
 the doc before relying on any of them; update this list when you find it stale.
@@ -126,6 +126,12 @@ the doc before relying on any of them; update this list when you find it stale.
   correct answer. The documented replacements are structured outputs, `output_config.format`,
   system-prompt instructions, and XML output tags. It may appear only as a distractor, or in
   a stem that explicitly pins an older model.
+  Precise boundary, verified 2026-09-07: prefilling *the last assistant turn* is unsupported
+  "starting with Claude 4.6 models and Claude Mythos Preview", and such requests return a 400.
+  Earlier models still support prefill, and assistant messages elsewhere in the conversation
+  are unaffected. So write "on current models" — not "removed from the API", which is false.
+  Source: `prompt-engineering/claude-prompting-best-practices`, §"Migrating away from
+  prefilled responses". The old dedicated prefill doc page now redirects to the overview.
 - **Extended-thinking effort is nested**: `output_config: { effort: "low"|"medium"|"high"|"xhigh"|"max" }`,
   default `"high"`. There is no top-level `effort` parameter.
 - `thinking: { type: "adaptive" }` is current. `thinking: { type: "enabled", budget_tokens: N }`
@@ -136,3 +142,14 @@ the doc before relying on any of them; update this list when you find it stale.
 - `Authorization: Bearer` is the primary auth header; `x-api-key` is a legacy fallback.
 - **Doc host migration**: `docs.claude.com` 301-redirects. Cite the canonical hosts —
   `platform.claude.com` for API/platform docs, `code.claude.com` for Claude Code docs.
+- **Compaction and tool-result clearing are two different mechanisms — do not blur them.**
+  Server-side *compaction* (`/build-with-claude/compaction`) replaces older content with a
+  model-written summary, so a specific identifier is not guaranteed to survive. *Tool result
+  clearing* (`/build-with-claude/context-editing`, `clear_tool_uses_20250919`) replaces the
+  result *body* with placeholder text but leaves the preceding `tool_use` block — including
+  its inputs — in place, since `clear_tool_inputs` defaults to false. So "clearing loses the
+  citation" is only true when the citation lived in the tool *result*. Cite each mechanism to
+  its own page; the compaction page does not document clearing and vice versa.
+  Neither page contains any warning about losing "subtle detail" or nuance — do not attribute
+  one to Anthropic. The supportable statement is that compaction "replaces older content with
+  a concise summary", and the lossiness follows from that.
