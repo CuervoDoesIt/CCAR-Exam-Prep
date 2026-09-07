@@ -263,7 +263,10 @@ app.post("/api/attempts", (req, res) => {
   const exam = loadExam(examId);
   if (!exam) return res.status(404).json({ error: "Exam not found" });
   const result = gradeAttempt(exam, answers);
-  // include full option detail so the results review screen can teach
+  // include full option detail so the results review screen can teach.
+  // isCorrect comes from the grader rather than being recomputed client-side,
+  // so the review screen can never disagree with the score above it.
+  const verdicts = new Map(result.questionResults.map((r) => [r.id, r.isCorrect]));
   const review = exam.questions.map((q) => ({
     id: q.id,
     domainId: q.domainId,
@@ -272,6 +275,7 @@ app.post("/api/attempts", (req, res) => {
     caseTitle: q.caseTitle ?? null,
     question: q.question,
     chosen: answers[q.id] ?? null,
+    isCorrect: verdicts.get(q.id) ?? false,
     options: q.options,
   }));
   const attempt = {

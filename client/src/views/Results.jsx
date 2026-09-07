@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { toKeys, correctKeys, sameSet } from '../answers.js';
+import { toKeys, correctKeys } from '../answers.js';
 
 function fmtDuration(s) {
   const m = Math.floor(s / 60);
@@ -12,7 +12,7 @@ export default function Results({ attempt, onExit }) {
   const { overall, sections, cases, review } = attempt;
   const runnerUpTraps = (cases ?? []).reduce((n, c) => n + c.runnerUpPicks, 0);
 
-  const shown = review.filter((r) => (filter === 'all' ? true : !sameSet(r.chosen, correctKeys(r))));
+  const shown = review.filter((r) => (filter === 'all' ? true : !r.isCorrect));
 
   return (
     <div className="results">
@@ -109,7 +109,7 @@ export default function Results({ attempt, onExit }) {
 
       {shown.map((r) => {
         const chosenKeys = toKeys(r.chosen);
-        const isCorrect = sameSet(chosenKeys, correctKeys(r));
+        const isCorrect = r.isCorrect;
         const open = !!openQ[r.id];
         return (
           <div key={r.id} className={`review-card ${isCorrect ? 'rc-right' : 'rc-wrong'}`}>

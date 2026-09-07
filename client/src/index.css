@@ -235,9 +235,16 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
   background: #24344f; border: 1px solid var(--blue); color: #cfe0ff;
   font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em;
 }
-/* Started but incomplete — kept visually distinct from answered so the palette
-   never implies a select-two question is done after a single pick. */
-.pal-partial { background: #3a3320; color: #ffce8a; border-color: #c07820; }
+/* Started but incomplete — distinct from answered so the palette never implies a
+   select-two question is done after a single pick. Deliberately in the blue
+   "answered" family rather than amber: amber belongs to .pal-flagged, and because
+   this rule comes later at equal specificity, reusing amber here would silently
+   mask the flag marker on a half-answered question. */
+.pal-partial {
+  background: #1b2637; color: #9fb6d8;
+  border-color: var(--blue); border-style: dashed;
+}
+.check-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
 
 @media (max-width: 640px) {
   .score-hero { flex-direction: column; gap: 10px; text-align: center; }

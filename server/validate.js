@@ -76,8 +76,14 @@ function checkQuestion(file, q, seen) {
     if (!/\bTWO\b/.test(q.question)) {
       err(`${file} ${q.id}: multi item stem must tell the candidate how many to select (e.g. "Which TWO...")`);
     }
-  } else if (q.selectCount !== undefined) {
-    err(`${file} ${q.id}: selectCount is only valid on multi items`);
+  } else {
+    if (q.selectCount !== undefined) err(`${file} ${q.id}: selectCount is only valid on multi items`);
+    // The dangerous direction: a stem that asks for TWO but was never marked
+    // multi validates as an ordinary 4-option single-choice item, so it renders
+    // with no select-two hint and is effectively miskeyed.
+    if (/\bTWO\b/.test(q.question)) {
+      err(`${file} ${q.id}: stem says TWO but the item is not type: "multi"`);
+    }
   }
 
   if (!Array.isArray(q.options) || q.options.length !== wantOptions) {
@@ -107,9 +113,20 @@ function checkLetterDistribution(file, letterDist, total) {
   }
 }
 
+// Multiple-response items per exam set. CCDV-F targets 8 of its 53; the CCAR
+// exams have no multi format at all, so 0 here also catches one appearing by
+// accident in a bank that cannot render it.
+const MULTI_EXPECTED = {
+  "ccar-f/exam1": 0, "ccar-f/exam2": 0,
+  "ccar-p/exam1": 0, "ccar-p/exam2": 0,
+  "ccdv-f/exam1": 8, "ccdv-f/exam2": 8,
+};
+
 // ---- domain-organised exams -------------------------------------------------
 for (const [rel, domains] of Object.entries(EXPECTED)) {
   const dir = path.join(DATA_DIR, ...rel.split("/"));
+  let multiCount = 0;
+  const multiPairs = {};
   for (const [domainId, count] of Object.entries(domains)) {
     const name = `${domainId.toLowerCase()}.json`;
     const file = path.join(dir, name);
@@ -126,9 +143,24 @@ for (const [rel, domains] of Object.entries(EXPECTED)) {
     for (const q of data.questions) {
       const k = checkQuestion(file, q, seen);
       if (q.type !== "multi") singles++;
+      else {
+        multiCount++;
+        const pair = (q.options ?? []).filter((o) => o.correct === true).map((o) => o.key).sort().join("");
+        multiPairs[pair] = (multiPairs[pair] ?? 0) + 1;
+      }
       if (k) letterDist[k]++;
     }
     checkLetterDistribution(file, letterDist, singles);
+  }
+  const wantMulti = MULTI_EXPECTED[rel];
+  if (wantMulti !== undefined && multiCount !== wantMulti) {
+    err(`${rel}: ${multiCount} multiple-response items, expected ${wantMulti}`);
+  }
+  // Multi items sit outside checkLetterDistribution because their answer is a
+  // pair, not a letter. Guard the same way: a bank where every "select TWO"
+  // keys the same pair is trivially exploitable.
+  if (multiCount >= 4 && Math.max(0, ...Object.values(multiPairs)) > Math.ceil(multiCount * 0.5)) {
+    warn(`${rel}: skewed correct-pair distribution on multi items ${JSON.stringify(multiPairs)}`);
   }
 }
 

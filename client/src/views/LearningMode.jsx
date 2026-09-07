@@ -11,7 +11,10 @@ export default function LearningMode({ examId, onExit }) {
   const [exam, setExam] = useState(null);
   const [error, setError] = useState(null);
   const [idx, setIdx] = useState(saved?.idx ?? 0);
-  const [picked, setPicked] = useState(saved?.picked ?? {}); // questionId -> option key
+  const [picked, setPicked] = useState(saved?.picked ?? {}); // questionId -> option key(s)
+  // Select-two items reveal on an explicit click rather than on the second pick,
+  // so completing the pair can't lock in an answer the user was still editing.
+  const [checked, setChecked] = useState(saved?.checked ?? {});
   const [domainFilter, setDomainFilter] = useState(saved?.domainFilter ?? 'all');
 
   useEffect(() => {
@@ -41,8 +44,8 @@ export default function LearningMode({ examId, onExit }) {
   }, [domainFilter]);
 
   useEffect(() => {
-    saveProgress(storageKey, { idx, picked, domainFilter });
-  }, [storageKey, idx, picked, domainFilter]);
+    saveProgress(storageKey, { idx, picked, checked, domainFilter });
+  }, [storageKey, idx, picked, checked, domainFilter]);
 
   if (error) return <div className="panel error-panel">{error}</div>;
   if (!exam) return <div className="panel">Loading exam…</div>;
@@ -52,13 +55,16 @@ export default function LearningMode({ examId, onExit }) {
   if (!q) return <div className="panel">No questions in this section.</div>;
   const chosenKeys = toKeys(picked[q.id]);
   const want = selectCount(q);
-  // Select-two items only reveal once both picks are in, so the first click
-  // doesn't give the answer away.
-  const revealed = isAnswered(q, picked[q.id]);
+  // A single-choice pick is unambiguous, so it reveals immediately. Select-two
+  // waits for an explicit confirm: the click that completes the pair would
+  // otherwise lock the answer while the user was still adjusting it.
+  const isRevealed = (qq) =>
+    selectCount(qq) > 1 ? !!checked[qq.id] : isAnswered(qq, picked[qq.id]);
+  const revealed = isRevealed(q);
   const keysCorrect = correctKeys(q);
   const gotIt = isCorrect(q, picked[q.id]);
-  const answeredCount = questions.filter((qq) => isAnswered(qq, picked[qq.id])).length;
-  const correctCount = questions.filter((qq) => isCorrect(qq, picked[qq.id])).length;
+  const answeredCount = questions.filter(isRevealed).length;
+  const correctCount = questions.filter((qq) => isRevealed(qq) && isCorrect(qq, picked[qq.id])).length;
   const activeCase = exam.cases?.find((c) => c.caseId === q.caseId);
   const numberInCase = activeCase
     ? exam.questions.filter((qq) => qq.caseId === q.caseId).findIndex((qq) => qq.id === q.id) + 1
@@ -82,6 +88,7 @@ export default function LearningMode({ examId, onExit }) {
               if (!window.confirm('Clear your saved answers and start this exam over?')) return;
               clearProgress(storageKey);
               setPicked({});
+              setChecked({});
               setIdx(0);
             }}
           >
@@ -126,7 +133,7 @@ export default function LearningMode({ examId, onExit }) {
         <h3 className="q-text">{q.question}</h3>
         {want > 1 && !revealed && (
           <div className="select-hint">
-            Select {want} — {chosenKeys.length} of {want} chosen
+            Select {want} — {chosenKeys.length} of {want} chosen. Scored all-or-nothing.
           </div>
         )}
         <div className="options">
@@ -180,6 +187,22 @@ export default function LearningMode({ examId, onExit }) {
             );
           })}
         </div>
+        {want > 1 && !revealed && (
+          <div className="check-row">
+            <button
+              className="btn"
+              disabled={chosenKeys.length !== want}
+              onClick={() => setChecked((c) => ({ ...c, [q.id]: true }))}
+            >
+              Check answer
+            </button>
+            <span className="muted">
+              {chosenKeys.length === want
+                ? 'You can still change your picks until you check.'
+                : `Choose ${want - chosenKeys.length} more.`}
+            </span>
+          </div>
+        )}
         {revealed && (
           <div className={`verdict-banner ${gotIt ? 'pass' : 'fail'}`}>
             {gotIt
@@ -198,7 +221,10 @@ export default function LearningMode({ examId, onExit }) {
         <div className="palette">
           {questions.map((qq, i) => {
             let cls = 'pal';
-            if (isAnswered(qq, picked[qq.id])) cls += isCorrect(qq, picked[qq.id]) ? ' pal-right' : ' pal-wrong';
+            // Gate on isRevealed, not isAnswered: colouring a select-two right or
+            // wrong before it has been checked would give the answer away.
+            if (isRevealed(qq)) cls += isCorrect(qq, picked[qq.id]) ? ' pal-right' : ' pal-wrong';
+            else if (toKeys(picked[qq.id]).length > 0) cls += ' pal-partial';
             if (i === safeIdx) cls += ' pal-current';
             return (
               <button key={qq.id} className={cls} onClick={() => setIdx(i)} title={qq.id}>
