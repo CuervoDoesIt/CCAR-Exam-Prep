@@ -176,7 +176,7 @@
           "text": "Commit the eight steps as a custom slash command in .claude/commands/, taking the prompt file path through $ARGUMENTS, so every engineer invokes the identical sequence explicitly.",
           "correct": true,
           "explanation": "Slash commands are the mechanism for a repeatable prompt workflow: the file lives in .claude/commands/ in the repository, so it is version-controlled and reviewed like code, and $ARGUMENTS lets one definition serve every prompt file. Because invocation is explicit, the diff step cannot be quietly dropped, which is what R4 needs — and the same script is what CI runs to enforce the per-field thresholds. Option C (runner-up) keeps the workflow in the repo too, but leaves it to the model to decide whether to run it.",
-          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         },
         {
           "key": "C",
@@ -191,7 +191,7 @@
           "text": "Keep a snippet of the eight steps in the team's wiki and paste it into the session at the start of each review, since the text is identical every time and needs no tooling to maintain.",
           "correct": false,
           "explanation": "A pasted snippet is unversioned, drifts from the scorer it describes the moment either changes, and depends entirely on the engineer remembering to paste it — the same failure mode as running the steps from memory. It also cannot be invoked by CI.",
-          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         }
       ]
     }

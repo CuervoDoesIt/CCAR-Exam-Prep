@@ -111,7 +111,7 @@
           "correct": false,
           "runnerUp": true,
           "explanation": "Project-scoped slash commands live in the repository, so they are shared with everyone who clones it, and this would reliably deliver the right context. But it does not meet R4, which requires the conventions and schema to be present without the engineer taking any explicit action; here the context arrives only if someone remembers to run the command, and an onboarding checklist is precisely the manual step R4 removes.",
-          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         },
         {
           "key": "D",

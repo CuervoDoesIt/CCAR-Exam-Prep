@@ -46,14 +46,14 @@
           "text": "A committed .claude/commands/triage.md whose frontmatter sets allowed-tools: Bash(gh *) and whose body embeds !`gh issue view $ARGUMENTS`.",
           "correct": true,
           "explanation": "A markdown file at .claude/commands/<name>.md creates /name for anyone with the checkout, and command files support the same frontmatter and body features as skills. The !`command` syntax runs the shell command before Claude sees the content, allowed-tools pre-approves it, and $ARGUMENTS carries the issue number through.",
-          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         },
         {
           "key": "B",
           "text": "The same file placed at ~/.claude/commands/triage.md, because personal commands take precedence over project ones and are therefore the more reliable location for a shared team command.",
           "correct": false,
           "explanation": "Personal definitions do win a name collision, but precedence is not the requirement here: a file under the home directory belongs to one machine and never arrives with the repository. Project scope is what shares a command with the team through source control.",
-          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         },
         {
           "key": "C",
@@ -67,7 +67,7 @@
           "text": "A \"## /triage\" section in the project CLAUDE.md listing the steps to follow when the user asks for a triage.",
           "correct": false,
           "explanation": "CLAUDE.md loads in every session as instructions, but it registers no invokable command, runs no shell before the turn, and pre-approves no tools. The gh call would still stop for a permission prompt.",
-          "citation": { "title": "Slash commands", "url": "https://code.claude.com/docs/en/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         }
       ]
     }

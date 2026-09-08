@@ -563,8 +563,8 @@
           "correct": false,
           "explanation": "Personal user-scoped configuration is not version-controlled in the repository and is not propagated on clone. Each engineer must manually replicate the configuration, drifting over time as templates evolve. This recreates the inconsistency problem and does not satisfy the shared-on-clone requirement.",
           "citation": {
-            "title": "Claude Code — slash commands",
-            "url": "https://docs.claude.com/en/docs/claude-code/slash-commands"
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {

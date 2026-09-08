@@ -105,8 +105,8 @@
           "correct": true,
           "explanation": "Project commands in .claude/commands/ are checked into the repository and shared with the team, so anyone who clones the repo gets the slash command automatically. This is Anthropic's documented mechanism for team-shared commands.",
           "citation": {
-            "title": "Slash commands",
-            "url": "https://code.claude.com/docs/en/slash-commands"
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {
@@ -115,8 +115,8 @@
           "correct": false,
           "explanation": "~/.claude/commands/ holds personal commands available across all of one user's projects but local to their machine only. Teammates cloning the repo would not receive it, so it fails the sharing requirement.",
           "citation": {
-            "title": "Slash commands",
-            "url": "https://code.claude.com/docs/en/slash-commands"
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {

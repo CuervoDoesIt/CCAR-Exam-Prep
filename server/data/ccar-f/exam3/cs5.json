@@ -507,7 +507,7 @@
           "explanation": "A skill is the documented home for a repeatable procedure, its body loads only when invoked, and pre-approving the diff commands removes the permission prompts — a sound setup on its own terms. It falls short on R5. Run in the main session, the full corpus diff enters that session's context and is re-processed on every subsequent turn at the session's default model rate, and R5 counts the nightly corpus against the same budget as screening and scheduling. Option D moves that bulk off the expensive path.",
           "citation": {
             "title": "Extend Claude with skills",
-            "url": "https://code.claude.com/docs/en/slash-commands"
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {

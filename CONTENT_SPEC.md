@@ -164,6 +164,15 @@ the doc before relying on any of them; update this list when you find it stale.
 - `Authorization: Bearer` is the primary auth header; `x-api-key` is a legacy fallback.
 - **Doc host migration**: `docs.claude.com` 301-redirects. Cite the canonical hosts —
   `platform.claude.com` for API/platform docs, `code.claude.com` for Claude Code docs.
+- **Slash commands were merged into skills.** `code.claude.com/docs/en/slash-commands` and the
+  legacy `docs.claude.com/en/docs/claude-code/slash-commands` both still return 200, but both now
+  serve the page titled **"Extend Claude with skills"**. Cite `code.claude.com/docs/en/skills`
+  instead. That page still documents `.claude/commands/` ("the older format and still works"),
+  `$ARGUMENTS`, `allowed-tools`, and name precedence, so questions about custom slash commands
+  remain correct — only the citation target changed. Built-in commands like `/help` and `/compact`
+  are documented separately at `code.claude.com/docs/en/commands`.
+  **A 200 is not proof a citation is good.** Check that the page actually served carries the claim,
+  and that its title matches the citation title — this URL is exactly the case a status check misses.
 - **Compaction and tool-result clearing are two different mechanisms — do not blur them.**
   Server-side *compaction* (`/build-with-claude/compaction`) replaces older content with a
   model-written summary, so a specific identifier is not guaranteed to survive. *Tool result
