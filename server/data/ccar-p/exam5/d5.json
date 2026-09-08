@@ -1,0 +1,353 @@
+{
+  "examId": "ccar-p-exam5",
+  "domainId": "D5",
+  "domainName": "Governance, Safety & Risk Management",
+  "questions": [
+    {
+      "id": "P5-D5-01",
+      "question": "A prosthetics clinic wants to send fitting notes containing patient identifiers to the Claude API. Its privacy officer asks for assurance that prompts are not stored. The engineering lead proposes adding a line to the system prompt instructing the model not to retain the data. What should the architect advise?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The system-prompt line is sufficient, since current models follow explicit instructions reliably.",
+          "correct": false,
+          "explanation": "Retention is a property of the platform and the contract, not of the model's behaviour inside a single request, so no instruction in a prompt can change where data is stored. Treating an advisory sentence as a data-protection control is the category error the privacy officer is trying to avoid.",
+          "citation": {
+            "title": "API and data retention",
+            "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Pursue zero data retention and HIPAA-ready access with Anthropic, checking feature eligibility.",
+          "correct": true,
+          "explanation": "Anthropic offers zero data retention and HIPAA readiness as contractual data-handling arrangements for the Claude API, with a published table of which features each covers. That matters here because features that inherently require storage are excluded, so the architecture has to be checked feature by feature rather than assumed clean.",
+          "citation": {
+            "title": "API and data retention",
+            "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Encrypt the fitting-note text client-side before sending it, so only ciphertext leaves the clinic.",
+          "correct": false,
+          "explanation": "The model has to read the note to summarise it, and it cannot read ciphertext, so this makes the feature impossible rather than compliant. Where identifiers are genuinely not needed for the task the right move is to omit or tokenise them, which is a different design from encrypting the payload.",
+          "citation": {
+            "title": "API and data retention",
+            "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Route the notes through the Batch API, since batch requests are processed and immediately discarded.",
+          "correct": false,
+          "explanation": "This invents a behaviour: batches are asynchronous and results are stored so you can retrieve them after processing ends. Choosing an API surface on an imagined retention property is exactly the kind of unverified assumption a privacy review exists to catch.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D5-02",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A localisation platform's agent ingests customer-supplied glossaries and style guides, then uses tools that publish subtitle files to a broadcaster's CDN. Security wants a pre-launch red-team plan covering instructions hidden inside a customer document. Which TWO measures belong in that plan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Seed the test corpus with documents carrying injection payloads and confirm the agent reports them rather than acting on them.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is to red-team your own agent before deployment with documents and tool outputs that deliberately contain injection attempts. It independently qualifies because it is the only measure here that produces evidence about how this agent actually behaves under attack, rather than an assumption that it will behave well.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Place each customer glossary into the system prompt so the agent treats it as authoritative context.",
+          "correct": false,
+          "explanation": "This is backwards: third-party content should reach the model inside tool_result blocks, never in the system prompt or a plain user text block, because Claude is trained to treat tool-result content with appropriate skepticism. Promoting untrusted text to system-prompt authority maximises the blast radius of an injection.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Rely on the model's documented inherent resilience to injection and skip application-layer controls.",
+          "correct": false,
+          "explanation": "Anthropic does describe Claude as inherently resilient, but the same guidance immediately prescribes additional layers precisely because resilience is not a guarantee. With a tool that can publish to a broadcaster's CDN, the residual risk is not one to absorb on a single control.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Screen each tool's returned content with a small classifier call before returning it as a tool_result, withholding anything flagged as an injection attempt.",
+          "correct": true,
+          "explanation": "Anthropic documents screening tool output with a lightweight model and a constrained structured verdict your application can branch on. It qualifies on its own because it is a runtime control that keeps working on documents nobody thought to test, which the red-team corpus by definition cannot cover.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Lower the effort level so the agent takes fewer autonomous steps per job.",
+          "correct": false,
+          "explanation": "Effort trades intelligence for latency and cost within a model; it is a performance knob, not a security boundary. A successfully injected agent with fewer steps still has the CDN publish tool.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D5-03",
+      "question": "A credit union's lending assistant calls an internal get_member_profile tool that returns the entire member record, including national ID numbers, full account numbers and dependants, though the assistant only needs the member's risk band and tenure. Compliance flags it. What is the strongest fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add a system-prompt rule that the assistant must never repeat national ID or account numbers in its answers.",
+          "correct": false,
+          "explanation": "The sensitive fields have already entered the context, the transcript and any logs by the time this rule applies, so it addresses only the final rendering. Anthropic's guidance is to limit the agent's access to sensitive data so a successful injection or mistake can do minimal damage.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Strip the identifiers from the assistant's final answer with a post-processing regular expression.",
+          "correct": false,
+          "explanation": "A last-mile filter cleans one output while the data still transits the API, sits in context, and persists in stored conversation history. It is also brittle against formats the pattern did not anticipate, which is a poor foundation for a regulated control.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Give the assistant read-only credentials to the member database so it cannot alter records.",
+          "correct": false,
+          "explanation": "Read-only prevents modification but does nothing about over-disclosure: a read-only credential still reads every sensitive field. This confuses integrity protection with the confidentiality problem compliance actually raised.",
+          "citation": {
+            "title": "Mitigate jailbreaks and prompt injections",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Change the tool's response so it returns only the risk band and tenure.",
+          "correct": true,
+          "explanation": "Anthropic's tool-design guidance is to return only high-signal information the model needs for its next step, and least privilege says an agent should not hold data it has no use for. Fields the agent never receives cannot be leaked, logged, or extracted by an injected instruction, so the control is structural rather than advisory.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D5-04",
+      "question": "A geothermal drilling firm's regulator-facing calculation library must never be edited by an agent without a named engineer's approval. The team wrote 'never modify files under /calc without approval' in CLAUDE.md, and during a refactor an agent modified one anyway. What is the right correction?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Enforce it structurally: a settings deny rule, or a PreToolUse hook that blocks the write.",
+          "correct": true,
+          "explanation": "Anthropic is explicit that CLAUDE.md is context rather than enforced configuration, and that a rule which must hold regardless of what Claude decides belongs in settings or a hook. Hooks run as deterministic shell commands at fixed lifecycle events, so the block happens whether or not the instruction was salient in that session.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Move the instruction to the top of CLAUDE.md and mark it IMPORTANT so it is not overlooked.",
+          "correct": false,
+          "explanation": "Emphasis improves adherence at the margin, and Anthropic does suggest it for a single stubborn rule, but the instruction remains advisory. For a control the regulator relies on, better odds of compliance is not the same as compliance.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Move the rule into a skill so it loads only when work touches the calculation library.",
+          "correct": false,
+          "explanation": "Skills are a good way to keep occasional domain knowledge out of every session, but they deliver instructions, not enforcement, and they load on the model's judgement. Scoping when a rule is visible does not make it binding.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Shorten CLAUDE.md to well under 200 lines so the rule is not lost among dozens of other instructions.",
+          "correct": false,
+          "explanation": "Trimming is genuine hygiene, since Anthropic notes that long files reduce adherence and rules get lost in the noise. It still leaves a safety-relevant constraint dependent on the model reading and honouring a sentence.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D5-05",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A desalination plant's assistant advises operators on membrane cleaning. The safety case requires that the assistant can never itself change a plant setpoint. Five candidate controls are on the table. Which TWO are structural rather than advisory?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A system-prompt paragraph forbidding the assistant from changing setpoints.",
+          "correct": false,
+          "explanation": "System-prompt rules shape behaviour but are instructions the model weighs alongside everything else in context, including anything an operator or a document says. A safety case that rests on the model choosing to comply has no failure mode it can point to and rule out.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A line in the operator runbook telling staff to reject any setpoint change the assistant suggests.",
+          "correct": false,
+          "explanation": "This is a procedural control on humans, not on the system, and it degrades exactly when operators are busiest during an upset. It also leaves the underlying capability in place, so the safety argument depends on vigilance rather than on impossibility.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Removing the write-capable setpoint tool from the assistant's tool list entirely.",
+          "correct": true,
+          "explanation": "A capability the session does not have cannot be exercised by any prompt, injected instruction, or model error, which is the strongest form of the control. It independently satisfies the safety requirement because the assistant's tool list is what defines the actions available to it at all.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A note in the repository CLAUDE.md stating that control-system tools are off limits.",
+          "correct": false,
+          "explanation": "Anthropic documents CLAUDE.md as context delivered to the model, not as enforced configuration, and recommends a hook when something must happen regardless of what Claude decides. For a plant safety case this is documentation, not a barrier.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "E",
+          "text": "A PreToolUse hook that blocks any call to the control-system tool and returns a denial.",
+          "correct": true,
+          "explanation": "Hooks execute as shell commands at fixed lifecycle points and apply whatever the model decides, so the block is deterministic rather than persuasive. It qualifies on its own, and it also covers the case where a future change reintroduces the tool by mistake.",
+          "citation": {
+            "title": "Hooks reference",
+            "url": "https://code.claude.com/docs/en/hooks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D5-06",
+      "question": "An archaeology consultancy requires a human archaeologist to approve every AI-drafted determination that a site is clear for excavation. An audit finds reviewers approve 99.7% of drafts with a median review time of four seconds. The regulator asks whether the control is effective. What should the architect change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add more reviewers so each one handles fewer determinations per shift.",
+          "correct": false,
+          "explanation": "Spreading the same four-second glance across more people scales the rubber stamp rather than restoring judgement. The audit's finding is about the quality of attention, which headcount alone does not address.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add a second AI reviewer that must agree with the first, using a different prompt, before a determination is issued.",
+          "correct": false,
+          "explanation": "Two correlated model judgements are not an independent check, and this quietly removes the human from a control the regulator was told a human performs. Automated review is a useful quality layer, but it cannot be swapped in for an accountable human decision.",
+          "citation": {
+            "title": "Building Effective AI Agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Send only the cases the system flags as uncertain, with the evidence, and track disagreement rate and review time.",
+          "correct": true,
+          "explanation": "A human-in-the-loop step is only a control if the human can plausibly disagree, which means giving them the evidence and a workload that permits attention. Instrumenting disagreement rate and review time turns the control into something measurable, so the consultancy can show the regulator that it works rather than asserting it.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have the assistant state a confidence score on each draft so reviewers can move through the queue faster.",
+          "correct": false,
+          "explanation": "A model's self-reported confidence is an unverified claim unless it has been calibrated against outcomes, and Anthropic's guidance is to ground claims in verifiable evidence rather than assertion. Optimising this queue for speed is also the opposite of what a four-second median calls for.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D5-07",
+      "question": "A beekeeping cooperative uses an assistant to draft residue-testing certificates for export honey. An export auditor asks how the cooperative can demonstrate that certificates issued in March were produced by the same system as those issued in June. What should be in place?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A monthly export of every issued certificate, with its issue date, into a write-once archive.",
+          "correct": false,
+          "explanation": "An immutable archive proves what was issued but says nothing about the configuration that produced it, which is precisely the auditor's question. Without the model id, prompt version and inputs recorded alongside, two identical-looking certificates could come from very different systems.",
+          "citation": {
+            "title": "API and data retention",
+            "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Record the pinned model id, prompt version and inputs with each certificate, and gate changes on the eval suite.",
+          "correct": true,
+          "explanation": "Traceability requires that each artefact carries the identity of the configuration that produced it, so any certificate can be tied back to a reproducible system state. Gating changes on the eval suite adds the second half the auditor needs: evidence that when the configuration did change, its behaviour was verified rather than assumed.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Commit to never changing the model, prompt or tools for the life of the export programme.",
+          "correct": false,
+          "explanation": "A frozen configuration expires on its own: models are eventually deprecated and retired, and requests to a retired model fail. Anthropic gives at least 60 days' notice for publicly released models, so the realistic posture is controlled change, not permanence.",
+          "citation": {
+            "title": "Model deprecations",
+            "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have the assistant describe its own configuration in a footer on each certificate it drafts.",
+          "correct": false,
+          "explanation": "A model's account of its own configuration is generated text, not an independent record, and it is exactly the kind of claim that should be grounded in a verifiable source. Audit evidence has to come from the calling system, which actually knows which model id and prompt version it sent.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        }
+      ]
+    }
+  ]
+}

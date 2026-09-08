@@ -1,0 +1,365 @@
+{
+  "examId": "ccar-f-exam5",
+  "domainId": "D5",
+  "domainName": "Context Management & Reliability",
+  "questions": [
+    {
+      "id": "F5-D5-01",
+      "question": "A tunnel-boring contractor runs a monitoring agent for a full shift and enables server-side compaction to survive the context limit. The team assumes the exact permit number quoted in hour one will still be quotable in hour six. What should they understand?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Compaction preserves every identifier verbatim, discarding only formatting, whitespace and redundant phrasing.",
+          "correct": false,
+          "explanation": "Compaction is a summarisation step, not a lossless compressor. Nothing in the mechanism promises that any particular token from the original turns is reproduced.",
+          "citation": { "title": "Compaction", "url": "https://platform.claude.com/docs/en/build-with-claude/compaction" }
+        },
+        {
+          "key": "B",
+          "text": "Compaction removes tool results but leaves all assistant and user text intact.",
+          "correct": false,
+          "explanation": "This describes neither mechanism correctly. Selectively removing tool results is context editing's job, and even that replaces result bodies with placeholder text rather than deleting them from the transcript.",
+          "citation": { "title": "Context editing", "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing" }
+        },
+        {
+          "key": "C",
+          "text": "Compaction replaces older content with a model-written summary; a specific identifier may not survive it.",
+          "correct": true,
+          "explanation": "The API generates a summary, emits it as a compaction block, and on subsequent requests drops all content blocks before that block — so older turns exist only through the summary. Anything the agent must be able to quote exactly, such as a permit number, belongs in durable storage the agent can re-read, not in conversational history.",
+          "citation": { "title": "Compaction", "url": "https://platform.claude.com/docs/en/build-with-claude/compaction" }
+        },
+        {
+          "key": "D",
+          "text": "Compaction only runs when a single assistant response exceeds the request's max_tokens.",
+          "correct": false,
+          "explanation": "Compaction is driven by accumulated input tokens reaching a trigger threshold, not by the length of one response. Confusing the input threshold with the output ceiling leads teams to think the feature is inactive when it is not.",
+          "citation": { "title": "Compaction", "url": "https://platform.claude.com/docs/en/build-with-claude/compaction" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D5-02",
+      "question": "An aquarium telemetry agent makes hundreds of tool calls per session with large sensor payloads. The team wants to reclaim context from the payloads but must keep an auditable record of which tool ran with which arguments. Which capability fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Context editing's clear_tool_uses strategy, which clears results but keeps each tool_use block and its inputs.",
+          "correct": true,
+          "explanation": "The clear_tool_uses_20250919 strategy clears older tool results once Claude has processed them, replacing each with placeholder text that tells the model it was removed. Because clear_tool_inputs defaults to false, Claude's original tool calls and their parameters stay visible — which is exactly the audit record the team needs.",
+          "citation": { "title": "Context editing", "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing" }
+        },
+        {
+          "key": "B",
+          "text": "Server-side compaction, which summarises the transcript into a compaction block once input tokens reach the trigger threshold.",
+          "correct": false,
+          "explanation": "Compaction condenses older content into a model-written summary and drops the blocks before it, so an individual call and its arguments are not preserved as structured data. It manages context length well but destroys the per-call record.",
+          "citation": { "title": "Compaction", "url": "https://platform.claude.com/docs/en/build-with-claude/compaction" }
+        },
+        {
+          "key": "C",
+          "text": "Prompt caching with a one-hour TTL covering the large sensor payloads.",
+          "correct": false,
+          "explanation": "Caching reduces the cost and latency of reprocessing a repeated prefix; the tokens still occupy the context window. It is a billing optimisation, not a context-reclamation mechanism.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Context editing with clear_tool_inputs set to true, clearing the parameters along with the results.",
+          "correct": false,
+          "explanation": "Setting clear_tool_inputs to true clears the tool call parameters along with the results, which removes precisely the record the team wants to keep. The default of false is the correct behaviour here.",
+          "citation": { "title": "Context editing", "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D5-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "Engineers at a grain elevator cooperative use \"compaction\" and \"tool-result clearing\" interchangeably in design reviews, and their notes have started to contradict each other. Which TWO statements correctly distinguish the two mechanisms?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Both replace older content with a model-written summary; only the trigger threshold differs.",
+          "correct": false,
+          "explanation": "Only compaction produces a summary. Context editing performs a substitution with fixed placeholder text and never asks the model to summarise anything, so treating them as the same operation with different settings is the error being corrected.",
+          "citation": { "title": "Context editing", "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing" }
+        },
+        {
+          "key": "B",
+          "text": "Compaction generates a summary, emits it as a compaction block, and the API then drops the content blocks that preceded it.",
+          "correct": true,
+          "explanation": "This is the documented flow: when input tokens reach the trigger threshold the API summarises the conversation, creates a compaction block and continues from it, and on later requests it automatically drops everything before that block. The consequence for design is that older turns survive only as summary text.",
+          "citation": { "title": "Compaction", "url": "https://platform.claude.com/docs/en/build-with-claude/compaction" }
+        },
+        {
+          "key": "C",
+          "text": "Tool-result clearing condenses each tool result into a one-sentence summary of what the tool returned.",
+          "correct": false,
+          "explanation": "No summarisation happens: the API replaces each cleared result with placeholder text indicating that it was removed. Expecting a condensed version of the data leads teams to assume information is still recoverable when it is not.",
+          "citation": { "title": "Context editing", "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing" }
+        },
+        {
+          "key": "D",
+          "text": "Tool-result clearing replaces the result body with placeholder text and, by default, keeps the preceding tool_use block and its inputs.",
+          "correct": true,
+          "explanation": "The clear_tool_uses strategy targets results, and clear_tool_inputs defaults to false so Claude's original tool calls stay visible. That is why clearing costs you the tool output but not the record of what was attempted — a materially different trade-off from compaction.",
+          "citation": { "title": "Context editing", "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing" }
+        },
+        {
+          "key": "E",
+          "text": "Both are Claude Code session features and are not reachable from the API.",
+          "correct": false,
+          "explanation": "Both are API capabilities documented on the platform: compaction is configured on the request, and context editing is passed as a context_management edit strategy. Assuming they are CLI-only would rule out the right answer for an API-backed agent.",
+          "citation": { "title": "Compaction", "url": "https://platform.claude.com/docs/en/build-with-claude/compaction" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D5-04",
+      "question": "A dental laboratory group re-classifies 400,000 archived case notes overnight. Results are not needed until morning, but the job keeps tripping rate limits and the spend is uncomfortable. Which approach fits best?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep the synchronous calls and add more parallel workers, retrying rate limits with exponential backoff.",
+          "correct": false,
+          "explanation": "More concurrency against the same limits mostly produces more 429s and longer backoffs, and it does nothing for cost. Backoff is correct handling for an interactive workload, but it is not the right architecture for a bulk offline job.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "B",
+          "text": "Submit the work through the Message Batches API, which processes asynchronously at half price.",
+          "correct": true,
+          "explanation": "The Batches API is designed for large volumes that do not need immediate responses: requests are processed asynchronously, all usage is charged at 50% of standard prices, and throughput increases. Most batches finish in under an hour, with results available when everything completes or after 24 hours, which comfortably fits an overnight window.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "C",
+          "text": "Enable fast mode so each request completes sooner and fewer pile up.",
+          "correct": false,
+          "explanation": "Fast mode tunes synchronous latency, which is not the constraint on an overnight job, and it is explicitly not available with the Batch API. Optimising response time for work nobody is waiting on is the wrong objective.",
+          "citation": { "title": "Batch processing", "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing" }
+        },
+        {
+          "key": "D",
+          "text": "Raise max_tokens so several case notes can be classified per request.",
+          "correct": false,
+          "explanation": "max_tokens is the output ceiling and does not by itself batch inputs; packing many notes into one call also makes a single truncation or refusal spoil a whole group. It confuses an output limit with a throughput mechanism.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D5-05",
+      "question": "An air-traffic-controller training assistant calls a roster_lookup tool that intermittently returns HTTP 500. The client currently raises the exception and ends the turn, so the user sees a stack trace. What is the documented way to let the agent recover?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Retry the whole Messages request from the first user turn.",
+          "correct": false,
+          "explanation": "Replaying the conversation from the start discards the reasoning already done and repeats every earlier tool call, which is expensive and can duplicate side effects. The failure is local to one tool call and should be reported as such.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "B",
+          "text": "Return an empty tool_result so Claude moves on to the next step.",
+          "correct": false,
+          "explanation": "An empty result reads as a successful call that found nothing, so Claude may confidently report that the roster is empty. Silently converting an outage into a valid-looking negative answer is a reliability anti-pattern.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "C",
+          "text": "Omit the tool_result block for the failed call and send the next user message.",
+          "correct": false,
+          "explanation": "Tool result blocks must immediately follow their corresponding tool_use blocks in the message history, so a missing result is a malformed conversation rather than a graceful skip. The API contract does not allow the gap.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        },
+        {
+          "key": "D",
+          "text": "Return a tool_result whose content describes the failure, with is_error set to true.",
+          "correct": true,
+          "explanation": "The documented pattern for a tool that throws during execution is to put the error message in the result content and set is_error: true. Claude then incorporates the failure into its reasoning — retrying, choosing another tool, or telling the user the service is unavailable — instead of the client aborting the turn.",
+          "citation": { "title": "Handle tool calls", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D5-06",
+      "question": "A touring orchestra's assistant pastes an entire 400-page union agreement into every request. The prompt still fits the context window and the cost is tolerable, but recall of specific clauses has degraded as the agreement grew. What does Anthropic's context-engineering guidance say to do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise output_config.effort to max so the model reasons over the whole document more carefully.",
+          "correct": false,
+          "explanation": "Effort buys more reasoning tokens; it does not restore attention that is spread thin across a very large input. Spending more per request to compensate for an oversized context is treating the symptom.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "B",
+          "text": "Move the agreement into the system prompt so it is treated as authoritative.",
+          "correct": false,
+          "explanation": "Relocating the same tokens between roles does not reduce how many there are, and role has no bearing on the attention-budget problem. The volume of context is the issue, not its position in the request.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Retrieve and pass only the relevant sections, because a model's attention budget is finite.",
+          "correct": true,
+          "explanation": "Anthropic's context-engineering guidance describes context as a finite resource with diminishing marginal returns: research on context rot shows recall accuracy falling as token count rises, because every token attends to every other token. The remedy is to curate the smallest high-signal set of tokens for the task rather than to stuff the window because it fits.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Split the agreement across two requests and concatenate the two answers.",
+          "correct": false,
+          "explanation": "Halving the document blindly breaks cross-references and leaves each call unable to see clauses that qualify the ones it has. Arbitrary partitioning is not the same as relevance-based retrieval.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D5-07",
+      "question": "An aquarium research assistant uses Anthropic's server-side web search tool. Some responses come back with stop_reason \"pause_turn\" and no final answer, and the client currently treats them as failures. What should it do instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Treat it as a rate-limit signal and back off exponentially before retrying the request.",
+          "correct": false,
+          "explanation": "Rate limiting surfaces as an HTTP 429 with its own error type, not as a stop reason on a successful response. Backing off here just delays a turn that is ready to continue immediately.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Append the assistant response to messages and issue another request to continue.",
+          "correct": true,
+          "explanation": "pause_turn means a server-tool loop reached its iteration limit mid-turn, and the documented handling is to send the response back as part of the conversation so the model picks up where it stopped. The work already done is preserved, which is why continuing beats restarting.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "Treat it as a refusal and surface an error to the researcher instead of continuing.",
+          "correct": false,
+          "explanation": "A declined response has its own stop reason, refusal, with stop_details explaining what was triggered. Collapsing distinct stop reasons into one error path throws away a recoverable turn and misreports why it happened.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "D",
+          "text": "Raise max_tokens and resend the original request unchanged so the turn can finish.",
+          "correct": false,
+          "explanation": "The pause is caused by the server-tool iteration limit, not by the output ceiling, so a bigger max_tokens changes nothing. Resending the original request also discards the searching already performed.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D5-08",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A tunnel-boring contractor is designing an agent that will run for days across thousands of steps. Which TWO techniques does Anthropic's context-engineering guidance recommend for long-horizon work?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Disable thinking so fewer tokens accumulate in the transcript.",
+          "correct": false,
+          "explanation": "Turning off reasoning to save context trades away the quality that makes a long-horizon agent viable, and it is not part of the guidance. Context pressure is managed by curating what stays in the window, not by making the agent think less.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "B",
+          "text": "Keep every turn in context so no information is ever lost.",
+          "correct": false,
+          "explanation": "This is the assumption the guidance argues against: accuracy in recalling information degrades as token count grows, so an ever-growing transcript makes the agent worse, not safer. Retention has to be selective.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Have the agent write structured notes to storage outside the context window and read them back when needed.",
+          "correct": true,
+          "explanation": "Structured note-taking is one of the three long-horizon techniques Anthropic describes, giving the agent persistent memory with minimal overhead — the Claude plays Pokemon example maintains coherence across thousands of steps this way. Because the notes live outside the window, they survive compaction and let the agent recover exact details on demand.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Raise max_tokens on every request so the agent can carry more state per turn.",
+          "correct": false,
+          "explanation": "max_tokens governs output length for a single response and has nothing to do with how history is retained across a multi-day run. It is a per-call ceiling, not a memory strategy.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "E",
+          "text": "Delegate focused investigations to sub-agents that return condensed summaries rather than raw exploration.",
+          "correct": true,
+          "explanation": "Sub-agent architectures are the third technique on that page: specialised agents do detailed work in their own context windows and hand back distilled results. The separation of concerns keeps the exhaustive search context isolated, so the orchestrator's window stays small and coherent.",
+          "citation": { "title": "Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D5-09",
+      "question": "A dental laboratory's summariser sends a 180,000-token case archive with max_tokens set to 32,000 against a 200,000-token-window model. On Claude 4.5 and newer models, what happens?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The API rejects the request with a validation error before any generation begins, since input plus max_tokens exceeds the window.",
+          "correct": false,
+          "explanation": "That is the behaviour on models older than Claude 4.5, where input plus max_tokens exceeding the window is a validation error. Assuming a pre-flight rejection on current models leaves the real failure mode unhandled.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "B",
+          "text": "The API silently truncates the oldest case notes so the request fits inside the window.",
+          "correct": false,
+          "explanation": "The API does not quietly drop input on your behalf; a request either proceeds with what you sent or reports a limit. Dropping the earliest case notes without telling anyone would be a serious correctness hazard, which is why it does not happen.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "C",
+          "text": "The request succeeds and max_tokens is automatically reduced to whatever room remains in the 200,000-token window.",
+          "correct": false,
+          "explanation": "max_tokens is not rewritten by the API. Generation simply proceeds until it either finishes or reaches the window limit, at which point the stop reason tells you what happened.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "D",
+          "text": "The request is accepted, and generation stops with stop_reason model_context_window_exceeded if it reaches the window limit.",
+          "correct": true,
+          "explanation": "On Claude 4.5 and newer, input plus max_tokens exceeding the context window no longer produces a validation error — the request is accepted and generation stops with model_context_window_exceeded if it runs into the limit. The design consequence is that the client must inspect stop_reason and treat that value as a truncated response rather than a complete summary.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D5-10",
+      "question": "A grain cooperative's agent calls an inventory tool that returns the complete 400-field warehouse record for every bin it touches. Context fills quickly and the agent's later decisions get noticeably worse. What does Anthropic's tool-design guidance recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Shape the tool response to return only high-signal fields and stable identifiers.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is to design tool responses that return only high-signal information: semantic, stable identifiers rather than opaque internal references, and just the fields Claude needs to decide its next step. Bloated responses waste context and make it harder for the model to extract what matters, which is exactly the degradation the cooperative is seeing.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "B",
+          "text": "Keep the full payload and lower the model's effort setting to reduce cost.",
+          "correct": false,
+          "explanation": "Lowering effort reduces reasoning depth while leaving the noisy context untouched, so decision quality falls further. It optimises the wrong variable.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "C",
+          "text": "Keep the full 400-field payload and instruct Claude to ignore the fields it does not need.",
+          "correct": false,
+          "explanation": "The tokens are consumed and compete for attention whether or not the model is told to ignore them. Curation belongs in the tool, where fields can actually be dropped, not in an instruction.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Move the tool behind an MCP server so responses are handled more efficiently.",
+          "correct": false,
+          "explanation": "MCP changes how a tool is connected and discovered, not what its response contains — the same 400 fields would arrive by a different route. Swapping transport for response design is a common misdiagnosis.",
+          "citation": { "title": "Writing tools for agents", "url": "https://www.anthropic.com/engineering/writing-tools-for-agents" }
+        }
+      ]
+    }
+  ]
+}

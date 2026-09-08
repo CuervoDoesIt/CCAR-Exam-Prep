@@ -1,0 +1,549 @@
+{
+  "examId": "ccar-p-exam5",
+  "domainId": "D2",
+  "domainName": "Claude Models, Prompting & Context Engineering",
+  "questions": [
+    {
+      "id": "P5-D2-01",
+      "question": "A salmon-farming platform forces JSON out of Claude by prefilling the assistant turn with an opening brace, then parsing the continuation. The pipeline ran for two years on a pre-4.6 model. After migrating to Claude Opus 5, every request returns a 400 error. What is the documented replacement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the opening brace into the final user message so Claude continues from it there instead.",
+          "correct": false,
+          "explanation": "A prefill worked by constraining the start of generation itself; a brace sitting in a user turn is just text the model reads, with no effect on decoding. It would remove the 400 but restore none of the format guarantee the pipeline depends on.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Adopt structured outputs, supplying the JSON schema so constrained decoding guarantees a schema-valid response.",
+          "correct": true,
+          "explanation": "Anthropic names structured outputs as the migration for prefills that were used to force JSON, YAML, or classification formats. Constrained decoding makes the response always valid against the schema, which is strictly stronger than what a prefill provided, and it removes the parse-and-retry path entirely.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Send the same prefill together with a beta header that re-enables prefilled responses on newer models.",
+          "correct": false,
+          "explanation": "No such header exists. Prefilling the last assistant turn is unsupported starting with Claude 4.6 models, and those requests return a 400 error, so there is no opt-in that revives the technique.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep the prefill and add a downstream repair pass that fixes any malformed JSON before it is stored.",
+          "correct": false,
+          "explanation": "The request is rejected with a 400 before any content is generated, so there is nothing downstream to repair. Even on a model that accepted the call, a repair pass is a probabilistic patch where schema-constrained decoding offers a guarantee.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-02",
+      "question": "A geothermal operator's reservoir-modelling service sets thinking with type 'enabled' and a 24,000-token budget. Requests succeeded on Claude Sonnet 4.6 but return 400 on Claude Sonnet 5, and the team still needs deep reasoning on hard wells. What is the correct migration?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Reduce the thinking budget so it sits comfortably below max_tokens.",
+          "correct": false,
+          "explanation": "The rule that budget_tokens must be at least 1,024 and less than max_tokens is real, but it only applies on models that still accept manual extended thinking. Claude Sonnet 5 rejects thinking type 'enabled' outright, so no budget value will make the request succeed.",
+          "citation": {
+            "title": "Extended thinking",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Replace the thinking block with a top-level effort field placed beside model and max_tokens.",
+          "correct": false,
+          "explanation": "Effort is not a bare field alongside model: it is set at output_config.effort. Inventing a flatter shape is a common migration error, and it also leaves the rejected thinking configuration in place if the thinking block is not changed.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Set thinking type to 'adaptive' and control reasoning depth through output_config.effort.",
+          "correct": true,
+          "explanation": "Anthropic's documented mapping is exactly this: remove budget_tokens, set thinking to adaptive, and use output_config.effort instead of a token budget. Expect a behavioral change as well as a syntactic one, since Claude then decides whether and how much to think per request and may skip thinking on easy inputs at lower effort levels.",
+          "citation": {
+            "title": "Extended thinking",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep the thinking block but pass 'adaptive' as the effort value in output_config.",
+          "correct": false,
+          "explanation": "Adaptive is a thinking mode, not an effort level; the documentation warns explicitly against passing it as an effort value. The valid effort levels are low, medium, high, xhigh, and max, with high as the API default.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A craft brewery attaches a 90,000-token brewing-standards manual to each batch-review request. Answers cite the wrong standard and miss detail buried mid-manual. Which TWO structuring practices does Anthropic's long-context guidance recommend here?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have Claude first extract the passages relevant to the batch into quote tags, then answer from those quotes.",
+          "correct": true,
+          "explanation": "For long-document tasks Anthropic recommends asking Claude to quote the relevant parts first and then carry out the task on those quotes. Grounding the answer in extracted passages focuses the model on the material that matters and lets it ignore the rest of a manual it would otherwise skim.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Interleave the review question between manual sections so it stays fresh as the model reads.",
+          "correct": false,
+          "explanation": "Fragmenting the query gives the model no single clear ask, and it contradicts the documented ordering, which keeps longform data together and the query at the end. Queries placed at the end improved response quality by up to 30 percent in Anthropic's tests on complex multi-document inputs.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Prefill the assistant turn with the report heading so the answer starts in the required format.",
+          "correct": false,
+          "explanation": "Prefilling the last assistant turn is unsupported starting with Claude 4.6 models and returns a 400 error. Where format control is the goal, the documented replacements are structured outputs, explicit system-prompt instructions, or XML output tags.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Wrap each standard in document tags carrying source and document_content subtags.",
+          "correct": true,
+          "explanation": "Anthropic's multi-document structure nests each document in its own tag with source metadata and a content subtag, which is what lets Claude tell the standards apart and attribute an answer to the right one. This is a separate lever from quote extraction: it fixes which standard is cited, where quoting fixes whether buried detail is found at all.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Raise max_tokens so the model has room to weigh the whole manual before answering.",
+          "correct": false,
+          "explanation": "max_tokens caps the length of the generated response; it does nothing about how the input is organized or attended to. The observed failure is on the input side, where structure and ordering are the documented levers.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-04",
+      "question": "A veterinary diagnostics platform runs an adaptive-thinking model. Billed output tokens are roughly double what the visible answers could account for, and finance wants the gap both explained and monitored per request. What should the architect tell them?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Thinking tokens bill as output even when the text is not returned; track them in the usage token details.",
+          "correct": true,
+          "explanation": "The tokens Claude spends reasoning are billed as output tokens and count toward max_tokens alongside the response text, which is exactly the gap finance is seeing. Anthropic exposes the breakdown at usage.output_tokens_details.thinking_tokens, and when streaming it appears only on the final message_delta event.",
+          "citation": {
+            "title": "Extended thinking",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Thinking tokens are billed as input, since they are internal reasoning rather than a delivered response.",
+          "correct": false,
+          "explanation": "This inverts the accounting: thinking tokens are billed as output tokens once, when they are generated. On models that keep previous turns' thinking blocks, those retained blocks are later billed as input like any other history, but the generation itself is never input-priced.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Thinking output is not billed, so the discrepancy indicates a metering error to raise with support.",
+          "correct": false,
+          "explanation": "Thinking has a real cost that Anthropic states plainly: the tokens spent reasoning are billed as output tokens even when the thinking text is not returned to you. Treating the charge as an error would delay the actual remedy, which is steering depth with effort.",
+          "citation": {
+            "title": "Thinking",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/thinking"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Lower max_tokens until billed output matches the visible answer length.",
+          "correct": false,
+          "explanation": "max_tokens is a hard ceiling on thinking plus response text, so squeezing it truncates answers rather than making the model reason less. Effort is the documented control for how much Claude spends on a response; max_tokens only decides where generation gets cut off.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-05",
+      "question": "A museum's cataloguing agent moved from Claude Sonnet 4.5 to Claude Opus 5. Prompts and tool definitions are unchanged, but per-turn input tokens now climb much faster across a long conversation and the window fills sooner. What explains it, and what is the lever?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Adaptive thinking re-sends the previous assistant answer as additional input on each turn, so the history is duplicated.",
+          "correct": false,
+          "explanation": "There is no such re-send: the caller decides what history goes into each request. The genuine model-dependent behavior concerns thinking blocks, not a duplicated copy of the previous answer.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The 1M-token context window carries a higher per-token input price, so the same history costs more.",
+          "correct": false,
+          "explanation": "For every model with a 1M-token window, that size is the default and long-context requests are billed at standard pricing with no beta header required. The symptom described is growth in token count, which a price change would not produce anyway.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Claude Opus 5 counts tool definitions toward input on every turn, while Claude Sonnet 4.5 counted them only on the first.",
+          "correct": false,
+          "explanation": "Tool definitions count toward the context window on every model, along with the system prompt and all messages. Nothing about that accounting changed across this migration, so it cannot explain a new growth pattern.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Claude Opus 5 keeps previous turns' thinking blocks in context and bills them as input; Sonnet 4.5 stripped them.",
+          "correct": true,
+          "explanation": "Whether prior thinking blocks stay in the window is model-dependent: Claude Opus 4.5 and later Opus models, Sonnet 4.6 and later, and the Fable and Mythos models keep them by default, while Sonnet 4.5, earlier models, and all Haiku models strip them automatically. Retained blocks count and bill as ordinary input tokens, and thinking block clearing in context editing lets you override the default in either direction.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-06",
+      "question": "An almond grower's irrigation advisories on Claude Opus 5 run to four pages. To shorten them the team dropped output_config.effort from high to low. Length barely moved, and reviewers report the recommendations are now shallower. What went wrong?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude Opus 5 does not support low effort, so the parameter was silently ignored and the advisories ran at the default level.",
+          "correct": false,
+          "explanation": "Claude Opus 5 supports all five effort levels, and Anthropic encourages using low and medium liberally wherever evals show quality holds. The setting took effect; it simply did not act on the dimension the team wanted.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Effort controls thinking volume, not visible length; prompt explicitly for length and restore the effort level.",
+          "correct": true,
+          "explanation": "Anthropic states directly that on Claude Opus 5 changing effort does not reliably shorten responses, because effort governs thinking volume rather than visible verbosity, and advises prompting for length instead. That explains both symptoms at once: the advisories stayed long while the reasoning behind them got thinner.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Effort only applies when thinking is active, so it had no effect on a plain text response.",
+          "correct": false,
+          "explanation": "Effort affects all tokens in the response, including text, tool calls, and thinking when it is active, so it works whether or not thinking is enabled. The quality drop reviewers noticed is direct evidence that it did apply.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "D",
+          "text": "max_tokens overrides effort, so the responses kept generating to the configured ceiling.",
+          "correct": false,
+          "explanation": "max_tokens is a hard upper bound on output, not a target the model writes toward, so it does not override or compete with effort. Anthropic's guidance actually runs the other way: at higher effort levels you should set a large max_tokens so the model has room to work.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-07",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A recycling network caches a 60,000-token municipal-contract prefix. After a release that tunes output_config.effort per request inside each conversation, cache reads collapsed to near zero. Which TWO changes restore cache hits while keeping effort tuning?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Add cache_control breakpoints after each dynamic block, up to the limit of four.",
+          "correct": false,
+          "explanation": "Breakpoints define where cache entries can be written and matched; they cannot make a prefix that differs between requests match an existing entry. Multiple breakpoints help when sections change at different frequencies, which is not the failure here.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Hold top-level effort constant for the life of a cached conversation, varying it across workloads instead.",
+          "correct": true,
+          "explanation": "Top-level effort shapes the rendered prompt, so changing it between requests does not preserve cached prefixes from earlier turns. Anthropic's stated best practice is to pick a level at the start of a session that relies on cache hits and keep it constant, varying effort between workloads rather than within a conversation.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Switch the breakpoint to the 1-hour TTL, which tolerates configuration changes between requests.",
+          "correct": false,
+          "explanation": "TTL controls how long an entry survives between uses, not how matching works; a hit still requires an identical prefix. Worse, the 1-hour tier writes at 2x base input price, so a never-matching entry would be re-written at a premium every request.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Move the effort level into the system prompt text so the request parameter stops changing.",
+          "correct": false,
+          "explanation": "Effort is a request parameter and cannot be set by describing it in prose; the model would simply read the sentence. It would also fail on its own terms, since varying that sentence per request changes the cached prefix in the same way the parameter did.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "E",
+          "text": "On a model that supports it, change effort mid-conversation with a per-message output_config system message.",
+          "correct": true,
+          "explanation": "Per-message effort, in beta on models such as Claude Opus 5 and Claude Fable 5.1, adds an effort-only system message whose new level takes effect from the next user turn. Everything before that message is unchanged, so the cached prefix still matches, which is what lets the team keep per-request tuning without paying for a cache rebuild.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-08",
+      "question": "A semiconductor fab cached a stable 2,000-token process-spec prefix successfully on Claude Opus 5. After moving the yield-analysis service to Claude Haiku 4.5 for cost, cache_read_input_tokens is always zero, with the prefix and breakpoint placement unchanged. What is the cause?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude Haiku 4.5 does not support prompt caching, so the cache_control field is ignored.",
+          "correct": false,
+          "explanation": "Haiku 4.5 does support prompt caching; the constraint that bites here is the minimum cacheable prompt length, which is model-specific. Concluding the feature is absent would push the team toward abandoning caching entirely rather than resizing the prefix.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Cache entries do not survive a model change, so the first request re-writes the cache and later ones will hit.",
+          "correct": false,
+          "explanation": "Entries are indeed model-specific, but that would show as a single write followed by normal reads. A permanently zero read count is the signature of a prompt that is never cached at all, not of a one-time re-warm.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Claude Haiku 4.5's minimum cacheable prompt length is 4,096 tokens, so a 2,000-token prefix is never cached.",
+          "correct": true,
+          "explanation": "Prompts shorter than the model's minimum cacheable length are not cached even when marked with cache_control, and that minimum varies by model: 512 tokens on Claude Opus 5 against 4,096 on Claude Haiku 4.5. Migrating between tiers can therefore silently disable caching, so the fix is either to grow the stable prefix past 4,096 tokens or to re-evaluate whether the tier change still saves money once cache reads are lost.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Claude Haiku 4.5 counts cache_read_input_tokens toward ITPM, so rate limiting disabled caching on this workload.",
+          "correct": false,
+          "explanation": "That footnote applies to Claude Haiku 3.5, not Claude Haiku 4.5; for most models cache reads do not count toward ITPM. Rate limiting also never switches caching off — it returns 429 errors instead.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-09",
+      "question": "A rail-freight dispatch agent on Claude Sonnet 5 must pace long shift-planning sessions against the context it has left. The team plans to inject its own token-budget tag into the system prompt on every request, and to copy the pattern onto a Claude Opus 4.7 variant. What should the architect say?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send nothing: context awareness is automatic on Claude Sonnet 5. For the Opus 4.7 variant, use task budgets instead.",
+          "correct": true,
+          "explanation": "Claude Sonnet 5 tracks its remaining token budget automatically, and the API injects both the budget tag and the post-tool-call usage warnings itself; you never send those tags. Claude Opus 4.7 and later Opus models do not receive the injected tags, so an explicit budget there comes from the task budgets feature, currently in beta.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Hand-injecting the budget tag is the documented way to turn context awareness on, so the plan is correct for both models.",
+          "correct": false,
+          "explanation": "Context awareness is automatic on the models that have it, with nothing for the caller to enable and no tags to send. Hand-writing the tag also risks contradicting the value the API supplies, which would mislead the model about how much room it really has.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Context awareness must be requested with a beta header before the model tracks its remaining window.",
+          "correct": false,
+          "explanation": "No header gates context awareness: on the models that support it, the behavior is on by default. The beta-gated feature in this area is task budgets, which serve the models that do not receive the injected tags.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Raise max_tokens so the model has a larger budget to pace itself against across the shift.",
+          "correct": false,
+          "explanation": "max_tokens bounds a single turn's output inside the fixed context window; it is not the budget context awareness reports. Raising it while input already fills the window can even end generation early with a model_context_window_exceeded stop reason.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-10",
+      "question": "A dental-practice platform adopted structured outputs for insurance-claim extraction under a 900 ms p99 target. Latency is comfortable in steady state, but every deploy that changes the schema produces a short burst of slow first requests before recovering. What is happening, and what should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The schema is too complex; simplify it until the latency spike disappears.",
+          "correct": false,
+          "explanation": "Steady-state latency is already inside the target, which rules out complexity as the standing cost. The spike is confined to first use of a schema, so trimming fields attacks a symptom that only appears at deploy boundaries.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Drop strict validation on the tool definitions so claim extraction stops paying the schema-enforcement overhead on every request.",
+          "correct": false,
+          "explanation": "Strict tool use is what guarantees the tool name and inputs conform to the schema, so dropping it trades away the reliability the platform adopted structured outputs for. It also does not address a one-time compilation cost that recurs whenever the schema itself changes.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Abandon structured outputs and prefill the assistant turn with the JSON opening instead.",
+          "correct": false,
+          "explanation": "Prefilling the last assistant turn is unsupported starting with Claude 4.6 models and returns a 400 error, so this replaces a latency spike with an outage. The documented migration runs the other way: prefills used for output formatting move to structured outputs.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The first request with a new schema pays a one-time grammar-compilation cost; warm each schema after deploy.",
+          "correct": true,
+          "explanation": "Anthropic documents added latency on first use of a schema while the grammar is compiled, with subsequent requests using the same schema running faster from a 24-hour cache. Because the cost is per schema rather than per request, issuing a synthetic warm-up call for each schema at deploy time moves the spike off the user-facing p99 without weakening any guarantee.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D2-11",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A hotel group's revenue-management summaries come back as dense bulleted markdown. Leadership wants flowing prose in a fixed set of named sections that a downstream report builder can pick apart. Which TWO prompting practices does Anthropic recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "State the positive instruction, such as asking for smoothly flowing prose paragraphs, rather than saying not to use markdown.",
+          "correct": true,
+          "explanation": "Anthropic's formatting guidance is to tell Claude what to do instead of what not to do, contrasting 'do not use markdown' with 'your response should be composed of smoothly flowing prose paragraphs'. A positively framed target gives the model something to produce, where a prohibition leaves the desired form unspecified.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Reduce max_tokens until responses are too short to accommodate bullet lists.",
+          "correct": false,
+          "explanation": "max_tokens is a hard ceiling, so tightening it truncates a response mid-sentence rather than changing its style. The downstream report builder would then receive incomplete sections, which is worse than the formatting problem being solved.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use XML format indicators, asking for each section inside its own named tag.",
+          "correct": true,
+          "explanation": "XML format indicators are a documented way to steer output structure, and tags let Claude parse and emit content unambiguously. This one independently serves the second requirement as well: named tags give the report builder deterministic boundaries to split on, which prose alone would not.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Prefill the assistant turn with the first section heading to lock in the layout.",
+          "correct": false,
+          "explanation": "Prefilling the last assistant turn is unsupported starting with Claude 4.6 models and returns a 400 error. Anthropic's migration for prefills that eliminated preambles or fixed a layout is direct system-prompt instructions, XML output tags, or structured outputs.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Lower output_config.effort so the model writes less and drops the bullet lists.",
+          "correct": false,
+          "explanation": "On Claude Opus 5, effort controls thinking volume rather than visible response length, so lowering it does not reliably shorten or restyle output. It does reduce reasoning depth, which would degrade the revenue analysis while leaving the formatting problem in place.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        }
+      ]
+    }
+  ]
+}

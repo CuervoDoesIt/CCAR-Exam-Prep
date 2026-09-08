@@ -125,13 +125,13 @@ scenarios, and a different angle on any shared sub-topic.
 1. **Single-choice**: exactly 4 options, exactly 1 correct. Randomize which letter is correct (roughly even distribution across A–D within a file).
 2. **Scenario-based**: questions open with a short realistic enterprise scenario (fintech, healthcare, B2B SaaS, e-commerce, legal, etc.) then ask a decision question. CCAR-P scenarios include constraints (latency SLAs, cost budgets, compliance) and are harder than CCAR-F.
 3. **Every option gets an explanation** — including wrong ones. Explanations must state the underlying Anthropic principle, e.g. "Anthropic's guidance is to start with the simplest solution and only add agentic complexity when it measurably improves outcomes."
-4. **Every option gets a citation** to a real, currently-live Anthropic-family doc page. Verify each URL exists (WebFetch it) before citing. Approved sources:
-   - https://docs.claude.com/en/docs/... (API/platform docs: tool use, prompt engineering, prompt caching, context windows, models, streaming, batches, embeddings, vision, extended thinking, citations)
-   - https://docs.claude.com/en/docs/claude-code/... (Claude Code: settings, hooks, slash commands, memory/CLAUDE.md, subagents, MCP)
-   - https://docs.claude.com/en/api/... (API reference)
-   - https://modelcontextprotocol.io/... (MCP spec and docs)
-   - https://www.anthropic.com/engineering/... (e.g. building-effective-agents, claude-code-best-practices, effective context engineering, multi-agent research system, writing tools for agents)
-   - https://www.anthropic.com/news/... (model/feature announcements) — use sparingly
+4. **Every option gets a citation** to a real, currently-live Anthropic-family doc page. Verify each URL returns 200 (WebFetch it) before citing. Cite the **canonical** hosts — `docs.claude.com` still resolves but only via 301, so new content must not use it:
+   - `https://platform.claude.com/docs/en/...` — API and platform docs (tool use, prompt engineering, prompt caching, context windows, compaction, context editing, models, streaming, batches, structured outputs, extended thinking, citations, evals)
+   - `https://code.claude.com/docs/en/...` — Claude Code (settings, hooks, slash commands, memory/CLAUDE.md, subagents, skills, MCP) **and the Agent SDK**, which now lives at `code.claude.com/docs/en/agent-sdk/*`; the old `platform.claude.com/docs/en/agent-sdk/*` form 307-redirects there
+   - `https://modelcontextprotocol.io/...` — MCP spec and docs
+   - `https://www.anthropic.com/engineering/...` — e.g. building-effective-agents, writing-tools-for-agents, effective-context-engineering-for-ai-agents, multi-agent-research-system
+   - `https://www.anthropic.com/news/...` — model/feature announcements, use sparingly
+   Note the path order is `/docs/en/...`, **not** `/en/docs/...`. Exams 1 and 2 still carry the older `docs.claude.com/en/...` form; those survive by redirect and are not being rewritten, but do not copy the pattern.
    If a URL 404s, find the current equivalent instead of citing it.
 5. **Accuracy over plausibility**: never invent API parameters, config file names, header names, or model behaviors. If unsure, research first. Key facts that MUST be correct include: `stop_reason` values (`end_turn`, `max_tokens`, `stop_sequence`, `tool_use`, `pause_turn`, `refusal`, `model_context_window_exceeded`), tool_use/tool_result message flow, prompt caching mechanics (cache prefix ordering, `cache_control` breakpoints, 5-min/1-h TTL), MCP primitives (tools/resources/prompts; of the client features, **sampling and roots are deprecated as of MCP protocol revision `2026-07-28`** — only elicitation remains current), Claude Code file locations (`.claude/commands/`, `.claude/agents/`, `CLAUDE.md`, `settings.json`, hooks events), context window sizes, and the guidance in "Building Effective Agents" (workflows vs agents, prompt chaining, routing, parallelization, orchestrator-workers, evaluator-optimizer).
 6. **Distractors are plausible but definitively wrong** — common misconceptions, not absurdities. Avoid "all of the above"/"none of the above".
