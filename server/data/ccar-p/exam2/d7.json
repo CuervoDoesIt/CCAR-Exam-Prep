@@ -13,8 +13,8 @@
           "correct": false,
           "explanation": "This preserves the underlying problem: adoption is manual, drifts over time, and new hires start with nothing until they find the page. Personal-scope configuration cannot deliver an organization-wide guarantee.",
           "citation": {
-            "title": "Claude Code slash commands",
-            "url": "https://docs.claude.com/en/docs/claude-code/slash-commands"
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {
@@ -23,8 +23,8 @@
           "correct": true,
           "explanation": "Project-scoped commands and agents live in the repository, so they are version-controlled, reviewable through normal pull requests, and automatically available to everyone who clones it. Pairing them with a project CLAUDE.md gives the team a single shared source of conventions that also accelerates onboarding.",
           "citation": {
-            "title": "Claude Code slash commands — project scope",
-            "url": "https://docs.claude.com/en/docs/claude-code/slash-commands"
+            "title": "Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {

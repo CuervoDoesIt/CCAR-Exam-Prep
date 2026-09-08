@@ -486,7 +486,7 @@
           "explanation": "This is the documented case for a skill: a section of instructions that has grown into a procedure belongs in a skill rather than in memory, because a skill's body loads only when it is used and so costs nothing until then. It also gives the informaticist a single invocation with no code, and puts the steps under version control alongside the deltas they produce. Option D makes the same procedure available but at the cost of loading it, and much else, into every session.",
           "citation": {
             "title": "Extend Claude with skills",
-            "url": "https://code.claude.com/docs/en/slash-commands"
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {

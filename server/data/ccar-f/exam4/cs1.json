@@ -251,7 +251,7 @@
           "explanation": "A skill invoked as a slash command is a good way to package a repeatable procedure, but it constrains only the sessions that choose to use it. Nothing prevents an engineer, or Claude in an ordinary session, from editing the manifest directly, so it adds convenience rather than a boundary.",
           "citation": {
             "title": "Extend Claude with skills",
-            "url": "https://code.claude.com/docs/en/slash-commands"
+            "url": "https://code.claude.com/docs/en/skills"
           }
         }
       ]
@@ -475,7 +475,7 @@
           "explanation": "A skill is the right container for a repeatable multi-step procedure: its body loads only when invoked, it is versioned with the repository so every SME runs the same harness, and it can be invoked by name without any code knowledge. Crucially it asserts schema validity across all 200 cases mechanically, which is what protects R2 — the case-management system depends on that enum contract and a human reading samples cannot verify it. Option C, the runner-up, describes the same procedure but never checks it.",
           "citation": {
             "title": "Extend Claude with skills",
-            "url": "https://code.claude.com/docs/en/slash-commands"
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {

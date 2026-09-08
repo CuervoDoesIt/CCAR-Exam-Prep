@@ -26,7 +26,7 @@
           "text": "Commit a concise project CLAUDE.md (build commands, conventions, workflow rules) and shared slash commands under .claude/commands/ so every engineer's sessions load identical context and repeatable workflows from the repo.",
           "correct": true,
           "explanation": "This is the documented team pattern: a project CLAUDE.md checked into source control gives every session persistent shared context, and command files in .claude/commands/ are shared with the team through the repo, turning recurring tasks into consistent, reviewable, versioned workflows. Anthropic's best-practices guidance notes the checked-in file compounds in value as the team contributes.",
-          "citation": { "title": "Claude Code Slash Commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         },
         {
           "key": "D",

@@ -193,7 +193,7 @@
           "explanation": "disable-model-invocation stops Claude from auto-invoking that skill; it does nothing to the underlying tool, which remains callable directly. The debugging sessions that caused the incidents were calling the write tool, not a skill, so the control is aimed at the wrong layer.",
           "citation": {
             "title": "Extend Claude with skills",
-            "url": "https://code.claude.com/docs/en/slash-commands"
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {
@@ -378,7 +378,7 @@
           "explanation": "A skill's body loads only when it is invoked, so a long procedure costs nothing until it is needed — the documented reason to move a grown CLAUDE.md section into a skill. disable-model-invocation is the field Anthropic recommends for workflows with side effects, and re-filing mappings has side effects: it keeps the TD as the trigger, so R2's named approver is a person who chose to run the routine. Option C would let Claude start the same side effects on its own judgement.",
           "citation": {
             "title": "Extend Claude with skills",
-            "url": "https://code.claude.com/docs/en/slash-commands"
+            "url": "https://code.claude.com/docs/en/skills"
           }
         },
         {

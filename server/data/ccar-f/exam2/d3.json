@@ -318,28 +318,28 @@
           "text": "It makes Claude Code prompt the user interactively for input after the command is invoked.",
           "correct": false,
           "explanation": "$ARGUMENTS is a substitution placeholder, not an interactive prompt trigger. The arguments are supplied inline on the same line as the slash command invocation.",
-          "citation": { "title": "Claude Code slash commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         },
         {
           "key": "B",
           "text": "It reads the value of a shell environment variable named ARGUMENTS.",
           "correct": false,
           "explanation": "Despite the shell-like syntax, $ARGUMENTS is resolved by Claude Code's command templating, not by the shell environment. Environment variables are a separate mechanism and are not how slash command arguments are passed.",
-          "citation": { "title": "Claude Code slash commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         },
         {
           "key": "C",
           "text": "It is replaced with 'assignments/essay-04.md', the text typed after the command name.",
           "correct": true,
           "explanation": "Custom slash commands support the $ARGUMENTS placeholder, which expands to everything the user typed after the command name. This lets one command template be parameterized per invocation; positional placeholders are also available for individual arguments.",
-          "citation": { "title": "Claude Code slash commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         },
         {
           "key": "D",
           "text": "It expands to a list of all files in the current working directory.",
           "correct": false,
           "explanation": "$ARGUMENTS carries only the invocation text supplied by the user; it performs no filesystem globbing or directory listing. File contents are referenced through other mechanisms, such as @file references.",
-          "citation": { "title": "Claude Code slash commands", "url": "https://docs.claude.com/en/docs/claude-code/slash-commands" }
+          "citation": { "title": "Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
         }
       ]
     },
