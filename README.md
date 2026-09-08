@@ -2,7 +2,7 @@
 
 An interactive study app for the Claude Certified **Architect** exams — CCAR-F (Foundations) and CCAR-P (Professional) — and the Claude Certified **Developer** exam, CCDV-F (Foundations).
 
-Twelve full-length mock exams — 704 questions total — each answer option explained and cited against Anthropic's official documentation. Every certification has both a blueprint-exact set and a harder case-study set.
+Fourteen full-length mock exams — 827 questions total — each answer option explained and cited against Anthropic's official documentation. Every certification has both a blueprint-exact set and a harder case-study set, and both Architect tracks add a multiple-response set.
 
 ## Two study modes
 
@@ -16,14 +16,22 @@ Twelve full-length mock exams — 704 questions total — each answer option exp
 |---|---|---|---|---|
 | CCAR-F Mock 1 & 2 | 5 domains | 60 | 120 min | 720 / 1000 |
 | CCAR-F Mock 3 & 4 | Case studies · **hard** | 60 | 120 min | 720 / 1000 |
+| CCAR-F Mock 5 | 5 domains · **15 select-TWO** | 60 | 120 min | 720 / 1000 |
 | CCAR-P Mock 1 & 2 | 7 domains | 63 | 120 min | 720 / 1000 |
 | CCAR-P Mock 3 & 4 | Case studies · **hard** | 63 | 120 min | 720 / 1000 |
+| CCAR-P Mock 5 | 7 domains · **16 select-TWO** | 63 | 120 min | 720 / 1000 |
 | CCDV-F Mock 1 & 2 | 8 domains | 53 | 120 min | 720 / 1000 |
 | CCDV-F Mock 3 & 4 | Case studies · **hard** | 53 | 120 min | 720 / 1000 |
 
 The two tracks deliberately test different things. CCAR asks *which architecture fits*; CCDV-F asks *which call, parameter, or code change produces this result* — request and response shapes, `stop_reason` handling, streaming, prompt-caching mechanics, tool round trips, retry behaviour. Topics CCAR-F lists as out of scope are core CCDV-F material, so the banks barely overlap.
 
-The CCDV-F exams also include **multiple-response** items ("Which TWO…"), as the real one does. They are scored all-or-nothing: one right pick earns zero.
+### Multiple-response exams
+
+"Which TWO…" items are a common shape on the real exams, so every certification has them. CCDV-F Mock 1 & 2 mix 8 into their 53; the Architect tracks get a dedicated set — **CCAR-F Mock 5** (15 of 60) and **CCAR-P Mock 5** (16 of 63).
+
+They are scored **all-or-nothing**, as on the real exam: one right pick out of two earns zero. In Learning Mode a select-TWO question waits for an explicit confirm before revealing, so the click that completes your pair does not lock an answer you were still adjusting.
+
+Mock 5 carries the same blueprint, length and time limit as Mock 1 & 2 for its certification, so section scoring stays directly comparable — the only difference is the question format. The select-TWO items are spread across domains in proportion to domain size rather than clustered, so no single section becomes disproportionately swingy under all-or-nothing scoring.
 
 ### Case-study exams (hard mode)
 

@@ -5,7 +5,8 @@ This spec governs ALL question bank JSON files in `server/data/`. Every authorin
 ## Exams
 
 ### CCAR-F — Claude Certified Architect: Foundations
-- 60 single-choice questions, 120 minutes, passing scaled score 720 (scale: `100 + (correct/60)*900`, rounded)
+- 60 questions, 120 minutes, passing scaled score 720 (scale: `100 + (correct/60)*900`, rounded)
+- Exams 1–2 are all single-choice; exam 5 mixes in 15 multiple-response items (see below)
 - Domains and question counts per exam set:
   | ID | Domain | Questions |
   |----|--------|-----------|
@@ -16,7 +17,8 @@ This spec governs ALL question bank JSON files in `server/data/`. Every authorin
   | D5 | Context Management & Reliability | 10 |
 
 ### CCAR-P — Claude Certified Architect: Professional
-- 63 single-choice questions, 120 minutes, passing scaled score 720 (scale: `100 + (correct/63)*900`, rounded)
+- 63 questions, 120 minutes, passing scaled score 720 (scale: `100 + (correct/63)*900`, rounded)
+- Exams 1–2 are all single-choice; exam 5 mixes in 16 multiple-response items (see below)
 - Domains and question counts per exam set:
   | ID | Domain | Questions |
   |----|--------|-----------|
@@ -76,9 +78,9 @@ One JSON file per domain per exam set, e.g. `server/data/ccar-f/exam1/d1.json`.
 }
 ```
 
-## Multiple-response items (CCDV-F only)
+## Multiple-response items
 
-The real CCDV-F includes "Which TWO…" items. These use the same schema plus two fields:
+All three certifications include "Which TWO…" items. These use the same schema plus two fields:
 
 ```json
 {
@@ -97,6 +99,26 @@ Rules:
 - Every option still needs its own explanation and citation. Explanations for the two correct options should say why each independently qualifies — not "A and C are both right".
 - Omit `type`/`selectCount` entirely for normal single-choice items.
 - **Not permitted in case-study (hard mode) exams** — the `runnerUp` mechanic is inherently a single-answer contrast.
+
+### Where they live
+
+| Set | Multiple-response items |
+| --- | --- |
+| `ccdv-f/exam1`, `ccdv-f/exam2` | 8 of 53 |
+| `ccar-f/exam5` | 15 of 60 |
+| `ccar-p/exam5` | 16 of 63 |
+| `ccar-f/exam1|exam2`, `ccar-p/exam1|exam2` | 0 — frozen, see below |
+| all `exam3`/`exam4` (case studies) | 0 — forbidden by the `runnerUp` contrast |
+
+`ccar-f/exam5` and `ccar-p/exam5` exist **only** because exams 1 and 2 are frozen
+while the user studies them. They carry the same blueprint and length as exams 1
+and 2, so Real Mode section scoring stays faithful; the difference is that about
+a quarter of the items are "Which TWO…". Per-domain multi targets are enforced by
+`MULTI_BY_DOMAIN` in `validate.js` so the format cannot cluster into one section,
+which would make that section's all-or-nothing scoring swingy.
+
+Exam 5 content must not repeat exams 1 or 2 for the same certification — different
+scenarios, and a different angle on any shared sub-topic.
 
 ## Content rules
 
