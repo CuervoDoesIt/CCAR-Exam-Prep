@@ -5,7 +5,8 @@ This spec governs ALL question bank JSON files in `server/data/`. Every authorin
 ## Exams
 
 ### CCAR-F — Claude Certified Architect: Foundations
-- 60 single-choice questions, 120 minutes, passing scaled score 720 (scale: `100 + (correct/60)*900`, rounded)
+- 60 questions, 120 minutes, passing scaled score 720 (scale: `100 + (correct/60)*900`, rounded)
+- Exams 1–2 are all single-choice; exam 5 mixes in 15 multiple-response items (see below)
 - Domains and question counts per exam set:
   | ID | Domain | Questions |
   |----|--------|-----------|
@@ -16,7 +17,8 @@ This spec governs ALL question bank JSON files in `server/data/`. Every authorin
   | D5 | Context Management & Reliability | 10 |
 
 ### CCAR-P — Claude Certified Architect: Professional
-- 63 single-choice questions, 120 minutes, passing scaled score 720 (scale: `100 + (correct/63)*900`, rounded)
+- 63 questions, 120 minutes, passing scaled score 720 (scale: `100 + (correct/63)*900`, rounded)
+- Exams 1–2 are all single-choice; exam 5 mixes in 16 multiple-response items (see below)
 - Domains and question counts per exam set:
   | ID | Domain | Questions |
   |----|--------|-----------|
@@ -76,9 +78,9 @@ One JSON file per domain per exam set, e.g. `server/data/ccar-f/exam1/d1.json`.
 }
 ```
 
-## Multiple-response items (CCDV-F only)
+## Multiple-response items
 
-The real CCDV-F includes "Which TWO…" items. These use the same schema plus two fields:
+All three certifications include "Which TWO…" items. These use the same schema plus two fields:
 
 ```json
 {
@@ -98,18 +100,38 @@ Rules:
 - Omit `type`/`selectCount` entirely for normal single-choice items.
 - **Not permitted in case-study (hard mode) exams** — the `runnerUp` mechanic is inherently a single-answer contrast.
 
+### Where they live
+
+| Set | Multiple-response items |
+| --- | --- |
+| `ccdv-f/exam1`, `ccdv-f/exam2` | 8 of 53 |
+| `ccar-f/exam5` | 15 of 60 |
+| `ccar-p/exam5` | 16 of 63 |
+| `ccar-f/exam1|exam2`, `ccar-p/exam1|exam2` | 0 — frozen, see below |
+| all `exam3`/`exam4` (case studies) | 0 — forbidden by the `runnerUp` contrast |
+
+`ccar-f/exam5` and `ccar-p/exam5` exist **only** because exams 1 and 2 are frozen
+while the user studies them. They carry the same blueprint and length as exams 1
+and 2, so Real Mode section scoring stays faithful; the difference is that about
+a quarter of the items are "Which TWO…". Per-domain multi targets are enforced by
+`MULTI_BY_DOMAIN` in `validate.js` so the format cannot cluster into one section,
+which would make that section's all-or-nothing scoring swingy.
+
+Exam 5 content must not repeat exams 1 or 2 for the same certification — different
+scenarios, and a different angle on any shared sub-topic.
+
 ## Content rules
 
 1. **Single-choice**: exactly 4 options, exactly 1 correct. Randomize which letter is correct (roughly even distribution across A–D within a file).
 2. **Scenario-based**: questions open with a short realistic enterprise scenario (fintech, healthcare, B2B SaaS, e-commerce, legal, etc.) then ask a decision question. CCAR-P scenarios include constraints (latency SLAs, cost budgets, compliance) and are harder than CCAR-F.
 3. **Every option gets an explanation** — including wrong ones. Explanations must state the underlying Anthropic principle, e.g. "Anthropic's guidance is to start with the simplest solution and only add agentic complexity when it measurably improves outcomes."
-4. **Every option gets a citation** to a real, currently-live Anthropic-family doc page. Verify each URL exists (WebFetch it) before citing. Approved sources:
-   - https://docs.claude.com/en/docs/... (API/platform docs: tool use, prompt engineering, prompt caching, context windows, models, streaming, batches, embeddings, vision, extended thinking, citations)
-   - https://docs.claude.com/en/docs/claude-code/... (Claude Code: settings, hooks, slash commands, memory/CLAUDE.md, subagents, MCP)
-   - https://docs.claude.com/en/api/... (API reference)
-   - https://modelcontextprotocol.io/... (MCP spec and docs)
-   - https://www.anthropic.com/engineering/... (e.g. building-effective-agents, claude-code-best-practices, effective context engineering, multi-agent research system, writing tools for agents)
-   - https://www.anthropic.com/news/... (model/feature announcements) — use sparingly
+4. **Every option gets a citation** to a real, currently-live Anthropic-family doc page. Verify each URL returns 200 (WebFetch it) before citing. Cite the **canonical** hosts — `docs.claude.com` still resolves but only via 301, so new content must not use it:
+   - `https://platform.claude.com/docs/en/...` — API and platform docs (tool use, prompt engineering, prompt caching, context windows, compaction, context editing, models, streaming, batches, structured outputs, extended thinking, citations, evals)
+   - `https://code.claude.com/docs/en/...` — Claude Code (settings, hooks, slash commands, memory/CLAUDE.md, subagents, skills, MCP) **and the Agent SDK**, which now lives at `code.claude.com/docs/en/agent-sdk/*`; the old `platform.claude.com/docs/en/agent-sdk/*` form 307-redirects there
+   - `https://modelcontextprotocol.io/...` — MCP spec and docs
+   - `https://www.anthropic.com/engineering/...` — e.g. building-effective-agents, writing-tools-for-agents, effective-context-engineering-for-ai-agents, multi-agent-research-system
+   - `https://www.anthropic.com/news/...` — model/feature announcements, use sparingly
+   Note the path order is `/docs/en/...`, **not** `/en/docs/...`. Exams 1 and 2 still carry the older `docs.claude.com/en/...` form; those survive by redirect and are not being rewritten, but do not copy the pattern.
    If a URL 404s, find the current equivalent instead of citing it.
 5. **Accuracy over plausibility**: never invent API parameters, config file names, header names, or model behaviors. If unsure, research first. Key facts that MUST be correct include: `stop_reason` values (`end_turn`, `max_tokens`, `stop_sequence`, `tool_use`, `pause_turn`, `refusal`, `model_context_window_exceeded`), tool_use/tool_result message flow, prompt caching mechanics (cache prefix ordering, `cache_control` breakpoints, 5-min/1-h TTL), MCP primitives (tools/resources/prompts; of the client features, **sampling and roots are deprecated as of MCP protocol revision `2026-07-28`** — only elicitation remains current), Claude Code file locations (`.claude/commands/`, `.claude/agents/`, `CLAUDE.md`, `settings.json`, hooks events), context window sizes, and the guidance in "Building Effective Agents" (workflows vs agents, prompt chaining, routing, parallelization, orchestrator-workers, evaluator-optimizer).
 6. **Distractors are plausible but definitively wrong** — common misconceptions, not absurdities. Avoid "all of the above"/"none of the above".

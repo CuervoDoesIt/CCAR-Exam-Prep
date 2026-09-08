@@ -1,0 +1,699 @@
+{
+  "examId": "ccar-f-exam5",
+  "domainId": "D1",
+  "domainName": "Agentic Architecture & Orchestration",
+  "questions": [
+    {
+      "id": "F5-D1-01",
+      "question": "A harbour pilotage authority runs a tide-and-traffic assistant that uses Anthropic's server-side web search alongside its own berth-booking tool. During a busy shift a response comes back with stop_reason \"pause_turn\". What should the orchestration layer do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Treat pause_turn as a normal completion and show the pilot whatever text was returned.",
+          "correct": false,
+          "explanation": "pause_turn is not a completion signal; the documented completion signal is end_turn. Rendering a paused turn as final surfaces a half-finished answer, which for berth allocation could mean acting on an incomplete traffic picture.",
+          "citation": {
+            "title": "Stop reasons and fallback - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Discard the turn and resend the original user message with a higher max_tokens value.",
+          "correct": false,
+          "explanation": "A max_tokens ceiling produces stop_reason \"max_tokens\", not \"pause_turn\". Throwing away the assistant content and starting over also discards the server-tool work already performed and pays for it a second time.",
+          "citation": {
+            "title": "Stop reasons and fallback - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Send the assistant's returned content back so Claude can continue the paused turn.",
+          "correct": true,
+          "explanation": "pause_turn means a server-tool loop hit its iteration limit mid-turn. The documented handling is to pass the assistant content back so the turn resumes from where it paused, which is why the orchestration layer must keep the returned blocks intact rather than summarising them.",
+          "citation": {
+            "title": "Stop reasons and fallback - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Return a tool_result with is_error true for the paused server tool so Claude retries it.",
+          "correct": false,
+          "explanation": "Server tools execute on Anthropic's infrastructure and your application never returns tool_result blocks for them; that is reserved for client tools your own code runs. Fabricating an error result misreports a successful-but-paused run as a failure.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-02",
+      "question": "A ski resort's snowmaking assistant enables Anthropic's web search server tool plus a client-side get_pump_status tool. One assistant turn returns a client tool_use block and a server_tool_use block that has no result yet. The team replies with the pump tool_result followed by a short text question, and the request fails with a 400. What is the correct next message?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A user message containing only the client tool_result blocks, with no trailing text.",
+          "correct": true,
+          "explanation": "When an assistant turn contains a server tool call that has no result block yet, the reply must contain only tool_result blocks. Trailing text ends the turn early and the API rejects the request naming the unresolved server tool, which is exactly the 400 the team saw.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The same message with the text block moved ahead of the tool_result so Claude reads the question first.",
+          "correct": false,
+          "explanation": "This makes things worse: tool_result blocks must come first in the content array, and text before them is itself a 400. The underlying problem is that any text at all ends the turn while a server tool call is still outstanding.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add a tool_result for the server_tool_use id as well, so every block in the turn is answered.",
+          "correct": false,
+          "explanation": "Server tools run on Anthropic's infrastructure, so the application never supplies their results; the API runs the call on the next request and returns the result block itself. Returning a result for a srvtoolu id is rejected.",
+          "citation": {
+            "title": "Tool use with Claude - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Strip the server_tool_use block out of the message history before replying.",
+          "correct": false,
+          "explanation": "Editing the assistant turn breaks the correspondence the API expects between blocks and their results, and it destroys the record of the server call the model is waiting on. Assistant content should be passed back unchanged.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A textile recycling group is deciding whether to replace its single research assistant with a lead agent that spawns parallel subagents. Anthropic reports multi-agent systems can consume roughly 15x the tokens of a chat interaction. Which TWO conditions justify that cost?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The subtasks are tightly interdependent and each worker needs the others' intermediate context.",
+          "correct": false,
+          "explanation": "Anthropic identifies heavily interdependent work — most coding tasks are the example — as a poor fit for multi-agent designs, because subagents do not share a context window. Coordination overhead there outweighs the parallelism gained.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The task's value is high enough that the improved result outweighs the extra token spend.",
+          "correct": true,
+          "explanation": "This qualifies on its own because the economics are the gate: Anthropic states multi-agent systems make sense for tasks whose value is high enough to pay for the increased performance. A low-value, high-volume query does not clear that bar no matter how parallelisable it is.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "C",
+          "text": "The group wants a lower per-query cost than its current single-agent assistant.",
+          "correct": false,
+          "explanation": "This inverts the trade-off. Multi-agent architectures buy quality on hard research tasks by spending far more tokens; if cost reduction is the goal, a single augmented agent or a cheaper model behind a routing step is the right direction.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The work parallelises cleanly and the information needed exceeds a single context window.",
+          "correct": true,
+          "explanation": "This qualifies independently because it is the structural condition Anthropic names: heavy parallelisation over information too large for one context window is exactly what separate subagent contexts provide. Each subagent explores its own slice and returns a condensed result to the lead.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "E",
+          "text": "The workflow is a fixed sequence of steps that must run in the same order every time.",
+          "correct": false,
+          "explanation": "A fixed, ordered sequence is the definition of a workflow, not a case for dynamic delegation. Anthropic's guidance is to implement predictable step sequences as prompt chaining and reserve agentic complexity for tasks whose steps cannot be predicted.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-04",
+      "question": "A municipal water utility's leak-investigation system uses a lead agent that spawns subagents over pressure telemetry, work orders, and customer reports. In testing, two subagents research the same district and a third returns a free-form essay the lead cannot merge. Per Anthropic's multi-agent findings, what should the architect fix first?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run the subagents sequentially so each one can read the previous subagent's output.",
+          "correct": false,
+          "explanation": "Serialising the work throws away the parallelism that justified the multi-agent design in the first place, and multiplies latency on an outage-response system. The duplication is a briefing problem, not an ordering problem.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Replace the lead agent with a fixed parallelization workflow that always runs the same three analyses.",
+          "correct": false,
+          "explanation": "A fixed fan-out is the right answer only when the subtasks are known in advance; here the investigation's shape depends on what the telemetry shows. Anthropic reserves orchestrator-workers precisely for cases where the subtasks are decided at runtime.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Give every subagent the full conversation history so each can see what the others are doing.",
+          "correct": false,
+          "explanation": "Sharing the whole history removes the context isolation that makes subagents worthwhile and floods each one with irrelevant tokens. Anthropic's design keeps detailed context inside each subagent and returns only condensed results to the lead.",
+          "citation": {
+            "title": "Effective context engineering for AI agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Have the lead agent brief each subagent with an explicit objective, scope boundary, sources, and output format.",
+          "correct": true,
+          "explanation": "Anthropic found that vague delegation is the main cause of duplicated and unusable subagent work, because subagents cannot see each other and must infer their remit. Detailed task descriptions — objective, boundaries, tools or sources, and the shape of the answer — are what let the lead merge the results.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-05",
+      "question": "A community solar developer's interconnection assistant reads long utility filings. Today the main agent calls the search tool itself, and raw filing text fills its context before it can synthesise a recommendation. Per Anthropic's context engineering guidance, which structural change best protects the lead agent's working memory?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise max_tokens so the agent has room to restate the filings inside its answer.",
+          "correct": false,
+          "explanation": "max_tokens governs output length, not how much retrieved material occupies the input context, and restating filings would consume even more of the window. The problem is what enters context, not how much room is left to write.",
+          "citation": {
+            "title": "Context windows - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Delegate retrieval to a subagent that does the detailed searching and returns a condensed summary.",
+          "correct": true,
+          "explanation": "Anthropic describes sub-agent architectures as a clear separation of concerns: the detailed search context stays isolated inside the subagent while the lead agent focuses on synthesis. That keeps the lead's window occupied by conclusions rather than raw source text.",
+          "citation": {
+            "title": "Effective context engineering for AI agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Move the filings into the system prompt so they are cached rather than re-read each turn.",
+          "correct": false,
+          "explanation": "Caching changes what you pay for tokens, not whether they occupy the context window — cached prefixes still count against it. Preloading every filing also contradicts the just-in-time retrieval principle of pulling in only what the current step needs.",
+          "citation": {
+            "title": "Context windows - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Cap the search tool so only the first page of any filing is ever returned.",
+          "correct": false,
+          "explanation": "A blunt truncation limit protects the context window by silently hiding the interconnection conditions that usually sit deep in a filing, trading context bloat for wrong answers. Filtering and summarising beats arbitrary cut-off.",
+          "citation": {
+            "title": "Writing effective tools for agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-06",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "An alpine railway operator is reviewing an agent that reroutes rolling stock during weather closures. The reviewer asks which design principles from Anthropic's \"Building Effective Agents\" the team must hold to. Which TWO principles does that guidance name?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Maintain simplicity in the agent's design, adding components only when they earn their place.",
+          "correct": true,
+          "explanation": "Simplicity is named on its own because every extra orchestration layer adds latency, cost, and failure modes. Anthropic's consistent advice is to find the simplest solution that works and increase complexity only when it measurably improves outcomes.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Adopt an agent framework early so prompt and tool plumbing is abstracted away.",
+          "correct": false,
+          "explanation": "Anthropic suggests starting with the model APIs directly, and warns that frameworks obscure the prompts and responses underneath, making systems harder to debug. Frameworks are a later convenience, not a founding principle.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Prioritise transparency by explicitly showing the agent's planning steps.",
+          "correct": true,
+          "explanation": "Transparency qualifies independently: an operator who can see the plan before rolling stock moves can intervene before a bad reroute is executed. Anthropic names showing the agent's planning steps as a core principle for building trust in agentic systems.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Insert an extra LLM planning call ahead of every request regardless of task difficulty.",
+          "correct": false,
+          "explanation": "An unconditional planning call is added complexity with no measured benefit, which is what the simplicity principle argues against. Routing simple requests directly is cheaper and usually more accurate.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Hide intermediate reasoning from operators so the control interface stays uncluttered.",
+          "correct": false,
+          "explanation": "This is the direct opposite of the transparency principle. Concealing the agent's plan removes the operator's only chance to catch an unsafe reroute before it is dispatched.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-07",
+      "question": "An oyster aquaculture cooperative's harvest-closure agent generates a long regulatory summary. One response returns with stop_reason \"model_context_window_exceeded\". How should the orchestration layer interpret it?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude declined the request on policy grounds; route the case to a human reviewer.",
+          "correct": false,
+          "explanation": "A policy decline is reported as stop_reason \"refusal\", with details in stop_details, and is handled by inspecting those details or retrying on a fallback model. Confusing the two leads the team to investigate a content problem that does not exist.",
+          "citation": {
+            "title": "Stop reasons and fallback - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Generation filled the model's context window, so the output is truncated, not final.",
+          "correct": true,
+          "explanation": "This stop reason means the response ran into the context window while generating, so the summary is incomplete. Treating it as final risks publishing a closure notice that stops mid-clause; the architecture should shorten the input, compact the history, or split the report.",
+          "citation": {
+            "title": "Stop reasons and fallback - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        },
+        {
+          "key": "C",
+          "text": "The request was rejected before generation began, so it can simply be retried unchanged.",
+          "correct": false,
+          "explanation": "Input that alone exceeds the window returns a 400 invalid_request_error instead; receiving a stop_reason at all means generation happened. Retrying the identical request would simply truncate again.",
+          "citation": {
+            "title": "Context windows - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A configured stop sequence fired; inspect the stop_sequence field to see which one.",
+          "correct": false,
+          "explanation": "That situation reports stop_reason \"stop_sequence\" and names the matched sequence. Reading the wrong stop reason here would hide a genuine capacity problem behind an imaginary formatting one.",
+          "citation": {
+            "title": "Stop reasons and fallback - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-08",
+      "question": "A seaweed farming venture wants materially better results from its market-research agent and is weighing a much longer single prompt against a lead-plus-subagents design. Anthropic's multi-agent research found that token usage alone explained about 80% of performance variance. What does that finding imply here?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Prompt length is the dominant lever, so the single agent should be given the longest prompt that fits.",
+          "correct": false,
+          "explanation": "Packing one window fuller works against the model: accuracy and recall degrade as a single context grows, an effect Anthropic calls context rot. The finding is about total tokens applied to the problem, not the size of one prompt.",
+          "citation": {
+            "title": "Context windows - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Because tokens dominate, the cheapest available model should be used everywhere to buy more of them.",
+          "correct": false,
+          "explanation": "Anthropic's reported gains came from a capable lead agent coordinating capable subagents, not from maximising raw token count on a weak model. Model choice and token budget are separate levers.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Performance is effectively fixed by the model, so the architecture choice makes little difference.",
+          "correct": false,
+          "explanation": "The opposite conclusion follows: if token usage explains most of the variance, architecture matters a great deal because architecture determines how many tokens can usefully be brought to bear. Anthropic measured a large gap between single- and multi-agent designs on research tasks.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Parallel subagents, each with its own context window, apply far more tokens than one window holds.",
+          "correct": true,
+          "explanation": "This is the architectural reading of the finding: separate contexts let the system spend tokens on parallel exploration instead of competing for one window. It is also why the pattern is reserved for research-shaped tasks where that extra spend is worth roughly 15x the tokens of a single chat.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-09",
+      "question": "A pollination-services company's scheduling agent returns three independent tool_use blocks — hive availability, orchard bloom, and haulage capacity — and the application runs them concurrently. The haulage call throws before completing. What must the next user message contain?",
+      "options": [
+        {
+          "key": "A",
+          "text": "One tool_result for each tool_use block, including a tool_result with is_error true for the haulage call.",
+          "correct": true,
+          "explanation": "The documented rule is one tool_result per tool_use block, matched by tool_use_id and sent together in the next user message. A call you could not complete still gets a result — marked is_error with a brief explanation — so Claude can adapt rather than stall on an unanswered block.",
+          "citation": {
+            "title": "Parallel tool use - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Only the two successful tool_results, leaving the failed one unanswered so Claude reissues it.",
+          "correct": false,
+          "explanation": "Leaving a tool_use block without a matching result produces the \"tool_use ids were found without tool_result blocks\" error rather than a retry. Claude cannot infer an omission means failure.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A text block describing the failure, placed before the two successful tool_results.",
+          "correct": false,
+          "explanation": "Text before tool_result blocks is rejected with a 400: tool_result blocks must come first in the content array, with any text placed after them. Errors belong inside the corresponding tool_result with is_error true, not in narration.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A fresh user message restating the whole request, since a parallel batch must be re-run atomically.",
+          "correct": false,
+          "explanation": "The API prescribes no atomicity for parallel calls; execution strategy is entirely the application's choice. Discarding two successful lookups wastes the work and the tokens already spent on them.",
+          "citation": {
+            "title": "Parallel tool use - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-10",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A grain terminal's dispatch agent runs for hours, and the team is comparing server-side compaction with tool result clearing. An auditor asks what each mechanism actually preserves. Which TWO statements are accurate?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Tool result clearing removes the tool_use block along with its result, so the call's inputs are gone.",
+          "correct": false,
+          "explanation": "The clear_tool_uses_20250919 strategy clears result bodies, and clearing the tool inputs as well is opt-in via clear_tool_inputs, which defaults to false. By default the call and its arguments remain visible.",
+          "citation": {
+            "title": "Context editing - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Compaction preserves the exact original wording of every earlier turn and only reorders it.",
+          "correct": false,
+          "explanation": "Compaction is summarisation, not reordering: it replaces older content with a model-written summary. Expecting verbatim preservation is precisely the misconception that leads teams to rely on compaction for audit trails.",
+          "citation": {
+            "title": "Compaction - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Compaction replaces older content with a concise model-written summary, so a specific identifier is not guaranteed to survive.",
+          "correct": true,
+          "explanation": "This holds on its own because summarisation is lossy by construction: what the summariser judges unimportant does not carry forward. A dispatch agent that must be able to quote a specific consignment number later should persist it outside the conversation rather than trust compaction.",
+          "citation": {
+            "title": "Compaction - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Compaction and tool result clearing are two names for the same context-editing strategy.",
+          "correct": false,
+          "explanation": "They are separate mechanisms documented on separate pages: compaction summarises older conversation content, while context editing clears tool results in place. Blurring them leads to citing behaviour from one page that the other does not have.",
+          "citation": {
+            "title": "Context windows - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Tool result clearing replaces the result body with placeholder text but leaves the preceding tool_use block, including its inputs, in place by default.",
+          "correct": true,
+          "explanation": "This qualifies independently: because clear_tool_inputs defaults to false, the record of what was asked survives even after the bulky answer is dropped. That makes clearing the safer choice when the agent needs to remember which consignments it already queried.",
+          "citation": {
+            "title": "Context editing - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-11",
+      "question": "A peat-free compost manufacturer is starting its first agentic project. A vendor recommends standardising on an agent framework before any prototype exists. What does Anthropic's guidance recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Choose the framework first, because hand-written agent loops are discouraged for production systems.",
+          "correct": false,
+          "explanation": "Anthropic's own examples build agents from plain API calls, and many successful implementations use simple composable patterns rather than a framework. Nothing in the guidance discourages writing the loop yourself.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Avoid frameworks permanently, since any abstraction over the API degrades output quality.",
+          "correct": false,
+          "explanation": "This overstates the advice. The caution is about hidden prompts and hard-to-debug layers, not about quality loss inherent to abstraction; frameworks are fine once the team knows what they generate underneath.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Call the model APIs directly first, and understand the code beneath any framework adopted later.",
+          "correct": true,
+          "explanation": "Anthropic suggests developers begin with direct API use, because frameworks obscure the actual prompts and responses and make debugging harder. Understanding the underlying calls first is what lets a team judge whether a framework's abstractions are helping.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Defer the decision until the system is multi-agent, and use a no-code orchestrator until then.",
+          "correct": false,
+          "explanation": "This invents a threshold that no Anthropic guidance sets, and a no-code layer hides the prompts even more thoroughly than a framework does. The recommendation is not conditional on system scale.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-12",
+      "question": "A port dredging contractor plans to let an agent issue live instructions to survey vessels. The agent performs well in demos, and the sponsor wants to skip staged rollout to hit a seasonal window. What does Anthropic's agent guidance call for before production autonomy?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A larger model, since raw capability is the main control on agent risk.",
+          "correct": false,
+          "explanation": "Capability and safety are different axes; a stronger model still takes real actions in the real world when it is wrong. Anthropic's controls for autonomy are testing, guardrails, and human checkpoints, not model size.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Extensive testing in a sandboxed environment together with guardrails on what the agent may do.",
+          "correct": true,
+          "explanation": "Because agents operate on real systems for many turns, errors compound in ways a demo will not surface. Anthropic's guidance pairs extensive sandboxed testing with appropriate guardrails before an agent is trusted to act autonomously in production.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A longer system prompt that enumerates every action the agent must not take.",
+          "correct": false,
+          "explanation": "Prompt instructions steer behaviour but do not enforce it, and an exhaustive prohibition list is impossible to write for an open-ended environment. Enforcement belongs in the tool surface and permission layer.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Replacing the agent with a fixed workflow, but only after the first production incident.",
+          "correct": false,
+          "explanation": "Waiting for an incident on live vessel instructions is the outcome the guidance exists to prevent. Testing and guardrails come before autonomy, not after the first failure.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-13",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A mountain rescue coordination centre is moving from a fixed workflow to an autonomous agent so it can handle call-outs whose steps cannot be scripted. The board asks what the organisation accepts in exchange. Which TWO trade-offs does Anthropic's guidance identify?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Higher latency and higher cost per task than the fixed workflow.",
+          "correct": true,
+          "explanation": "This stands alone as a trade-off Anthropic names explicitly: agentic systems trade latency and cost for better task performance. For a rescue centre that means budgeting for slower, pricier handling of the hard cases the workflow could not cover.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A guarantee of higher accuracy on every category of call-out.",
+          "correct": false,
+          "explanation": "No such guarantee exists; on tasks with fixed, well-understood steps a workflow is usually more accurate as well as cheaper. Autonomy pays off only where the path cannot be predicted in advance.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Deterministic, reproducible output for identical inputs.",
+          "correct": false,
+          "explanation": "Determinism is a property the organisation gives up, not gains: the agent chooses its own path from environment feedback. Where reproducibility is a hard requirement, the fixed workflow remains the right design.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "An unpredictable number of steps, so explicit stopping conditions become necessary.",
+          "correct": true,
+          "explanation": "This qualifies independently because an agent decides at runtime how many cycles a call-out needs, and without a stopping condition a stuck loop burns budget until someone intervenes. Anthropic treats stopping conditions as a foundational guardrail for autonomous loops.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "E",
+          "text": "No further need for tool documentation once the agent can plan its own steps.",
+          "correct": false,
+          "explanation": "Autonomy raises the value of tool documentation rather than removing it, because the agent now selects tools without a scripted path to follow. Anthropic's rule of thumb is to invest as much effort in the agent-computer interface as goes into human-computer interfaces.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D1-14",
+      "question": "A commercial fishing fleet's quota-reconciliation agent runs for six hours across hundreds of tool calls. A transient outage kills the process near the end, and the operator has to start the entire run again. Based on Anthropic's production experience with long-running agent systems, what should the architecture add?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Durable checkpointing of run state so an interrupted run resumes from where it stopped.",
+          "correct": true,
+          "explanation": "Anthropic's multi-agent production work highlights durable execution — persisting progress so agents resume rather than restart — as essential once runs last long enough that failures are inevitable. It also caps the blast radius of any single outage to the work since the last checkpoint.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A lower maximum iteration cap so failures occur earlier in the run.",
+          "correct": false,
+          "explanation": "An iteration cap is a runaway-loop guardrail, not a recovery mechanism, and lowering it here would simply stop legitimate reconciliations before they finish. It does nothing about losing five hours of completed work.",
+          "citation": {
+            "title": "Building effective agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Automatic retry of the whole run up to three times.",
+          "correct": false,
+          "explanation": "Blind whole-run retries triple the token spend and repeat every side effect the earlier attempts already performed. Recovery should resume from persisted state, not replay hours of tool calls.",
+          "citation": {
+            "title": "How we built our multi-agent research system - Anthropic",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Collapsing the whole reconciliation into a single API request so there is no state to lose.",
+          "correct": false,
+          "explanation": "Hundreds of tool calls cannot happen inside one request, since each client tool call requires a round trip back to your application. Long-horizon work is managed with external state and context strategies, not by eliminating turns.",
+          "citation": {
+            "title": "Effective context engineering for AI agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

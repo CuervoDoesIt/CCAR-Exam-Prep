@@ -230,6 +230,15 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 .pal-case-start { margin-left: 14px; }
 
 /* Multiple-response ("select TWO") items */
+/* Blue, matching .select-hint and the select-two palette states, so the format
+   reads as one visual family. Deliberately NOT amber: amber is the hard-mode
+   badge, and an exam can only be one of the two. */
+.multi-badge {
+  margin-left: 8px; vertical-align: middle; background: #24344f;
+  border: 1px solid var(--blue); color: #cfe0ff;
+  font-size: 0.62rem; font-weight: 800; letter-spacing: 1px;
+  padding: 2px 6px; border-radius: 4px;
+}
 .select-hint {
   display: inline-block; margin: -8px 0 14px; padding: 4px 10px; border-radius: 999px;
   background: #24344f; border: 1px solid var(--blue); color: #cfe0ff;

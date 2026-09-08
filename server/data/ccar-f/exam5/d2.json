@@ -1,0 +1,641 @@
+{
+  "examId": "ccar-f-exam5",
+  "domainId": "D2",
+  "domainName": "Tool Design & MCP Integration",
+  "questions": [
+    {
+      "id": "F5-D2-01",
+      "question": "A fishing fleet co-operative aggregates five MCP servers — vessel tracking, catch reporting, fuel cards, weather, and payroll — giving Claude roughly 240 tools. Definitions alone consume tens of thousands of tokens before any work starts, and the agent increasingly picks the wrong tool. What does Anthropic's guidance recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Collapse all 240 operations into a single tool that takes a free-text command string.",
+          "correct": false,
+          "explanation": "Consolidation helps when a handful of related calls always run together, but a free-text command tool removes the JSON Schema that constrains inputs and turns tool selection into an unvalidated parsing problem. Schemas are what make tool calls checkable.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Enable the tool search tool and set defer_loading on most of the definitions.",
+          "correct": true,
+          "explanation": "Anthropic documents both symptoms this team has — context bloat from definitions and selection accuracy degrading past roughly 30–50 tools — as the reason tool search exists. Claude searches the catalogue and the API loads only the few tools a request needs, while the full definitions still travel in the tools array.",
+          "citation": {
+            "title": "Tool search tool - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Split the work across five separate Claude applications, one per MCP server.",
+          "correct": false,
+          "explanation": "This trades one problem for another: a skipper asking whether a catch report matches the vessel's fuel spend now has no single agent that can see both. Tool search keeps one agent while removing the context cost of unused tools.",
+          "citation": {
+            "title": "Tool search tool - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Shorten every tool description to a single line to cut token usage.",
+          "correct": false,
+          "explanation": "Detailed descriptions are the single biggest factor in tool-selection accuracy, so trimming them attacks context cost by making the confusion worse. It also degrades tool search itself, which matches against names, descriptions, and argument descriptions.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-02",
+      "question": "A ski resort connects its lift-management MCP server through the Messages API MCP connector. The assistant should read lift status and shift rosters but must never invoke the server's tools that halt lifts or delete shifts. What configuration enforces that?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set tool_choice to none so no tool can be invoked on those requests.",
+          "correct": false,
+          "explanation": "tool_choice none blocks every tool, including the status and roster reads the assistant exists to perform. The requirement is selective, not total.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Ask the MCP server operator to drop those tools from tools/list for every client.",
+          "correct": false,
+          "explanation": "That removes the capability for all consumers, including the operations console that legitimately needs to halt a lift. Per-consumer restriction belongs in the client's own toolset configuration.",
+          "citation": {
+            "title": "MCP connector - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Add a system-prompt instruction forbidding use of the destructive tools.",
+          "correct": false,
+          "explanation": "Prompt instructions steer the model but do not enforce anything; a tool that is enabled can still be called. For an action that stops a lift, the control must be configuration, not persuasion.",
+          "citation": {
+            "title": "MCP connector - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector"
+          }
+        },
+        {
+          "key": "D",
+          "text": "In the mcp_toolset configs, set enabled: false for each destructive tool.",
+          "correct": true,
+          "explanation": "This is the documented denylist pattern, and Anthropic recommends it specifically for read-only assistants or where a human confirmation step should precede state changes. Because per-tool configs override the toolset default, only the named destructive tools are withheld from the model.",
+          "citation": {
+            "title": "MCP connector - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A seaweed farm's harvest-planning tool takes a deeply nested input — nested plot objects, date ranges, and optional yield filters — and the agent keeps omitting required fields or mistyping them. Which TWO changes does Anthropic's tool documentation recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set strict: true on the tool definition so tool inputs are constrained to match the schema exactly.",
+          "correct": true,
+          "explanation": "Strict tool use qualifies on its own because it eliminates the failure class entirely: inputs are guaranteed to match the schema, so missing required parameters and type mismatches cannot reach the tool. It is the documented answer when invalid tool calls must stop rather than merely become rarer.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Raise max_tokens so the model has room to write longer tool inputs.",
+          "correct": false,
+          "explanation": "Malformed inputs are a schema-comprehension problem, not a length problem; the model is not running out of room to emit the JSON. Raising max_tokens changes nothing about which fields it chooses to include.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Set tool_choice to any so the model is forced to call one of the tools.",
+          "correct": false,
+          "explanation": "Forcing a call changes whether a tool is used, not whether its arguments are well formed — a forced call can still be malformed. It also suppresses the natural-language explanation the model would otherwise offer first.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add input_examples containing schema-valid example inputs that show the nesting and optional-field patterns.",
+          "correct": true,
+          "explanation": "input_examples qualifies independently as the documented remedy for complex, nested, or format-sensitive inputs: concrete examples travel with the schema and show when to include optional parameters. Each example is validated against the input_schema, so a wrong example is rejected at request time rather than teaching bad patterns.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Split the tool into ten single-field tools so each individual call is trivial.",
+          "correct": false,
+          "explanation": "This is the opposite of Anthropic's advice to consolidate related operations into fewer, more capable tools. Ten granular tools add selection ambiguity and force the agent to chain calls, spending context on intermediate results.",
+          "citation": {
+            "title": "Writing effective tools for agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-04",
+      "question": "A harbour pilotage agent ingests notices to mariners scraped from third-party sites. Security review warns that an attacker could publish a notice containing instructions aimed at the model. Where does Anthropic's documentation say such untrusted content belongs in the request?",
+      "options": [
+        {
+          "key": "A",
+          "text": "In the system prompt, where surrounding policy text can bound how it is treated.",
+          "correct": false,
+          "explanation": "The system prompt is the most trusted region of the request, so placing attacker-controlled text there maximises its influence. Anthropic's guidance explicitly steers untrusted content away from system prompts.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "B",
+          "text": "In a plain user text block prefixed with a warning that it may be untrusted.",
+          "correct": false,
+          "explanation": "A plain user text block reads as the operator's own words, and a prefix is only a hint. The documentation names plain user text blocks alongside system prompts as the wrong place for content from sources you do not control.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Inside tool_result blocks, which is where content from sources outside your control belongs.",
+          "correct": true,
+          "explanation": "Anthropic's documentation warns that tool results routinely carry content from web pages, inbound mail, and third-party APIs, and instructs teams to keep that content inside tool_result blocks rather than system prompts or user text. Keeping the boundary explicit is the first structural defence against indirect prompt injection, alongside the jailbreak-mitigation guidance.",
+          "citation": {
+            "title": "Handle tool calls - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls"
+          }
+        },
+        {
+          "key": "D",
+          "text": "In the tool's description field, so the model sees the notice before deciding to call the tool.",
+          "correct": false,
+          "explanation": "Tool descriptions are static definition text compiled into the tool-use system prompt, not a place for per-request data. Injecting scraped content there would be both architecturally wrong and maximally trusted.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-05",
+      "question": "A textile recycling firm's lot-lookup tool returns every column of its warehouse table, including internal row keys such as \"wh_row_88421\" that the agent then cannot use in any follow-up call. What does Anthropic's tool-design guidance recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Return only the fields needed for the next step, using semantic, stable identifiers.",
+          "correct": true,
+          "explanation": "Anthropic's guidance on tool responses is to return high-signal information: semantic, stable identifiers such as slugs or UUIDs, and only the fields the model needs to reason about what to do next. Bloated responses waste context and bury the facts that matter.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Return the complete record every time so the agent never needs a second call.",
+          "correct": false,
+          "explanation": "Completeness is not free: every unused column consumes context the agent needs for reasoning, and accuracy degrades as the window fills. A focused response plus a follow-up call when needed is cheaper than pre-loading everything.",
+          "citation": {
+            "title": "Writing effective tools for agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Return the record as a compact encoded string the agent decodes when needed.",
+          "correct": false,
+          "explanation": "Encoding saves tokens by making the content unreadable to the model, which defeats the purpose of returning it. Tool results should be shaped for the model to reason over directly.",
+          "citation": {
+            "title": "Writing effective tools for agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep the internal row keys and add a second tool that translates them into usable identifiers.",
+          "correct": false,
+          "explanation": "This adds a whole extra round trip to undo a problem the first tool created, spending latency and context on translation. The fix belongs in the response shape, not in a compensating tool.",
+          "citation": {
+            "title": "Writing effective tools for agents - Anthropic",
+            "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-06",
+      "question": "An oyster aquaculture MCP server exposes a book_grading_slot tool. Part-way through a call it finds the request is missing the grader's certification number and a confirmation of the booking fee. Which current MCP client feature lets the server ask the user for that information mid-request?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Roots",
+          "correct": false,
+          "explanation": "Roots communicate filesystem directory boundaries to a server and carry no user-input mechanism at all. They are also deprecated as of MCP protocol revision 2026-07-28, with directories now passed via tool parameters, resource URIs, or server configuration.",
+          "citation": {
+            "title": "Understanding MCP clients - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Elicitation",
+          "correct": true,
+          "explanation": "Elicitation is the client feature for requesting specific information from the user during an interaction: the server returns an InputRequiredResult carrying an elicitation/create request, the client collects the data against the supplied schema, and the original call is retried with the responses. It is the only client feature of the three that remains current.",
+          "citation": {
+            "title": "Understanding MCP clients - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Sampling",
+          "correct": false,
+          "explanation": "Sampling asks the client's language model for a completion, not the human for input, so it cannot supply a certification number the model does not know. It is also deprecated as of protocol revision 2026-07-28.",
+          "citation": {
+            "title": "Understanding MCP clients - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Resources",
+          "correct": false,
+          "explanation": "Resources are a server primitive that exposes read-only context such as files or schemas for the application to retrieve. They flow from server to client as data and provide no way to prompt a person mid-call.",
+          "citation": {
+            "title": "Understanding MCP servers - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-07",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A vendor's MCP server design has the server ask the client's model to rank supplier bids, and uses roots to tell the client which folders to expose. A reviewer notes both features are deprecated as of MCP protocol revision 2026-07-28. Which TWO replacements does the specification point to?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the ranking into an elicitation form so the user picks the winning supplier by hand.",
+          "correct": false,
+          "explanation": "Elicitation gathers information from a person; it is not a substitute for model inference, and turning an automated ranking into manual data entry changes the product rather than migrating the feature. Elicitation is the right tool when the server genuinely needs a human decision or a missing field.",
+          "citation": {
+            "title": "Understanding MCP clients - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Have the server integrate directly with an LLM provider API for the ranking step.",
+          "correct": true,
+          "explanation": "This is the replacement the specification names for sampling: new implementations should integrate directly with LLM provider APIs instead of asking the client to run completions. It also removes the dependency on whether a given client declared the sampling capability at all.",
+          "citation": {
+            "title": "Understanding MCP clients - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep sampling but declare the sampling.tools capability so it stays supported.",
+          "correct": false,
+          "explanation": "sampling.tools governs whether a client accepts tool-enabled sampling requests; it does not exempt sampling from deprecation. Building new work on a feature scheduled for removal simply defers the migration.",
+          "citation": {
+            "title": "Understanding MCP clients - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Expose the folders as MCP prompts that the user triggers explicitly.",
+          "correct": false,
+          "explanation": "Prompts are reusable, user-invoked instruction templates, not a way to describe filesystem scope. Using them to convey directory boundaries misapplies the primitive and gives the server no usable paths.",
+          "citation": {
+            "title": "Understanding MCP servers - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/docs/learn/server-concepts"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Pass the directories through tool parameters, resource URIs, or server configuration.",
+          "correct": true,
+          "explanation": "This is exactly what the specification prescribes in place of roots for new implementations. It also makes the scope explicit at the point of use, rather than relying on an advisory boundary that servers were only ever asked to respect, never required to enforce.",
+          "citation": {
+            "title": "Understanding MCP clients - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/docs/learn/client-concepts"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-08",
+      "question": "A community solar operator's grid-model MCP server runs as a local stdio process on an engineering workstation. The team wants Claude, called through the Messages API MCP connector from their cloud backend, to use it directly. What has to change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Nothing — the connector launches local stdio servers on demand when a request needs them.",
+          "correct": false,
+          "explanation": "The connector runs on Anthropic's infrastructure and has no ability to spawn a process on someone's workstation. Local stdio servers are launched by a host application on the same machine, not by the API.",
+          "citation": {
+            "title": "MCP connector - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Pass the server's command line in the mcp_servers entry instead of a URL.",
+          "correct": false,
+          "explanation": "The mcp_servers entry accepts type \"url\" with an https URL; there is no command field. Inventing one would fail validation, and it would also mean handing an external service a command to execute.",
+          "citation": {
+            "title": "MCP connector - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Wrap the stdio server in a client toolset entry in the tools array.",
+          "correct": false,
+          "explanation": "Client toolsets are Anthropic's fixed groupings of member tools such as computer use and browser use; they are not a wrapper for arbitrary MCP servers. MCP servers are configured through mcp_servers and an mcp_toolset entry.",
+          "citation": {
+            "title": "Tool use with Claude - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Host it as a remote HTTPS server, or run their own MCP client instead of the connector.",
+          "correct": true,
+          "explanation": "The connector documents both constraints: the server must be publicly exposed over HTTP, and local stdio servers cannot be connected directly. When a team needs local servers — or MCP prompts and resources, which the connector does not carry — the documented path is to manage the MCP client connection themselves with the SDK helpers.",
+          "citation": {
+            "title": "MCP connector - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-09",
+      "question": "An alpine railway's platform team wants every engineer who clones the timetable repository to pick up the same Claude Code MCP server configuration automatically, reviewed and versioned alongside the code. Which scope fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Local scope, private to one engineer working in one project",
+          "correct": false,
+          "explanation": "Local scope is private to one developer for one project and is stored outside the repository, so nothing is shared on clone. It suits experiments and personal credentials, not a team standard.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP - Claude Code Docs",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "B",
+          "text": "User scope, available to one engineer across all their projects",
+          "correct": false,
+          "explanation": "User scope makes a server available across all of that one person's projects and is still private to them. It solves the opposite problem: one engineer, many repositories.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP - Claude Code Docs",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Project scope, written to .mcp.json in the repository",
+          "correct": true,
+          "explanation": "Project scope stores the configuration in .mcp.json inside the repository, so it travels with a clone and moves through code review like any other file. That is the documented way to share an MCP server configuration with a team.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP - Claude Code Docs",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Enterprise managed configuration, deployed centrally by administrators",
+          "correct": false,
+          "explanation": "Managed configuration is administered centrally for an organisation, which is a different control point from a repository the platform team owns. It cannot be versioned with the timetable code or reviewed in a pull request.",
+          "citation": {
+            "title": "Connect Claude Code to tools via MCP - Claude Code Docs",
+            "url": "https://code.claude.com/docs/en/mcp"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-10",
+      "question": "A grain terminal's MCP server accepts the OAuth access token its clients already hold for the downstream grain-exchange API and forwards it unchanged to that API. Security review flags the design. What does the MCP specification require?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The server must reject tokens not issued for it and obtain its own downstream credentials.",
+          "correct": true,
+          "explanation": "Token passthrough is explicitly forbidden: an MCP server must reject tokens that were not issued to it. Forwarding client tokens bypasses the server's own rate limiting and validation, and destroys the audit trail because downstream logs no longer identify who really made the call.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Forwarding is permitted as long as the token only ever travels over TLS.",
+          "correct": false,
+          "explanation": "TLS protects the token in transit and says nothing about audience validation, which is the actual issue. A correctly encrypted token still grants access it was never scoped to give this server.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Forwarding is permitted provided the server logs every forwarded request.",
+          "correct": false,
+          "explanation": "Logging is a detective control, not the prohibition the specification states, and it does not restore the downstream service's ability to tell clients apart. The requirement is a MUST NOT, with no logging exemption.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The server should cache the forwarded token and refresh it with the grain-exchange API on the client's behalf.",
+          "correct": false,
+          "explanation": "Caching and refreshing a token that was never issued to this server compounds the violation and widens the blast radius if the store is breached. The server needs credentials of its own, not better custody of someone else's.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-11",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "An avalanche forecasting service runs a remote MCP server over Streamable HTTP behind a load balancer, issuing a session ID when a client connects. Which TWO requirements does the MCP security guidance place on those sessions?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Once issued over TLS, the session ID may serve as the client's authentication credential.",
+          "correct": false,
+          "explanation": "The specification states plainly that MCP servers must not use sessions for authentication. A session ID is a correlation handle; anyone who obtains it would otherwise be able to impersonate the original client.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Session IDs should be sequential so gaps in the sequence reveal dropped connections.",
+          "correct": false,
+          "explanation": "Sequential identifiers are guessable, which is the precise property the guidance warns against. Connection health should be observed through monitoring, not by making session IDs predictable.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Session IDs must be secure and non-deterministic, generated from a secure random source.",
+          "correct": true,
+          "explanation": "This stands on its own: guessable session identifiers let an attacker join or inject into another client's stream, which is the session-hijacking vector the guidance describes. Secure random generation, with rotation or expiry, is the stated requirement.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The server must verify authorization on every inbound request rather than trusting an established session.",
+          "correct": true,
+          "explanation": "This qualifies independently because it closes the impersonation path even if a session ID leaks: a stolen handle buys nothing without a valid credential on the request. It matters especially behind a load balancer, where several stateful nodes may serve the same session.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Sessions must never be bound to user identity, so they stay portable between server nodes.",
+          "correct": false,
+          "explanation": "This inverts the guidance, which recommends binding session IDs to user-specific information, for example keying stored data as user id plus session id. Binding is what stops a guessed session from impersonating a different user.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-12",
+      "question": "A municipal water utility's assistant has eight operational tools. For the end-of-shift narrative summary, product requires that Claude write purely from the conversation already in context and call nothing at all. Which setting expresses that requirement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "tool_choice {\"type\": \"auto\"} plus a system-prompt instruction not to call tools.",
+          "correct": false,
+          "explanation": "auto leaves the decision to the model, and prompt wording only biases that decision. Where the requirement is that no tool can be called, steering is not the same as a guarantee.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "B",
+          "text": "tool_choice {\"type\": \"none\"}",
+          "correct": true,
+          "explanation": "none is the documented value that prevents Claude from using any tools, and it is the default whenever no tools are supplied. Because it is set per request, the same assistant keeps its eight tools for operational turns and loses them only for the summary turn.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "C",
+          "text": "tool_choice {\"type\": \"any\"} with only a read-only tool supplied.",
+          "correct": false,
+          "explanation": "any means the model must call one of the provided tools, which is the opposite requirement. It would force a lookup the summary turn was specified never to make.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "tool_choice {\"type\": \"tool\", \"name\": \"summarize_shift\"}",
+          "correct": false,
+          "explanation": "This forces one specific tool call, so the model definitely calls a tool rather than definitely not calling one. It also suppresses the natural-language response the summary is supposed to be.",
+          "citation": {
+            "title": "Define tools - Claude Docs",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "F5-D2-13",
+      "question": "A canal navigation authority is shipping a one-click install flow that lets staff add local MCP servers to their client from a shared catalogue entry. What does the MCP security guidance require of the client before it runs one?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Verify the server binary's signature and install silently when it matches.",
+          "correct": false,
+          "explanation": "Signature checks say who published a binary, not what the configured startup command will do — a catalogue entry can append data-exfiltration or privilege-escalation arguments to a legitimate package. Silent installation removes the consent step the guidance requires.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run the server as a background service with elevated privileges so it can reach lock hardware.",
+          "correct": false,
+          "explanation": "This maximises the damage a malicious or buggy server can do, when the guidance points the other way: sandbox spawned processes and restrict filesystem and network access. Local MCP servers already run with the client's privileges, which is risk enough.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Truncate the command shown in the dialog so the confirmation stays readable.",
+          "correct": false,
+          "explanation": "Truncation is called out as unacceptable precisely because the dangerous part of a command is usually the trailing arguments. A consent dialog that hides what will run provides no real consent.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Show the exact command that will be executed, in full, and require explicit approval before running it.",
+          "correct": true,
+          "explanation": "A client that supports one-click local server configuration must display the untruncated command, identify it as code execution on the user's machine, and require explicit approval with the option to cancel. The guidance further suggests highlighting dangerous patterns and sandboxing the spawned process.",
+          "citation": {
+            "title": "MCP Security Best Practices - Model Context Protocol",
+            "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,152 @@
+{
+  "examId": "ccar-p-exam5",
+  "domainId": "D6",
+  "domainName": "Stakeholder Communication & Lifecycle Management",
+  "questions": [
+    {
+      "id": "P5-D6-01",
+      "question": "An innovation team at a container port terminal built a berth-scheduling assistant that has run in production for four months. Ownership now transfers to the platform team, who will carry the pager for it. What must the handover contain for that team to own it safely?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The prompt files, the API keys, and a recorded walkthrough demonstrating the assistant on a typical berth plan and a busy-season one.",
+          "correct": false,
+          "explanation": "A demo shows the happy path and tells the new owners nothing about how to detect a regression or what good looks like numerically. Anthropic's guidance is that a use-case-specific evaluation set is the most important asset for judging changes, and that is exactly what this handover omits.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "An architecture document plus a shared channel where the original authors remain available for questions.",
+          "correct": false,
+          "explanation": "Informal access to the authors is a dependency, not a transfer, and it evaporates when they move on. Documentation describes the design but gives the on-call engineer no runnable way to verify the system after a change.",
+          "citation": { "title": "Building Effective AI Agents", "url": "https://www.anthropic.com/engineering/building-effective-agents" }
+        },
+        {
+          "key": "C",
+          "text": "The runnable eval suite and its graded corpus, version-controlled prompts with pinned model ids, and a rollback procedure.",
+          "correct": true,
+          "explanation": "Ownership means being able to change the system safely and to know when it has degraded, which requires an executable measurement rather than prose. Pinned model ids and version-controlled prompts make any production behaviour attributable, and a rollback procedure gives the on-call engineer a defined action at three in the morning.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "A signed internal SLA and the vendor support contacts to escalate to if the assistant misbehaves.",
+          "correct": false,
+          "explanation": "An SLA states an obligation without providing any means to meet it, and vendor support cannot debug this terminal's prompts or corpus. It also leaves the team unprepared for the one lifecycle event that is certain to arrive, a model deprecation notice with a retirement date.",
+          "citation": { "title": "Model deprecations", "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations" }
+        }
+      ]
+    },
+    {
+      "id": "P5-D6-02",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "The board of an offshore wind operator will approve a turbine fault-triage assistant only if the architect commits to '100% accuracy'. Which TWO responses are both honest and useful to the board's decision?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Accept the commitment and plan further prompt engineering to reach it before launch.",
+          "correct": false,
+          "explanation": "No measured system reaches a perfect rate on open-ended inputs, and Anthropic's guidance is to set achievable targets grounded in current model capability. Accepting an unmeetable commitment moves the failure from the design review to the first incident.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "B",
+          "text": "Reframe the request as an error budget: give the measured error rate per fault class and show which classes route to an engineer instead of auto-closing.",
+          "correct": true,
+          "explanation": "This qualifies on its own because it converts an unanswerable demand into a decision the board can actually take, using numbers the eval suite already produces. It also makes the mitigation visible: the classes with the worst measured rate never close without a human, so the residual risk is bounded rather than merely acknowledged.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "C",
+          "text": "Explain that accuracy cannot be measured for language models and can only be judged qualitatively by engineers.",
+          "correct": false,
+          "explanation": "This is false and it disarms the board: Anthropic documents concrete measurement approaches including exact match, similarity scoring, and LLM-based grading. Claiming the system is unmeasurable removes the only basis on which oversight could work.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        },
+        {
+          "key": "D",
+          "text": "Show the accuracy, cost and latency trade-off from the eval runs so the board picks the operating point, and commit to reporting against it after launch.",
+          "correct": true,
+          "explanation": "It stands alone because choosing where to sit on that curve is a business decision about risk appetite and budget, not a technical one, and Anthropic's cost guidance frames model and effort choices in exactly those terms. The commitment to report afterwards is what keeps the chosen point honest once real traffic arrives.",
+          "citation": { "title": "Optimizing for cost and intelligence", "url": "https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence" }
+        },
+        {
+          "key": "E",
+          "text": "Attach a disclaimer to every triage output saying it may be incorrect, and present that as the mitigation.",
+          "correct": false,
+          "explanation": "A blanket disclaimer transfers risk to the reader without reducing it, and readers stop seeing it within days. Anthropic's guidance is to ground outputs and verify claims rather than to caveat everything uniformly, which conveys no information about which outputs are actually doubtful.",
+          "citation": { "title": "Reduce hallucinations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations" }
+        }
+      ]
+    },
+    {
+      "id": "P5-D6-03",
+      "question": "A seed-testing laboratory's client contract states that the AI model used will not change without 30 days' written notice. The pinned snapshot is Active today, but every model eventually carries a retirement date. How should the architect handle the commitment?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Treat the model id as a controlled configuration item: changes trigger the notice and must pass eval parity.",
+          "correct": true,
+          "explanation": "Anthropic notifies customers with active deployments and gives at least 60 days before retirement for publicly released models, which is enough room to serve a 30-day client notice if someone is watching for it. Putting the model id under change control makes the contractual trigger explicit, and gating the replacement on eval parity is what lets the lab tell the client the change is safe rather than merely announced.",
+          "citation": { "title": "Model deprecations", "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations" }
+        },
+        {
+          "key": "B",
+          "text": "Renegotiate the clause out of the contract, since model versions are an implementation detail clients should not track.",
+          "correct": false,
+          "explanation": "The model version is observable in output behaviour and is a legitimate concern for a client whose certificates depend on it. Anthropic's own migration guidance treats a version change as something to test deliberately, which is precisely why a client wants notice.",
+          "citation": { "title": "Migration guides", "url": "https://platform.claude.com/docs/en/about-claude/models/migration-guide" }
+        },
+        {
+          "key": "C",
+          "text": "Assure the client that the pinned snapshot will remain in use for the full term of the contract.",
+          "correct": false,
+          "explanation": "This is a promise the lab cannot keep: deprecated models are assigned retirement dates and requests to retired models fail. Committing to permanence guarantees a future breach of either the technical reality or the contract.",
+          "citation": { "title": "Model deprecations", "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations" }
+        },
+        {
+          "key": "D",
+          "text": "Switch to an unpinned model alias so upgrades happen transparently and no notice is ever required.",
+          "correct": false,
+          "explanation": "Removing the pin does not remove the change, it removes the lab's knowledge of it, which makes the notice obligation impossible to honour. It also discards the ability to run the eval suite against the new model before client work depends on it.",
+          "citation": { "title": "Migration guides", "url": "https://platform.claude.com/docs/en/about-claude/models/migration-guide" }
+        }
+      ]
+    },
+    {
+      "id": "P5-D6-04",
+      "question": "Eighteen months after launch, a rail freight yard's wagon-defect summariser is used on 6% of shifts, costs more per accepted summary than the manual process it replaced, and both engineers who built it have left. The sponsor asks the architect for a recommendation.",
+      "options": [
+        {
+          "key": "A",
+          "text": "Fund a rebuild on the newest model to recover adoption, and revisit the product decision once usage has had time to respond.",
+          "correct": false,
+          "explanation": "This spends before diagnosing: nothing yet shows that model capability is why supervisors are not using it. Anthropic's model guidance still begins with benchmark tests specific to the use case, so a rebuild without that evidence is a guess with a budget attached.",
+          "citation": { "title": "Choosing the right model", "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model" }
+        },
+        {
+          "key": "B",
+          "text": "Leave it running as-is; the spend is small and adoption may recover on its own.",
+          "correct": false,
+          "explanation": "An unowned production system is an accruing liability rather than a neutral one: it will eventually break on a model retirement or a dependency change with nobody assigned to fix it. Cost per accepted summary is already worse than the manual path, so the economics do not support waiting either.",
+          "citation": { "title": "Optimizing for cost and intelligence", "url": "https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence" }
+        },
+        {
+          "key": "C",
+          "text": "Cut the cost by moving it to the cheapest available model and leave the service unowned.",
+          "correct": false,
+          "explanation": "Comparing on per-token price rather than cost per successfully completed task is the trap Anthropic's cost guidance warns about, and a weaker model on an unmeasured system will likely worsen the accept rate. It also leaves the real problem, no owner, entirely untouched.",
+          "citation": { "title": "Optimizing for cost and intelligence", "url": "https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence" }
+        },
+        {
+          "key": "D",
+          "text": "Run the sunset decision against the criteria set at launch: either fund an owner, or retire it on a communicated date with a migration path.",
+          "correct": true,
+          "explanation": "Lifecycle management includes deciding to stop, and the honest input is the success criteria the programme agreed to at launch rather than sentiment about the effort spent. Naming a retirement date and a migration path for current users is what makes the decision a managed transition instead of an outage the yard discovers one morning.",
+          "citation": { "title": "Define success criteria and build evaluations", "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests" }
+        }
+      ]
+    }
+  ]
+}

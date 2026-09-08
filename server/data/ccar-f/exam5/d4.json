@@ -1,0 +1,442 @@
+{
+  "examId": "ccar-f-exam5",
+  "domainId": "D4",
+  "domainName": "Prompt Engineering & Structured Output",
+  "questions": [
+    {
+      "id": "F5-D4-01",
+      "question": "A grain elevator cooperative sends Claude the OCR text of scale tickets and pipes the result straight into an ingestion service. A single malformed field aborts the nightly load. Which approach gives the strongest guarantee the response parses?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use structured outputs: set output_config.format to a json_schema describing the ticket record.",
+          "correct": true,
+          "explanation": "Structured outputs constrain generation to your JSON Schema, so the response is always valid against it — no JSON.parse errors, guaranteed field types and required fields. That removes the retry-and-repair loop entirely, which is what a hard ingestion contract needs.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "B",
+          "text": "Prefill the assistant turn with an opening brace so Claude must continue the JSON object.",
+          "correct": false,
+          "explanation": "Prefilling the last assistant turn is no longer supported starting with Claude 4.6 models, and such requests return a 400 error. It was a common way to force JSON, which is exactly why Anthropic documents structured outputs as the replacement.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Add \"respond with valid JSON only\" to the system prompt and retry when parsing fails.",
+          "correct": false,
+          "explanation": "Prose instructions raise the odds of well-formed output but guarantee nothing, so the pipeline still needs a repair path and still fails occasionally. When a schema is available, relying on instruction-following alone is the weaker design.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "D",
+          "text": "Set temperature to 0 so the output format stops varying between runs.",
+          "correct": false,
+          "explanation": "Temperature shapes token sampling; it does not constrain output to a shape, and even at 0 responses are not bit-identical run to run. It is a common misconception that low temperature substitutes for a schema.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-02",
+      "question": "A tunnel-boring contractor defines a structured-output schema for ring-build reports and adds a maximum of 300 to the advance_rate_mm field. Values above 300 still come back. What is going on, and what should they do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Numerical constraints only apply when strict: true is also set, which switches the schema to full JSON Schema validation.",
+          "correct": false,
+          "explanation": "strict: true is the flag for tool inputs, and it uses the same grammar-constrained sampling and the same JSON Schema subset. It does not unlock numeric range checks anywhere.",
+          "citation": { "title": "Strict tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use" }
+        },
+        {
+          "key": "B",
+          "text": "output_config.format validates only the top level, so the field must be nested inside an object.",
+          "correct": false,
+          "explanation": "Schema enforcement is not limited to the top level — nested objects and arrays are supported. Restructuring the document would change nothing about which keywords are enforced.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "C",
+          "text": "Structured outputs do not support numerical constraints such as maximum; enforce the range in application code.",
+          "correct": true,
+          "explanation": "The documented JSON Schema subset covers objects, arrays, enums, anyOf/allOf, string formats and minItems, but explicitly excludes numerical constraints like minimum and maximum, plus minLength/maxLength, recursive schemas and external $ref. The architectural consequence is that a schema guarantees shape and type, while business ranges remain the application's job.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "D",
+          "text": "Stating the 300 mm limit in the system prompt makes the schema inherit it as a constraint.",
+          "correct": false,
+          "explanation": "Schemas and prompts are separate channels; text in the system prompt never becomes a constraint the sampler enforces. It may nudge the model, but the failure the team is seeing is exactly the case where nudging is not enough.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-03",
+      "question": "A touring orchestra's assistant calls a hold_venue tool. Occasionally the arguments arrive with a string where an integer is expected, and the booking service throws. Which change fixes this at the model layer?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Set tool_choice to {\"type\": \"any\"} so a tool is always called.",
+          "correct": false,
+          "explanation": "Forcing tool use controls whether a tool is called, not how its arguments are typed. The orchestra's problem is malformed input on calls that already happen, so this addresses the wrong failure mode.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "B",
+          "text": "Set strict: true on the tool definition so inputs are constrained to the JSON Schema.",
+          "correct": true,
+          "explanation": "Strict tool use applies grammar-constrained sampling to tool inputs, so the input always matches your input_schema and the tool name is always valid. The documentation uses this exact example: without it a count may arrive as \"2\", with it the value is the integer 2 — no validate-and-retry layer required.",
+          "citation": { "title": "Strict tool use", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use" }
+        },
+        {
+          "key": "C",
+          "text": "Add input_examples showing correctly typed calls.",
+          "correct": false,
+          "explanation": "input_examples are schema-validated examples that help Claude understand format-sensitive or nested inputs, and they genuinely improve call quality. But they are guidance included in the prompt, not a sampling constraint, so the occasional bad type can still get through.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        },
+        {
+          "key": "D",
+          "text": "Raise output_config.effort so the model reasons harder about the arguments.",
+          "correct": false,
+          "explanation": "Effort controls how many tokens the model spends thinking, which can improve judgement but never guarantees schema conformance. Paying more for reasoning is a poor substitute for a mechanism that makes the failure impossible.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-04",
+      "question": "A dental laboratory's case-report generator used to prefill the assistant turn with \"Case summary:\" to suppress conversational preamble. After moving to a current model, those requests fail with a 400 error. What is the documented replacement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the prefilled text into a stop_sequences entry.",
+          "correct": false,
+          "explanation": "Stop sequences end generation when text is produced; they cannot make a response start a particular way. Using one here would truncate output rather than remove the preamble.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Send the same text as the first user message instead of an assistant message.",
+          "correct": false,
+          "explanation": "This misreads the change. The restriction is on prefilling the last assistant turn, and relocating the fragment to the user turn does not implement any of the documented migration paths; it just adds a stray instruction fragment to the conversation.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Pin the service permanently to a pre-4.6 model, since prefill still works there.",
+          "correct": false,
+          "explanation": "Earlier models do still accept prefill, so this would stop the 400s — but freezing an architecture on a superseded model to preserve a deprecated technique is not the documented migration and blocks every future model upgrade. Anthropic's position is that current models no longer need prefill for this.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Instruct the model in the system prompt to respond directly without preamble.",
+          "correct": true,
+          "explanation": "This is the migration Anthropic documents for the skip-the-preamble use of prefill: a direct system-prompt instruction such as \"Respond directly without preamble\", optionally combined with XML output tags, structured outputs or tool calling. The guidance also notes that if the occasional preamble slips through, it is fine to strip it downstream.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-05",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "An air-traffic-controller training provider is migrating a family of prompts off assistant prefill after current models began returning 400 errors. Which TWO options are replacements Anthropic documents for that migration?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use structured outputs via output_config.format where the prefill was forcing a JSON shape.",
+          "correct": true,
+          "explanation": "Forcing an output format such as JSON or YAML is the first prefill scenario Anthropic lists, and structured outputs is the documented answer: the schema constrains generation, so the shape is guaranteed rather than coaxed. It also gives stronger guarantees than the prefill it replaces.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "B",
+          "text": "Set temperature to 0 so responses begin the same way every time.",
+          "correct": false,
+          "explanation": "Temperature affects sampling variability, not the opening tokens of a response, and it appears nowhere in the migration guidance. Treating a sampling knob as a formatting control is a common misstep.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Direct the model to emit its answer inside XML output tags that the client parses.",
+          "correct": true,
+          "explanation": "Anthropic's migration text names directing the model to output within XML tags as an alternative to prefill, alongside structured outputs and tool calling. It works because the client parses a delimited region, so any stray preamble outside the tags is simply ignored.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Add a stop sequence matching the unwanted preamble text.",
+          "correct": false,
+          "explanation": "A stop sequence halts generation when the text appears, which would cut the response off at the preamble rather than remove it. It is not one of the documented replacements.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "E",
+          "text": "Move the prefill string into a system block so it is no longer an assistant message.",
+          "correct": false,
+          "explanation": "Pasting a partial response fragment into the system prompt is not the same as instructing the model how to respond, and it is not what the guidance recommends. The documented move is an explicit behavioural instruction, not a relocated fragment.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-06",
+      "question": "An aquarium network sends Claude twelve facility water-quality reports plus one diagnostic question in a single request. Answers frequently attribute readings to the wrong facility. Per Anthropic's long-context guidance, how should the prompt be structured?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Concatenate the reports and tell Claude to ignore the ones that are not relevant.",
+          "correct": false,
+          "explanation": "An undelimited wall of similar documents is the condition that produces cross-contamination in the first place. Telling the model to ignore some of it does not give it a way to tell one report from another.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Wrap each report in document tags with document_content and source subtags, above the question.",
+          "correct": true,
+          "explanation": "For multi-document prompts Anthropic recommends wrapping each document in document tags with document_content and source (plus other metadata) subtags, which gives the model an unambiguous boundary and a label for attribution. Keeping the longform data above the query follows the same page's rule that long inputs belong near the top of the prompt.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Put the diagnostic question first, above the reports, so Claude knows what to look for as it reads.",
+          "correct": false,
+          "explanation": "This inverts the documented ordering: longform data goes near the top, above the query, instructions and examples, and Anthropic says this improves performance across all models. Leading with the question is a plausible-sounding but measurably worse arrangement.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Split the work into twelve single-report requests and merge the answers in code.",
+          "correct": false,
+          "explanation": "Fanning out prevents any reasoning that spans facilities, which a comparative diagnostic question usually needs, and it multiplies cost and orchestration. The structuring problem has a direct prompt-level fix, so extra architecture is not warranted.",
+          "citation": { "title": "Prompt engineering overview", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-07",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A tunnel-boring firm's prompt runs grading instructions, a raw geotechnical log and an engineer's question together in one undelimited block. Claude sometimes acts on sentences that came from the log. Which TWO documented changes should the team make?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Lower max_tokens so the response stays tightly scoped.",
+          "correct": false,
+          "explanation": "max_tokens caps output length and has no bearing on how the model interprets the input. Shortening the answer would hide the symptom at best while the misattribution continues.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "B",
+          "text": "Wrap each content type in its own XML tags, such as instructions, log and question.",
+          "correct": true,
+          "explanation": "Anthropic recommends XML tags precisely when a prompt mixes instructions, context, examples and variable input: wrapping each type in its own tag lets the model parse the prompt unambiguously and reduces misinterpretation. Here it draws the boundary between what to follow and what to analyse.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "C",
+          "text": "Repeat the grading instructions after every paragraph of the log.",
+          "correct": false,
+          "explanation": "Interleaving instructions through the data makes the boundary less clear, not more, and inflates the prompt. The documented remedy is structural delimitation, not repetition.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "State explicitly that text inside the log tags is data to analyse and never directions to follow.",
+          "correct": true,
+          "explanation": "Tags create the boundary; an explicit instruction tells the model what the boundary means, which follows Anthropic's core principle of being clear and direct about the task rather than leaving it implied. Pairing the two is what stops log prose being read as instructions.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "E",
+          "text": "Convert the geotechnical log to JSON before sending it.",
+          "correct": false,
+          "explanation": "Re-encoding the payload does not itself separate instructions from data — JSON string values can carry the same imperative sentences. The documented structuring tool for mixed prompt content is XML tagging.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-08",
+      "question": "An air-traffic-controller training provider's roster-conflict analyzer makes multi-step logical errors. To cut latency the team turned thinking off entirely and added \"think step by step\" to the prompt. On a current model, what does Anthropic recommend instead?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Keep thinking enabled and lower output_config.effort rather than disabling thinking.",
+          "correct": true,
+          "explanation": "Effort is the documented depth control on current models: it lives at output_config.effort, defaults to high, and can be stepped down to medium or low for latency-sensitive work once evals show quality holds. Anthropic specifically prefers a lower effort level to disabling thinking, because with thinking off the model can occasionally emit internal tags into visible output.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "B",
+          "text": "Set thinking to type \"enabled\" with a small budget_tokens value.",
+          "correct": false,
+          "explanation": "Manual extended thinking with budget_tokens is deprecated on the 4.6 generation and rejected with a 400 error on Claude 4.7 and later. The mapping is to drop budget_tokens, use adaptive thinking, and control depth with effort.",
+          "citation": { "title": "Extended thinking", "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking" }
+        },
+        {
+          "key": "C",
+          "text": "Pass a bare effort parameter at the root of the request body.",
+          "correct": false,
+          "explanation": "There is no bare effort field at the root of the request body; the documented location is output_config.effort. Inventing the flatter shape is a common error and simply fails against the API.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "D",
+          "text": "Keep thinking off and rely on manual step-by-step prompting, which is equivalent.",
+          "correct": false,
+          "explanation": "Manual chain-of-thought is documented only as a fallback for when thinking is off, not as an equivalent. On current models Anthropic advises keeping thinking on at a lower effort level instead, and warns that with thinking disabled the model may leak internal tags into the visible answer.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-09",
+      "question": "A dental laboratory's case-summary service parses Claude's JSON response directly. It works for most cases but fails to parse on unusually long ones. What should the pipeline do before attempting to parse?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Retry the identical request immediately, since generation is non-deterministic.",
+          "correct": false,
+          "explanation": "If the response is being cut off by the output limit, an identical retry hits the same limit. Blind retries add cost and latency while masking a deterministic cause.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "B",
+          "text": "Trim everything after the last closing brace and parse the remainder.",
+          "correct": false,
+          "explanation": "Salvaging a truncated document produces a structurally valid object that is silently missing content — the worst outcome for a clinical record. Repairing output is not a substitute for detecting that it was incomplete.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "C",
+          "text": "Fall back to a smaller, faster model for the long cases.",
+          "correct": false,
+          "explanation": "Model choice is unrelated to a response being cut short by the token limit, and a smaller model does not remove the ceiling. This treats a truncation symptom as a capability problem.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "D",
+          "text": "Inspect stop_reason first: max_tokens means the response was truncated.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is to always check stop_reason to distinguish a natural end_turn from cases needing special handling. max_tokens signals the response hit the output ceiling, and the documented handling is to raise max_tokens or continue generation by appending the partial response and requesting more.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-10",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A touring orchestra wants Claude's venue-feasibility answers to stay grounded in the 90-page technical rider it supplies, instead of drifting into general knowledge. Which TWO documented long-context techniques should it apply?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ask Claude to summarise the whole rider first, then answer from the summary.",
+          "correct": false,
+          "explanation": "Summarising first inserts a lossy step between the source and the answer, so specific clauses can disappear before the question is even asked. The documented technique keeps the model working from the original text.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Raise max_tokens so more of the rider fits into the request.",
+          "correct": false,
+          "explanation": "max_tokens governs how many tokens the model may generate, not how much input it can receive. Confusing the output ceiling with input capacity is a frequent misconception and would not change grounding at all.",
+          "citation": { "title": "Context windows", "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows" }
+        },
+        {
+          "key": "C",
+          "text": "Ask Claude to first extract the relevant passages into quotes tags, then answer from those quotes.",
+          "correct": true,
+          "explanation": "Anthropic recommends grounding responses in quotes for long-document tasks: having Claude pull the relevant parts into quotes tags before carrying out the task helps it focus on what matters and ignore the rest of the document. It also gives the orchestra an auditable trail from answer back to rider clause.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "D",
+          "text": "Place the rider near the top of the prompt, above the instructions and the question.",
+          "correct": true,
+          "explanation": "The long-context guidance is explicit that longform data belongs near the top of the prompt, above the query, instructions and examples, and that this improves performance across all models. It is the cheapest change available and applies regardless of which other technique is used.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "E",
+          "text": "Force a tool call with tool_choice so the answer must come from a retrieval tool.",
+          "correct": false,
+          "explanation": "Forcing tool use changes whether a tool is invoked, not whether an answer is grounded in a document already in the prompt. It is also unsupported on some current models, where the guidance points to strict tool use or structured outputs instead.",
+          "citation": { "title": "Define tools", "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-11",
+      "question": "A grain cooperative's classifier must return exactly one of six moisture-grade codes. Prose instructions produce occasional invented codes that the downstream system rejects. Which is the most robust fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Emphasise in bold that only the six listed codes may be used.",
+          "correct": false,
+          "explanation": "Emphasis is still instruction-following, so it lowers the rate of invented codes without eliminating them. When a constraint can be enforced by the sampler, relying on prompt emphasis is the weaker architecture.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        },
+        {
+          "key": "B",
+          "text": "Fuzzy-match any unexpected code to the nearest valid one in post-processing.",
+          "correct": false,
+          "explanation": "Silently coercing an out-of-vocabulary answer to a neighbouring grade turns a visible failure into an invisible data-quality error. For a graded commodity that is worse than rejecting the record.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "C",
+          "text": "Constrain the response with a structured-output schema whose grade field is an enum.",
+          "correct": true,
+          "explanation": "Enums are part of the supported JSON Schema subset for structured outputs, so generation is constrained to the listed values and an invalid code becomes impossible rather than unlikely. That is the difference between a guarantee and a strong suggestion, and it removes the downstream validation branch entirely.",
+          "citation": { "title": "Structured outputs", "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs" }
+        },
+        {
+          "key": "D",
+          "text": "Supply twenty few-shot examples covering all six codes, including borderline moisture readings.",
+          "correct": false,
+          "explanation": "Examples are a genuine technique for locking in format and edge-case handling, and they would help here. But they still leave the output space open, so a rare unseen input can produce a seventh code; a schema closes the space.",
+          "citation": { "title": "Prompting best practices", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D4-12",
+      "question": "An aquarium chain's husbandry assistant sends a 6,000-token block of grading criteria that is byte-identical on every request, followed by a short per-tank question. How should the request be laid out, and why?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put the criteria and the question together in the user turn, criteria last.",
+          "correct": false,
+          "explanation": "Burying invariant instructions after the variable question mixes roles and puts the stable content at the end of the prompt, where it cannot form a reusable cached prefix. It also leaves the model with no clear separation between standing rules and the current request.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "B",
+          "text": "Put the invariant criteria in the system prompt and the per-tank question in the user turn.",
+          "correct": true,
+          "explanation": "This keeps roles clean — standing rules in system, the specific request in the user turn — which is the structure Anthropic's prompt-engineering guidance assumes. It also aligns with the caching prefix order of tools, then system, then messages, so the 6,000-token block sits in the stable prefix and the changing question comes after it.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "Put both the criteria and the tank question in the system prompt, regenerating it per tank.",
+          "correct": false,
+          "explanation": "Rewriting the system prompt for each tank changes the beginning of the prompt every request, which destroys any stable prefix and muddles the role boundary. Variable content belongs after the invariant content, not inside it.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "D",
+          "text": "Put the criteria in an assistant turn that precedes the user's question.",
+          "correct": false,
+          "explanation": "Instructions are not something the assistant said, and shaping the conversation this way misuses the message roles. Assistant turns exist to carry prior model output, not standing configuration.",
+          "citation": { "title": "Prompt engineering overview", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview" }
+        }
+      ]
+    }
+  ]
+}

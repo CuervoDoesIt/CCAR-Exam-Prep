@@ -1,0 +1,549 @@
+{
+  "examId": "ccar-p-exam5",
+  "domainId": "D1",
+  "domainName": "Solution Design & Architecture",
+  "questions": [
+    {
+      "id": "P5-D1-01",
+      "question": "An offshore wind operator plans two Claude systems: a supplier-and-weather market scan that explores dozens of independent sources per query, and a refactor of the turbine control firmware repository where every change must stay consistent across files. Engineering proposes one multi-agent architecture for both. What should the architect recommend?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Use the multi-agent orchestrator for both workloads, since parallel subagents outperform a single agent on any sufficiently large task.",
+          "correct": false,
+          "explanation": "Anthropic's multi-agent research reports the opposite for coordination-heavy work: multi-agent systems underperform in domains that require shared context across agents or carry heavy dependencies between subtasks, and most coding tasks are exactly that shape. Size is not the criterion; the dependency structure is.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Use a single agent for both, because multi-agent architectures remain unproven outside research demos.",
+          "correct": false,
+          "explanation": "The pattern is not unproven: Anthropic's internal evaluation had its multi-agent research system outperform single-agent Claude Opus 4 by 90.2% on research tasks. The real constraint is economic and structural, not maturity, so blanket rejection gives up a documented win on the breadth-first workload.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Multi-agent for the breadth-first market scan; a single agent for the firmware refactor, where shared context matters more than parallelism.",
+          "correct": true,
+          "explanation": "Anthropic positions multi-agent architectures for valuable tasks involving heavy parallelization and information that exceeds one context window, which describes the market scan precisely. Coding changes need every worker to see the same evolving state, so they belong to a single agent. Splitting the two workloads matches each to the architecture its dependency structure demands.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Decide purely on measured token cost and adopt whichever architecture consumes fewer tokens per request.",
+          "correct": false,
+          "explanation": "Token cost is a constraint to weigh, not the decision rule. Anthropic reports multi-agent systems using roughly fifteen times the tokens of chat interactions and calls them economically viable only where the task's value justifies that spend, which means value per task, not raw token count, drives the choice.",
+          "citation": {
+            "title": "How we built our multi-agent research system",
+            "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-02",
+      "question": "A private aviation charter platform feeds Claude's output straight into a booking API that rejects any malformed payload. Today the team prefills the assistant turn with an opening brace and retries on parse failures. After moving to Claude Opus 5, every request returns a 400 error. What should the architect adopt?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Structured outputs: define the booking payload's JSON schema in the request's output format configuration.",
+          "correct": true,
+          "explanation": "Structured outputs constrain decoding so the response always matches the supplied schema, removing parse failures and retries entirely. Anthropic documents it as the direct migration path for prefills that were used to force a particular output format, which is exactly what the opening brace was doing.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Reinstate the prefill behind a beta header so the existing pipeline keeps working unchanged.",
+          "correct": false,
+          "explanation": "No such header exists. Prefilling the last assistant turn is unsupported starting with Claude 4.6 models, and those requests return a 400 error; there is no opt-in that restores the behavior on newer models.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Pin the booking service indefinitely to a pre-4.6 model so the prefill technique keeps working.",
+          "correct": false,
+          "explanation": "Earlier models genuinely do still accept prefills, so this would run — but it freezes a revenue system on a model with a published retirement date to preserve a superseded technique. Anthropic's guidance is to migrate the pattern, not the model pin, because structured outputs give a stronger guarantee than prefill ever did.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Keep parsing prose responses, retry more aggressively on parse failure, and tighten the system prompt's formatting instructions.",
+          "correct": false,
+          "explanation": "Retries cannot help when the request itself is rejected with a 400 before any output is produced. Even on a model that accepted the call, instruction-plus-retry is a probabilistic guarantee where constrained decoding offers a deterministic one for a hard downstream contract.",
+          "citation": {
+            "title": "Structured outputs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A seed-genetics company runs a trait-analysis agent for eight hours per crossing program. Partway through each run the conversation exhausts the context window and earlier findings are lost. Which TWO mechanisms does Anthropic document for carrying a long-running agent past its context limit?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Enable prompt caching on the conversation prefix so older turns move out of the context window.",
+          "correct": false,
+          "explanation": "Caching changes what you pay for repeated prefix tokens, not whether they occupy the window: cached prefixes still count toward the context limit. It is a cost and latency optimization, so it delays nothing about the overflow this agent hits.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Server-side compaction: once input tokens cross the configured trigger, the API summarizes the conversation into a compaction block and drops what preceded it.",
+          "correct": true,
+          "explanation": "Compaction is Anthropic's primary strategy for conversations that approach the context window limit. When input tokens reach the trigger threshold, the API generates a summary, emits it as a compaction block, and ignores all content blocks before that block on later requests, which is precisely what lets an eight-hour run continue. Note the summary replaces older content, so specific identifiers are not guaranteed to survive verbatim.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Raise max_tokens so each turn has more room to work with.",
+          "correct": false,
+          "explanation": "max_tokens caps the output of a turn inside the fixed context window; it does not enlarge that window. If input plus max_tokens exceeds the window, generation can instead stop early with a model_context_window_exceeded stop reason, which makes this actively counterproductive.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "D",
+          "text": "The memory tool: the agent writes findings to files under /memories that your application persists outside the context window and reads back on demand.",
+          "correct": true,
+          "explanation": "The memory tool lets Claude store and retrieve information across turns and sessions without keeping it all in context, supporting just-in-time retrieval of what a task actually needs. It operates client-side, so your application executes the file operations against storage you control, which is what makes the findings survive a context reset independently of any summarization.",
+          "citation": {
+            "title": "Memory tool",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Spread the run across several API keys so each key carries part of the conversation.",
+          "correct": false,
+          "explanation": "Keys do not partition a conversation: the Messages API is stateless, so whichever key you use must still carry the full history in the request. Rate limits are enforced at the organization level as well, so extra keys buy neither context nor throughput.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-04",
+      "question": "A bicycle manufacturer's nightly bill-of-materials review sends a variable number of supplier PDFs in a single request. Roughly 2% of runs fail with a 400 invalid_request_error reading 'prompt is too long', and the whole job aborts. What is the correct architectural fix?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Raise max_tokens on the nightly job so the oversized requests have room to finish the bill-of-materials summary.",
+          "correct": false,
+          "explanation": "max_tokens governs generated output, not input capacity, so it cannot rescue a request whose input alone already exceeds the window. Raising it can even hurt, since input plus max_tokens overflowing the window is what triggers early stops on models that support that behavior.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Enable prompt caching on the document blocks so the PDFs stop counting toward the context window.",
+          "correct": false,
+          "explanation": "Cached prompt prefixes still occupy the context window; caching changes what you pay for those tokens, not whether they count. Input tokens, cache-read tokens, and cache-creation tokens all count toward the window, so the overflow is unchanged.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Wrap the failing runs in exponential-backoff retries so transient overflows clear themselves.",
+          "correct": false,
+          "explanation": "This is a deterministic 400 validation error, not a transient 429, so every retry sends the same oversized payload and fails identically. Backoff is the right tool for rate limiting, where a retry-after header tells you when capacity returns; it does nothing for an input that structurally does not fit.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Size each request with the token counting API before sending, then split or compact the batch when it would overflow.",
+          "correct": true,
+          "explanation": "If the input alone exceeds the model's context window, the API returns a 400 on every model, so the only reliable fix is to know the size before you send. Anthropic documents the token counting API for exactly this pre-flight estimate, letting the pipeline shard or summarize the night's documents instead of aborting.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-05",
+      "question": "A port customs brokerage runs an orchestrator agent on Claude Opus 5 that fans classification work out to dozens of subagents per shipment. Accuracy is acceptable but token spend is triple forecast, and the final tariff-ruling step still needs deep reasoning. Which change fits Anthropic's guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Route every subagent call through the Message Batches API to capture the 50% discount.",
+          "correct": false,
+          "explanation": "The orchestrator blocks on subagent results within a single shipment's flow, and batches are processed asynchronously with no guaranteed response time. The discount is real but the delivery model is incompatible with an inline fan-out step.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Run the subagents at low effort while keeping the orchestrator and the tariff-ruling step at high.",
+          "correct": true,
+          "explanation": "Effort applies to every output token, including thinking and tool calls, and lower levels produce fewer and terser calls. Anthropic names subagents as a typical use case for low effort, precisely because the expensive judgement belongs to the orchestrating step. Tiering effort by role preserves the reasoning that matters while cutting the bulk of the spend.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Disable thinking on the orchestrator while running it at max effort, so it plans without spending reasoning tokens.",
+          "correct": false,
+          "explanation": "On Claude Opus 5 thinking cannot be disabled at xhigh or max effort: such requests return a 400 error. The two controls are related by design, since effort in adaptive mode governs how often and how deeply the model thinks, so this combination is not available.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Cut max_tokens on subagent calls until measured spend matches the forecast.",
+          "correct": false,
+          "explanation": "max_tokens is a hard ceiling on total output, not a steering signal, so squeezing it truncates subagents mid-task rather than making them concise. Effort is the documented control for how much a model spends on a response; max_tokens only decides where generation is cut off.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-06",
+      "question": "A clinical-trial recruitment agent makes hundreds of registry-lookup tool calls per site sweep. Stale result bodies now dominate its context, but auditors must still be able to see exactly which registry identifiers the agent queried. Which context mechanism preserves that audit trail?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Context editing with the clear_tool_uses strategy, leaving clear_tool_inputs at its default.",
+          "correct": true,
+          "explanation": "This strategy clears the oldest tool results once the conversation crosses a configured token trigger, replacing each result with placeholder text while keeping the most recent tool-use pairs. Because clear_tool_inputs defaults to false, Claude's original tool calls and their parameters stay visible, so the queried registry identifiers remain in the conversation for audit.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Server-side compaction, which summarizes the older part of the conversation into a compaction block.",
+          "correct": false,
+          "explanation": "Compaction replaces older content with a model-written summary, so a specific identifier is not guaranteed to appear in what survives. It is the right mechanism for continuing past a context limit, but it is the wrong choice when exact values must be reproducible for auditors.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A system-prompt instruction telling Claude to disregard tool results older than one hour.",
+          "correct": false,
+          "explanation": "Content the model is told to ignore still consumes tokens and attention budget, so the context pressure is untouched. Anthropic's guidance is that reclaiming context requires actually removing or summarizing content, not asking the model to look past it.",
+          "citation": {
+            "title": "Effective context engineering for AI agents",
+            "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Context editing with clear_tool_inputs set to true, so both calls and results are cleared and context shrinks fastest.",
+          "correct": false,
+          "explanation": "Opting into clearing tool inputs removes exactly the record the auditors need, since it strips the tool-call parameters along with the results. It is a legitimate setting when the inputs are large and disposable, but here it deletes the audit trail the requirement is built around.",
+          "citation": {
+            "title": "Context editing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-07",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A municipal water utility narrates SCADA anomalies to on-call engineers against a 1.5-second p95 latency target. Every request carries the same 30,000-token asset registry, and monthly spend is 40% over budget. Which TWO changes cut cost without breaching the latency target?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Place a cache_control breakpoint at the end of the asset registry so later requests read it from cache.",
+          "correct": true,
+          "explanation": "A large, stable prefix reused on every request is the canonical prompt-caching case: cache reads are billed at roughly a tenth of the base input price on most models, and reading a cached prefix reduces latency rather than adding to it. Continuous alert traffic also keeps refreshing the entry's TTL.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Move the narration workload to the Message Batches API for the 50% discount.",
+          "correct": false,
+          "explanation": "Batch processing is asynchronous and intended for work that does not need immediate responses, with most batches completing in under an hour. An on-call alert with a 1.5-second target cannot wait on that, so the discount is unreachable here.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Step effort down to medium once evals show narration quality holds at that level.",
+          "correct": true,
+          "explanation": "Effort applies to all tokens in the response, so lowering it reduces spend and response time together, which serves both constraints at once. Anthropic describes medium as the balanced step-down and advises testing your own use case before deploying a lower level, which the eval gate provides.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Raise max_tokens so each response can cover more anomalies and fewer calls are needed.",
+          "correct": false,
+          "explanation": "max_tokens sets a ceiling on output rather than driving how much the model writes, so raising it does not consolidate calls. Longer generations also take longer, which pushes against a p95 latency target instead of helping it.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Add a second model call that verifies each narration before it reaches the engineer.",
+          "correct": false,
+          "explanation": "A verification pass is a quality mechanism that adds a full extra round trip and its own token cost, moving both metrics in the wrong direction. Anthropic's guidance is to add multi-call complexity only where it demonstrably improves outcomes, and nothing here indicates a quality shortfall.",
+          "citation": {
+            "title": "Building effective AI agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-08",
+      "question": "A shipyard's dry-dock scheduling assistant starts returning HTTP 429 on every request on the 22nd of the month. Response bodies carry error.details.error_code of enforced_spend_limit_reached, and no retry-after header is present. What should the runbook do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Retry with exponential backoff, doubling the interval each attempt, until a retry-after header appears and capacity returns.",
+          "correct": false,
+          "explanation": "The spend-cap 429 is deliberately sent without a retry-after header, and retrying, including the SDKs' automatic retries, fails until access resumes. Backoff is correct for a throughput 429; here it burns the on-call window without any prospect of success.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Round-robin traffic across additional API keys provisioned in the same organization.",
+          "correct": false,
+          "explanation": "Both spend limits and rate limits are enforced at the organization level, so extra keys inside that organization share the same exhausted budget. Multiplying keys is a persistent misconception that adds operational surface without adding capacity.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Treat it as the monthly spend cap, not throughput: request a higher limit and fail over to the degraded path.",
+          "correct": true,
+          "explanation": "Once an organization reaches its tier's spend cap, API usage pauses until 00:00 UTC on the first of the next month unless a higher limit is granted sooner. The error_code field exists precisely so callers can tell this apart from a rate limit and stop retrying, which makes a documented degraded mode the only thing that keeps the scheduling desk running.",
+          "citation": {
+            "title": "Rate limits",
+            "url": "https://platform.claude.com/docs/en/api/rate-limits"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Divert traffic to the Message Batches API until the limit clears, since batches have separate limits.",
+          "correct": false,
+          "explanation": "The spend cap pauses the organization's API usage rather than one endpoint, and the batch rate limits it does have address throughput, not spend. An interactive scheduling assistant also cannot ride on asynchronous processing with no guaranteed response time.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-09",
+      "question": "A ski resort's end-of-season operations review must reason across a single 400,000-token incident log in one request. Latency is flexible, the analysis is thorough but not frontier-level, and finance wants the cheapest option that actually meets the requirement. Which model choice fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Claude Haiku 4.5, the cheapest tier at $1 input and $5 output per MTok.",
+          "correct": false,
+          "explanation": "Claude Haiku 4.5 has a 200K-token context window, so a 400,000-token log cannot fit in a single request and the API would return a 400 'prompt is too long'. Price is irrelevant when the capability constraint is not met.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Claude Fable 5.1 at $10 input and $50 output per MTok, for the deepest possible reasoning over the log.",
+          "correct": false,
+          "explanation": "Fable 5.1 does have a 1M-token window, but it is the slowest and most expensive tier, positioned for demanding reasoning and long-horizon agentic work. Nothing in a thorough-but-routine incident review justifies a fivefold input-price premium over a model with the same window.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Claude Opus 5 at $5 input and $25 output per MTok, the recommended default for most workloads.",
+          "correct": false,
+          "explanation": "Opus 5 fits the log comfortably with its 1M-token window and is a sound general default, but Sonnet 5 offers the same window at $2 input and $10 output. Under an explicit instruction to pick the cheapest option that meets the requirement, the Opus premium is unspent budget.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Claude Sonnet 5, which pairs a 1M-token context window with $2 input and $10 output per MTok.",
+          "correct": true,
+          "explanation": "Sonnet 5 is the least expensive current model whose context window accommodates a 400,000-token input, and Anthropic positions it as the best combination of speed and intelligence. Selecting on the binding constraint first, window size, then on price among the models that clear it, is the discipline this requirement calls for.",
+          "citation": {
+            "title": "Models overview",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/overview"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-10",
+      "question": "A dairy cooperative enables server-side compaction on a multi-hour milk-routing agent. Assuming the API now holds conversation state, engineers drop everything before the compaction block on their side and send only the newest user message. The agent loses context anyway. What is the correct integration?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Send a conversation identifier and let the API rehydrate the compacted history server-side.",
+          "correct": false,
+          "explanation": "There is no session replay in the Messages API: each request's input must contain the conversation the model should see. Compaction changes what that history looks like, not who is responsible for sending it.",
+          "citation": {
+            "title": "Context windows",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Append the entire response, compaction block included, and resend the conversation each turn.",
+          "correct": true,
+          "explanation": "Compaction requires you to pass the compaction block back with the rest of the response; on subsequent requests the API then automatically drops the content blocks that preceded it. The caller still owns the transcript, so appending the whole response is what makes the mechanism work while the effective context stays small.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Resend the full pre-compaction history alongside the compaction block, so nothing can be lost.",
+          "correct": false,
+          "explanation": "This gives up the entire benefit: the blocks before the compaction block are ignored on later requests anyway, so you would pay to transmit history the API discards. Compaction exists to shrink what the model must attend to, and re-sending everything reinstates the pressure that triggered it.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Lower the compaction trigger below 50,000 tokens so less history has to be carried between requests.",
+          "correct": false,
+          "explanation": "The trigger value must be at least 50,000 tokens, so this configuration is rejected outright. Even where it were accepted, the trigger only decides when summarization happens; it does not change the caller's obligation to send the conversation.",
+          "citation": {
+            "title": "Compaction",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/compaction"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D1-11",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A textile mill wants an agent to adjust loom schedules unattended overnight, with authority to change live production orders. Which TWO controls does Anthropic's guidance on agents call for before granting that autonomy?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run the agent at max effort so its reasoning is deep enough to avoid mistakes.",
+          "correct": false,
+          "explanation": "Effort governs how many tokens the model spends reasoning and responding; it is a quality and cost dial, not a safety boundary. No effort level makes a destructive schedule change reversible, so this substitutes a performance knob for the controls the risk actually requires.",
+          "citation": {
+            "title": "Effort",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/effort"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Give the agent every tool the mill's systems expose so it never stalls mid-run.",
+          "correct": false,
+          "explanation": "Maximal tool access widens the blast radius of any mistake, which is the opposite of bounding risk before granting autonomy. Anthropic pairs agent autonomy with extensive sandboxed testing and appropriate guardrails, not with unrestricted authority to prevent stalls.",
+          "citation": {
+            "title": "Building effective AI agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Extensive testing in sandboxed environments before the agent touches production orders.",
+          "correct": true,
+          "explanation": "Anthropic recommends extensive testing in sandboxed environments as a precondition for agent autonomy, because agents make decisions at each step and errors compound over a long horizon. A sandbox is where those failure modes surface at zero cost, which is the only place to discover them before an overnight run rewrites live orders.",
+          "citation": {
+            "title": "Building effective AI agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Route the overnight run through the Message Batches API so it is isolated from daytime traffic.",
+          "correct": false,
+          "explanation": "Batch processing is a cost and throughput mechanism for asynchronous work, not an isolation or authorization boundary. Submitting an agent's actions through it changes when they execute, not what they are permitted to do.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Guardrails with human approval checkpoints and explicit stopping conditions, such as a maximum number of iterations.",
+          "correct": true,
+          "explanation": "Anthropic pairs agent autonomy with appropriate guardrails, human checkpoints at meaningful decision points, and stopping conditions that end a run rather than letting it loop. This bounds the cost of a wrong turn independently of how well the agent was tested, which is why it stands on its own as a control.",
+          "citation": {
+            "title": "Building effective AI agents",
+            "url": "https://www.anthropic.com/engineering/building-effective-agents"
+          }
+        }
+      ]
+    }
+  ]
+}

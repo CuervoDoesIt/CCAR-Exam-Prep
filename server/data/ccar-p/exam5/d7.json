@@ -1,0 +1,99 @@
+{
+  "examId": "ccar-p-exam5",
+  "domainId": "D7",
+  "domainName": "Developer Productivity & Operational Enablement",
+  "questions": [
+    {
+      "id": "P5-D7-01",
+      "question": "A desalination plant wants six operations analysts, none of them software engineers, to use Claude Code against a repository of runbooks, SQL queries and shift reports. They repeat five specific workflows and keep re-explaining the plant's terminology every session. What setup gives them consistent results?",
+      "options": [
+        {
+          "key": "A",
+          "text": "One long project CLAUDE.md holding the terminology plus all five workflows written out step by step, checked into the repository.",
+          "correct": false,
+          "explanation": "CLAUDE.md loads into context at the start of every session, so multi-step procedures that matter only occasionally consume tokens constantly and dilute the rules that always apply. Anthropic advises keeping it under roughly 200 lines and moving multi-step procedures out, because long files reduce adherence.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "A short checked-in project CLAUDE.md for the always-relevant facts, plus one skill per workflow in .claude/skills/.",
+          "correct": true,
+          "explanation": "This splits the two kinds of knowledge the way Anthropic recommends: CLAUDE.md carries terminology and conventions every session needs, while skills carry repeatable procedures that load only when relevant or when invoked directly. Because both live in the repository, all six analysts get the same behaviour on clone, which is what makes results consistent rather than personal.",
+          "citation": {
+            "title": "Best practices for Claude Code",
+            "url": "https://code.claude.com/docs/en/best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "A shared document of prompt templates the analysts copy and paste at the start of each session.",
+          "correct": false,
+          "explanation": "Pasted templates are unversioned and drift the moment one analyst edits their copy, so the plant loses any guarantee that two people ran the same workflow. Anthropic's guidance is to check this configuration into the repository so it is shared, reviewable and improves over time.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Broaden the analysts' permission settings so approval prompts do not interrupt workflows they run daily.",
+          "correct": false,
+          "explanation": "Permission tuning addresses interruption, not consistency, so the analysts would still get different answers to the same question. Widening permissions for non-engineers on a plant repository also increases risk without touching the problem that was actually reported.",
+          "citation": {
+            "title": "Configure permissions",
+            "url": "https://code.claude.com/docs/en/permissions"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D7-02",
+      "question": "A 200-engineer monorepo has a single root CLAUDE.md that has grown to 900 lines as four teams appended their own conventions. Engineers report that Claude ignores rules that matter to their area, and reviewers see inconsistent output across services. What is the right restructuring?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Split it into four files at the repository root and pull them all into CLAUDE.md with @ imports.",
+          "correct": false,
+          "explanation": "Imported files are expanded and loaded at launch alongside the file that references them, so the same 900 lines still enter every session. Anthropic notes explicitly that splitting into imports helps organisation but does not reduce context.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Move the conventions into managed settings so the organisation enforces them centrally and teams cannot drift from them.",
+          "correct": false,
+          "explanation": "Managed settings enforce technical controls such as permission deny rules and sandboxing, not code-style and convention guidance. Anthropic draws that line directly: settings are for enforcement, and a managed CLAUDE.md is where behavioural guidance belongs, which would still put all four teams' text in every session.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep a short root CLAUDE.md and move each team's conventions into .claude/rules/ files with paths frontmatter.",
+          "correct": true,
+          "explanation": "Path-scoped rules load when Claude works with files matching their glob patterns, so each team's conventions arrive exactly when they are relevant and cost nothing the rest of the time. The rules directory is checked in, so the behaviour is shared and reviewable; teams bothered by unrelated ancestor files can also exclude them with claudeMdExcludes.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Ask engineers to paste the section relevant to their service at the start of each session.",
+          "correct": false,
+          "explanation": "Instructions given only in conversation do not survive compaction and depend on each engineer remembering to supply them, which is how inconsistency arose in the first place. Anthropic's guidance is to put durable instructions in files that load automatically rather than relying on per-session discipline.",
+          "citation": {
+            "title": "How Claude remembers your project",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -69,6 +69,7 @@ export default function Home({ onStart }) {
                 <h3>
                   {exam.title}
                   {exam.format === 'case' && <span className="hard-badge">HARD</span>}
+                  {exam.multiCount > 0 && <span className="multi-badge">SELECT TWO</span>}
                 </h3>
                 <ul className="exam-facts">
                   <li>{exam.questionCount} questions</li>
@@ -79,7 +80,15 @@ export default function Home({ onStart }) {
                       ? `${exam.caseCount || '—'} client case studies`
                       : `${exam.domains.length || '—'} sections`}
                   </li>
+                  {exam.multiCount > 0 && (
+                    <li>{exam.multiCount} multiple-response items</li>
+                  )}
                 </ul>
+                {exam.multiCount > 0 && exam.format !== 'case' && (
+                  <p className="muted card-note">
+                    Includes "Which TWO…" questions, scored all-or-nothing as on the real exam.
+                  </p>
+                )}
                 {exam.format === 'case' && (
                   <p className="muted card-note">
                     Cross-domain questions on a shared client scenario, each with a strong answer and a

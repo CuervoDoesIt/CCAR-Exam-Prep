@@ -11,6 +11,12 @@ const EXPECTED = {
   "ccar-f/exam2": { D1: 14, D2: 13, D3: 11, D4: 12, D5: 10 },
   "ccar-p/exam1": { D1: 11, D2: 11, D3: 17, D4: 11, D5: 7, D6: 4, D7: 2 },
   "ccar-p/exam2": { D1: 11, D2: 11, D3: 17, D4: 11, D5: 7, D6: 4, D7: 2 },
+  // Exam 5 is the multiple-response set: same blueprint and length as exams 1
+  // and 2, but roughly a quarter of its items are "Which TWO..." questions.
+  // Converting items in exams 1 and 2 was rejected because the user is studying
+  // them; a separate set adds the format without disturbing those banks.
+  "ccar-f/exam5": { D1: 14, D2: 13, D3: 11, D4: 12, D5: 10 },
+  "ccar-p/exam5": { D1: 11, D2: 11, D3: 17, D4: 11, D5: 7, D6: 4, D7: 2 },
   // CCDV-F blueprint (Exam Guide v1.0, July 2026): 53 items across 8 domains.
   "ccdv-f/exam1": { D1: 8, D2: 17, D3: 2, D4: 1, D5: 9, D6: 6, D7: 4, D8: 6 },
   "ccdv-f/exam2": { D1: 8, D2: 17, D3: 2, D4: 1, D5: 9, D6: 6, D7: 4, D8: 6 },
@@ -134,7 +140,16 @@ function checkLetterDistribution(file, letterDist, total) {
 const MULTI_EXPECTED = {
   "ccar-f/exam1": 0, "ccar-f/exam2": 0,
   "ccar-p/exam1": 0, "ccar-p/exam2": 0,
+  "ccar-f/exam5": 15, "ccar-p/exam5": 16,
   "ccdv-f/exam1": 8, "ccdv-f/exam2": 8,
+};
+
+// Per-domain multiple-response targets for the exam 5 sets. Spreading them
+// roughly in proportion to domain size stops the format from clustering in one
+// section, which would make that section's all-or-nothing scoring swingy.
+const MULTI_BY_DOMAIN = {
+  "ccar-f/exam5": { D1: 4, D2: 3, D3: 3, D4: 3, D5: 2 },
+  "ccar-p/exam5": { D1: 3, D2: 3, D3: 4, D4: 3, D5: 2, D6: 1, D7: 0 },
 };
 
 // ---- domain-organised exams -------------------------------------------------
@@ -155,17 +170,23 @@ for (const [rel, domains] of Object.entries(EXPECTED)) {
     const seen = new Set();
     const letterDist = { A: 0, B: 0, C: 0, D: 0 };
     let singles = 0;
+    let domainMulti = 0;
     for (const q of data.questions) {
       const k = checkQuestion(file, q, seen);
       if (q.type !== "multi") singles++;
       else {
         multiCount++;
+        domainMulti++;
         const pair = (q.options ?? []).filter((o) => o.correct === true).map((o) => o.key).sort().join("");
         multiPairs[pair] = (multiPairs[pair] ?? 0) + 1;
       }
       if (k) letterDist[k]++;
     }
     checkLetterDistribution(file, letterDist, singles);
+    const wantDomainMulti = MULTI_BY_DOMAIN[rel]?.[domainId];
+    if (wantDomainMulti !== undefined && domainMulti !== wantDomainMulti) {
+      err(`${file}: ${domainMulti} multiple-response items, expected ${wantDomainMulti}`);
+    }
   }
   const wantMulti = MULTI_EXPECTED[rel];
   if (wantMulti !== undefined && multiCount !== wantMulti) {

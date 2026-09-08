@@ -18,6 +18,8 @@ const EXAM_META = {
   "ccar-p-exam2": { cert: "CCAR-P", title: "CCAR-P Mock Exam 2", dir: ["ccar-p", "exam2"], questionCount: 63, timeLimitMinutes: 120 },
   "ccar-p-exam3": { cert: "CCAR-P", title: "CCAR-P Mock Exam 3 — Case Studies", dir: ["ccar-p", "exam3"], questionCount: 63, timeLimitMinutes: 120, format: "case" },
   "ccar-p-exam4": { cert: "CCAR-P", title: "CCAR-P Mock Exam 4 — Case Studies", dir: ["ccar-p", "exam4"], questionCount: 63, timeLimitMinutes: 120, format: "case" },
+  "ccar-f-exam5": { cert: "CCAR-F", title: "CCAR-F Mock Exam 5 — Multiple Response", dir: ["ccar-f", "exam5"], questionCount: 60, timeLimitMinutes: 120 },
+  "ccar-p-exam5": { cert: "CCAR-P", title: "CCAR-P Mock Exam 5 — Multiple Response", dir: ["ccar-p", "exam5"], questionCount: 63, timeLimitMinutes: 120 },
   "ccdv-f-exam1": { cert: "CCDV-F", title: "CCDV-F Mock Exam 1", dir: ["ccdv-f", "exam1"], questionCount: 53, timeLimitMinutes: 120 },
   "ccdv-f-exam2": { cert: "CCDV-F", title: "CCDV-F Mock Exam 2", dir: ["ccdv-f", "exam2"], questionCount: 53, timeLimitMinutes: 120 },
   "ccdv-f-exam3": { cert: "CCDV-F", title: "CCDV-F Mock Exam 3 — Case Studies", dir: ["ccdv-f", "exam3"], questionCount: 53, timeLimitMinutes: 120, format: "case" },
@@ -252,6 +254,10 @@ app.get("/api/exams", (_req, res) => {
       loadedQuestions: exam ? exam.questions.length : 0,
       domains: exam ? exam.domains : [],
       caseCount: exam?.cases ? exam.cases.length : 0,
+      // Surfaced so the home screen can tell the user an exam contains
+      // "Which TWO..." items before they start it; derived from the bank
+      // rather than declared in meta so it cannot drift from the content.
+      multiCount: exam ? exam.questions.filter((q) => q.type === "multi").length : 0,
     };
   });
   res.json(list);

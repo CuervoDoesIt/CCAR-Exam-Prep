@@ -1,0 +1,549 @@
+{
+  "examId": "ccar-p-exam5",
+  "domainId": "D4",
+  "domainName": "Evaluation, Testing & Optimization",
+  "questions": [
+    {
+      "id": "P5-D4-01",
+      "question": "A geothermal drilling contractor is building an assistant that sorts daily driller logs into twelve fault categories that feed the maintenance schedule. Two senior drillers disagree on roughly 15% of labels. Before any prompt tuning, the team needs a golden dataset it can defend. What should it do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Have one senior driller label the whole set alone, so the labels are at least internally consistent.",
+          "correct": false,
+          "explanation": "Single-annotator labels are consistent but encode one expert's bias, and they hide the fact that 15% of cases are genuinely ambiguous. Anthropic's evaluation guidance is to make criteria specific and measurable, which means surfacing that ambiguity in a rubric rather than papering over it.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Skip human labelling and have a Claude judge produce the reference labels for the whole corpus.",
+          "correct": false,
+          "explanation": "An unvalidated model grader cannot serve as ground truth; you would be measuring the system against its own assumptions. Model-based grading is useful, but it has to be checked against human labels before it can be trusted as a reference.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Both drillers independently label a traffic-weighted sample including rare faults, and disagreements are adjudicated into a rubric.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is that evals should mirror the real-world task distribution and include edge cases, and that criteria must be specific enough to be measured. Independent labelling plus adjudication turns the 15% disagreement into an explicit rubric rather than silent noise, so later score movements mean something.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Label only the logs the current prototype gets wrong, so the eval set concentrates on known weaknesses and stays small enough to re-run often.",
+          "correct": false,
+          "explanation": "A corpus built only from current failures cannot detect regressions on the cases the system handles correctly today, which is the main job of a golden dataset. It also skews the distribution away from real traffic, so the score stops predicting production behaviour.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-02",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A desalination plant's operations assistant sends a 12,000-token block of standing procedures on every request, preceded by a per-request timestamp and operator id at the very top of the system prompt. Gaps between requests are usually 15 to 30 minutes. Cache hit rate is near zero and finance wants input spend cut. Which TWO changes improve the caching economics?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the timestamp and operator id below the standing procedures, so the cached prefix is identical across requests.",
+          "correct": true,
+          "explanation": "Prompt caching matches an exact prefix built in the order tools, system, then messages. Anything that varies at the front invalidates everything after it, so putting per-request values first guarantees a miss on every call. Relocating them behind the static block is what makes a hit possible at all.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Raise max_tokens so more of the generated response is retained in the cache.",
+          "correct": false,
+          "explanation": "Prompt caching applies to the input prefix only; generated output tokens are never cached. Raising max_tokens changes nothing about cache behaviour and can increase output spend, which is billed at the higher output rate.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Place the cache_control breakpoint on the final user message, which carries the operator's question.",
+          "correct": false,
+          "explanation": "A breakpoint should sit on the last block whose content is identical across requests. Marking content that changes every call is the documented common mistake: the write happens but no later request ever matches it, so you pay the write premium and never collect a read.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Use the one-hour cache TTL, since the 15 to 30 minute gaps exceed the default five-minute lifetime.",
+          "correct": true,
+          "explanation": "The default cache lives five minutes, so entries expire between this plant's requests and every call pays a fresh write. The one-hour TTL costs 2x base input on the write and 0.1x on reads, so it repays after two reads, which this traffic pattern comfortably reaches.",
+          "citation": {
+            "title": "Prompt caching",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Move the workload to the Batch API to collect the caching discount.",
+          "correct": false,
+          "explanation": "The Batch API is a separate 50% discount for asynchronous work that does not need an immediate response; it is not a caching mechanism. An interactive operations assistant cannot wait on batch turnaround, so this trades a solvable caching problem for an unusable latency profile.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-03",
+      "question": "A subtitling vendor grades machine-drafted Spanish subtitles for register and idiom fidelity using a Claude judge prompt on a 1-5 scale. Those scores will gate releases to a broadcaster. Before the judge becomes a release gate, what should the team do?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run the judge three times per subtitle and average the scores to remove noise.",
+          "correct": false,
+          "explanation": "Repeating a grader reduces variance but does nothing about bias: a judge that systematically misreads register will do so consistently. Averaging makes an unvalidated measurement look more precise without making it more correct.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Score a held-out set already rated by human linguists, measure agreement, and re-check whenever the rubric changes.",
+          "correct": true,
+          "explanation": "A model grader is itself a measurement instrument and needs calibrating against the human judgement it stands in for. Establishing agreement on a held-out human-labelled set tells you the error the gate will introduce, and re-checking after rubric edits catches drift before it silently changes release decisions.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Use the same model and prompt that drafts the subtitles as the judge, so quality standards stay consistent.",
+          "correct": false,
+          "explanation": "Grading a generation with the same call that produced it invites the model to ratify its own choices. Anthropic's evaluation guidance is to grade with a separate call, and typically a separate model, so the grader is not defending the output it wrote.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Replace the 1-5 scale with a free-text critique that release managers read before shipping.",
+          "correct": false,
+          "explanation": "Free-text critiques cannot be aggregated, thresholded, or regression-tracked, so they cannot function as a gate. Anthropic's guidance favours criteria that are measurable and automatable so that thousands of cases can be graded per run.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-04",
+      "question": "An archaeological survey firm's report-drafting assistant has had four production defects in six weeks. Each was fixed with a prompt tweak and verified by hand by the engineer who fixed it. Two of the four later recurred after unrelated prompt edits. What practice would have prevented the recurrences?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the workload to a more capable model, which is less likely to produce the defects in the first place.",
+          "correct": false,
+          "explanation": "A stronger model may reduce some failures but gives no guarantee that a specific past defect stays fixed. Anthropic's model-selection guidance still puts a benchmark test set first, because without one you cannot tell whether a change helped or hurt.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Add a weekly manual spot-check where a senior surveyor reviews twenty sampled reports against the defect list.",
+          "correct": false,
+          "explanation": "A twenty-case weekly sample is very unlikely to contain any specific past defect, so recurrences surface only by luck and only after clients have seen them. Anthropic's guidance prioritises many automatically graded cases over occasional hand review.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Freeze the prompt and require a director's sign-off on every future change.",
+          "correct": false,
+          "explanation": "Approval gates slow changes down but detect nothing; a director reading a diff cannot tell that it reintroduces a defect from five weeks ago. The missing capability is an automated check, not another human in the approval chain.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Add every confirmed defect as an automatically graded case in a regression suite that gates prompt changes.",
+          "correct": true,
+          "explanation": "A regression corpus is what converts a one-time fix into a standing guarantee. Anthropic's guidance is to prefer volume with automated grading, and adding each real failure keeps the suite anchored to the true input distribution rather than to cases someone imagined.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-05",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A credit union runs an 800-case graded corpus against its loan-summary assistant before every prompt change. The risk committee asks what else is required once a change is live in production. Which TWO belong in the online evaluation layer rather than the offline suite?",
+      "options": [
+        {
+          "key": "A",
+          "text": "The 800-case golden corpus, re-run automatically on every pull request.",
+          "correct": false,
+          "explanation": "This is the offline layer itself: a fixed corpus graded before merge. It is essential, but by construction it only ever contains inputs someone already collected, which is exactly the blind spot the online layer exists to cover.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Sampled human review of live outputs, scored against the same rubric the corpus uses.",
+          "correct": true,
+          "explanation": "Sampling real production traffic is the only way to grade inputs the corpus never contained, such as new loan products or unusual member phrasing. Using the same rubric keeps the online and offline numbers comparable, so a divergence between them is itself a signal that the corpus has gone stale.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Unit tests asserting that each tool's JSON schema matches the lending system's contract.",
+          "correct": false,
+          "explanation": "Schema tests are ordinary offline software tests; they run in CI and say nothing about output quality in production. They belong in the build, alongside the tool definitions they validate.",
+          "citation": {
+            "title": "Define tools",
+            "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"
+          }
+        },
+        {
+          "key": "D",
+          "text": "A pre-merge run of the full corpus at two different effort levels to compare cost and quality.",
+          "correct": false,
+          "explanation": "Sweeping effort levels over a fixed corpus is valuable optimisation work, but it happens before release against static data, so it is still offline evaluation. It cannot reveal how the change behaves on live traffic.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        },
+        {
+          "key": "E",
+          "text": "A monitored business outcome, such as the rate at which underwriters rewrite the generated summary, tracked by release cohort.",
+          "correct": true,
+          "explanation": "Rewrite rate is measured on real users doing real work, so it captures usefulness that a rubric score can miss entirely. Tracking it by cohort ties any movement to a specific release, which turns production into a continuous experiment rather than a hope.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-06",
+      "question": "A prosthetics clinic is migrating its fitting-note extractor off a retired model snapshot. The old implementation forced JSON by prefilling the assistant turn with an opening brace. On the current model those same requests now return 400 errors. What is the correct replacement?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Request structured outputs by setting output_config.format to the extractor's JSON schema.",
+          "correct": true,
+          "explanation": "Prefilling the final assistant turn is unsupported starting with Claude 4.6 models and returns a 400, and Anthropic documents structured outputs as the replacement for prefills used to force a format. Re-run the eval suite on the new model afterwards to prove the migration preserved extraction accuracy rather than just stopping the errors.",
+          "citation": {
+            "title": "Migrating to Claude Opus 5",
+            "url": "https://platform.claude.com/docs/en/models/opus-5/migration-guide"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Move the opening brace into the system prompt as literal text so the model continues from it.",
+          "correct": false,
+          "explanation": "Text in a system prompt is an instruction, not a prefilled assistant turn, so it does not constrain the response shape the way the old prefill did. This misreads the failure and leaves the extractor parsing unvalidated free text.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep the prefill and pin an older model that still accepts it, deferring the change indefinitely.",
+          "correct": false,
+          "explanation": "Older models do still accept prefills, so this appears to work, but every model eventually gets a retirement date and requests to retired models fail outright. Anthropic gives at least 60 days' notice for publicly released models; deferring converts a planned migration into a deadline-driven one.",
+          "citation": {
+            "title": "Model deprecations",
+            "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Set a stop sequence on the closing brace so generation ends exactly at the end of the object.",
+          "correct": false,
+          "explanation": "A stop sequence controls where generation halts, not whether the emitted text is schema-valid JSON, and a nested object would end the response early. It addresses truncation, not the structural guarantee the extractor needs.",
+          "citation": {
+            "title": "Prompting best practices",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-07",
+      "question": "A beekeeping cooperative's hive-inspection assistant gets a new prompt scoring 94% against 89% on the offline suite. In a two-week randomised online test the new prompt produces 20% more follow-up questions from beekeepers and no change in inspections completed. What should the architect conclude?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ship the new prompt; the offline suite is the team's agreed ground truth and it improved by five points on the same rubric.",
+          "correct": false,
+          "explanation": "An offline score is only as good as the rubric behind it, and this rubric evidently rewards something beekeepers do not need. Treating a proxy metric as ground truth when a real outcome contradicts it is how teams ship measurable regressions.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Discard the online result, since a two-week window is too short for behavioural metrics to be meaningful.",
+          "correct": false,
+          "explanation": "Duration alone does not invalidate a randomised comparison, and a 20% shift in follow-up questions is a substantial effect, not noise at the margin. Dismissing an inconvenient result without a stated power analysis is rationalisation rather than evaluation.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Keep the current prompt, and encode the observed failure mode in the rubric and corpus before re-testing.",
+          "correct": true,
+          "explanation": "When offline and online measurements disagree, the online outcome is closer to the thing the business actually wants, and the gap is information about the rubric. Anthropic's guidance is to make success criteria relevant to the application's real purpose, so the fix is to improve the criteria rather than to override the evidence.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Combine the offline and online scores into a single weighted metric and ship if the combined number rises.",
+          "correct": false,
+          "explanation": "Averaging a rubric score with a behavioural rate produces a number with no interpretation, and the weights would be chosen to get the desired answer. Multidimensional criteria should be reported and traded off explicitly, not collapsed into one figure.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-08",
+      "question": "A ferry operator's contract with the port authority states that its disruption-notice drafting tool must begin displaying text within one second during an incident, while allowing a complete draft to take longer. Engineering reports a median end-to-end latency of 4.2 seconds and asks what to instrument.",
+      "options": [
+        {
+          "key": "A",
+          "text": "Average end-to-end latency per request, reported hourly.",
+          "correct": false,
+          "explanation": "An average of total generation time answers neither half of the clause: it hides the tail, and the clause explicitly permits a long full draft. Averages also mask exactly the incident-time spikes the port authority cares about.",
+          "citation": {
+            "title": "Reducing latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        },
+        {
+          "key": "B",
+          "text": "The p99 of total generation time, since the contract is about worst-case behaviour.",
+          "correct": false,
+          "explanation": "Tail reporting is the right instinct, but applied to the wrong quantity: total generation time is the thing the contract deliberately leaves unbounded. Optimising it would spend effort on a metric no one committed to.",
+          "citation": {
+            "title": "Reducing latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Output tokens per second averaged across the fleet.",
+          "correct": false,
+          "explanation": "Throughput describes how fast text accumulates once it starts, not when it starts. A system could hold excellent tokens per second and still breach a first-visible-text commitment because of time spent before the first token.",
+          "citation": {
+            "title": "Reducing latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Time to first token on streamed responses, reported at the tail rather than the mean.",
+          "correct": true,
+          "explanation": "Time to first token is the documented metric for when a response starts appearing, and it is the one that matters when you stream. Reporting it at the tail is what evidences a contractual ceiling, since the clause is a promise about bad cases, not about the typical one.",
+          "citation": {
+            "title": "Reducing latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-09",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A seed-testing laboratory must cut the monthly Claude bill for its certificate-drafting pipeline by 40% without losing ground on its eval suite. Certificates are generated in an overnight run and read the next morning. Which TWO changes are sound?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Lower temperature to 0.1 so responses are shorter and therefore cheaper.",
+          "correct": false,
+          "explanation": "Temperature is deprecated on Claude Opus 4.7 and later and returns a 400 error when set to a non-default value, so this is not even available on current models. It was never a cost control either; Anthropic's guidance is to steer behaviour through prompting instead.",
+          "citation": {
+            "title": "Model deprecations",
+            "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Halve max_tokens so every certificate costs less to generate.",
+          "correct": false,
+          "explanation": "max_tokens is a hard cut-off, so responses stop mid-sentence rather than getting more concise, and truncated certificates need rework or a retry that costs more than was saved. Anthropic describes it as a blunt technique best suited to short answers.",
+          "citation": {
+            "title": "Reducing latency",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Submit the overnight run through the Batch API.",
+          "correct": true,
+          "explanation": "The Batch API discounts both input and output tokens by 50% for work that does not need an immediate response, and most batches finish in under an hour. An overnight job read the next morning is precisely the workload shape it is designed for, so the saving costs nothing in quality.",
+          "citation": {
+            "title": "Batch processing",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/batch-processing"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Turn on fast mode so the overnight run finishes earlier and consumes less compute.",
+          "correct": false,
+          "explanation": "Fast mode buys higher output speed at premium pricing, so it raises the bill rather than lowering it, and speed is worthless for a job nobody is waiting on. It is also not available with the Batch API, so it would forfeit the discount that does help here.",
+          "citation": {
+            "title": "Pricing",
+            "url": "https://platform.claude.com/docs/en/about-claude/pricing"
+          }
+        },
+        {
+          "key": "E",
+          "text": "Route routine certificate types to a smaller model and keep the frontier model for exceptions, adopting the split only if the eval suite holds.",
+          "correct": true,
+          "explanation": "Anthropic documents multi-model strategies in which most tokens are billed at the lower rate and only hard cases reach the frontier model. Gating adoption on the eval suite is what keeps this a cost optimisation rather than a quality cut made in the dark.",
+          "citation": {
+            "title": "Optimizing for cost and intelligence",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-10",
+      "question": "A rail freight yard shipped three changes in one release: a new retrieval index, a rewritten system prompt, and a model upgrade. Eval scores for its wagon-defect summariser fell six points and nobody can say which change caused it. What should the team institute?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Roll all three back and freeze changes for a quarter while confidence is rebuilt.",
+          "correct": false,
+          "explanation": "Rolling back restores the old score but leaves the team no wiser, and a freeze simply defers the same problem to a larger batch of changes later. The deficiency is attribution, not change velocity.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Evaluate one variable at a time against a pinned baseline, recording model, prompt and retrieval versions.",
+          "correct": true,
+          "explanation": "An eval score is only interpretable relative to a known configuration, so each run has to carry the identity of what produced it. Isolating one variable per run is what makes a delta attributable, and it is also what lets you decide whether the model upgrade is worth keeping despite the prompt regression.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Grow the eval set to 5,000 cases so random noise stops obscuring the cause.",
+          "correct": false,
+          "explanation": "More cases tighten the confidence interval on the six-point drop but say nothing about which of three simultaneous changes produced it. Volume is valuable for detection; it is not a substitute for controlled comparison.",
+          "citation": {
+            "title": "Define success criteria and build evaluations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Ask a Claude judge to read the diff and the failing outputs and report which of the three changes caused the drop.",
+          "correct": false,
+          "explanation": "A model's narrative about a causal question it cannot observe is a hypothesis, not evidence, and it will sound confident either way. Causal attribution comes from re-running the eval with one thing changed.",
+          "citation": {
+            "title": "Reduce hallucinations",
+            "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations"
+          }
+        }
+      ]
+    },
+    {
+      "id": "P5-D4-11",
+      "question": "An offshore wind operator is choosing between two models for work-order triage. The cheaper model costs a fifth as much per token but in the pilot needed 2.4 attempts on average, and longer prompts, to pass the eval's acceptance check. The costlier model passed first time. Finance is comparing published per-token prices. How should the architect frame it?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Compare total cost per successfully completed task, counting retries and the rework failures cause.",
+          "correct": true,
+          "explanation": "Anthropic's cost guidance is explicit that models should be compared on cost per task rather than cost per token, because retries, longer prompts and downstream rework all land on the same budget. At 2.4 attempts the cheaper model's effective multiple is not the sticker fifth, and only the per-task figure exposes that.",
+          "citation": {
+            "title": "Optimizing for cost and intelligence",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence"
+          }
+        },
+        {
+          "key": "B",
+          "text": "Pick the cheapest per-token model and treat retries as fixed operational overhead outside the model comparison.",
+          "correct": false,
+          "explanation": "Excluding retries from the comparison defines away the very cost the pilot measured, and that overhead scales with volume rather than staying fixed. It also hides the latency and rework the operator's engineers absorb.",
+          "citation": {
+            "title": "Pricing",
+            "url": "https://platform.claude.com/docs/en/about-claude/pricing"
+          }
+        },
+        {
+          "key": "C",
+          "text": "Always choose the most capable available model, since triage errors on turbines are expensive.",
+          "correct": false,
+          "explanation": "Consequence severity is a real input, but a blanket rule skips the measurement that would show where the cheaper model is adequate. Anthropic's guidance is to test both against your own criteria and weigh performance against cost, not to default in either direction.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        },
+        {
+          "key": "D",
+          "text": "Decide on published benchmark scores, which are comparable across vendors in a way internal pilots are not.",
+          "correct": false,
+          "explanation": "General benchmarks do not measure this operator's work-order distribution, its prompts, or its acceptance check. Anthropic's guidance is that an evaluation set specific to your use case is the most important step in a model decision.",
+          "citation": {
+            "title": "Choosing the right model",
+            "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+          }
+        }
+      ]
+    }
+  ]
+}

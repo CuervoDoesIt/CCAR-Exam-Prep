@@ -1,0 +1,408 @@
+{
+  "examId": "ccar-f-exam5",
+  "domainId": "D3",
+  "domainName": "Claude Code Configuration & Workflows",
+  "questions": [
+    {
+      "id": "F5-D3-01",
+      "question": "A dental laboratory group keeps a 12-step crown-milling release procedure inside its project CLAUDE.md. The procedure runs once a month, the file has grown past 400 lines, and Claude increasingly ignores the everyday build rules. Which change best matches Anthropic's guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Move the procedure into a separate file and pull it into CLAUDE.md with an @path import.",
+          "correct": false,
+          "explanation": "Imports help with organisation but not with context cost: imported files are expanded and loaded at launch alongside the CLAUDE.md that references them. The startup context stays the same size, so adherence to the everyday rules does not improve.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Package the procedure as a skill so its full content loads only when it is invoked or judged relevant.",
+          "correct": true,
+          "explanation": "Anthropic's guidance is that a multi-step procedure that only matters occasionally belongs in a skill rather than CLAUDE.md. Only skill descriptions sit in context permanently; the full body loads when you invoke the skill or when Claude judges it relevant to the prompt. That keeps the always-on memory file short, which is what drives reliable adherence.",
+          "citation": { "title": "Claude Code — Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
+        },
+        {
+          "key": "C",
+          "text": "Move the procedure into .claude/rules/release.md with no frontmatter.",
+          "correct": false,
+          "explanation": "A rule file without a paths field is loaded unconditionally at launch, with the same priority as .claude/CLAUDE.md. The instructions would simply move from one always-loaded file to another, leaving the context bloat untouched.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "D",
+          "text": "Add a PostToolUse hook that echoes the procedure into the transcript after every file edit.",
+          "correct": false,
+          "explanation": "Hooks run shell commands at fixed lifecycle events; they are for actions that must happen at a specific moment, not for on-demand reference material. Echoing a long procedure after every edit would consume more context, not less, and would fire at times the procedure is irrelevant.",
+          "citation": { "title": "Claude Code — Hooks reference", "url": "https://code.claude.com/docs/en/hooks" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-02",
+      "question": "A tunnel-boring contractor's monorepo holds guidance-system conventions that only matter when Claude touches files under src/guidance/. Loading them in every session wastes context, but they must be present whenever those files are read. Which mechanism fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Put the conventions in CLAUDE.local.md at the repository root.",
+          "correct": false,
+          "explanation": "CLAUDE.local.md loads at launch alongside CLAUDE.md, so it is unconditional rather than path-scoped. It is also a personal, gitignored file, which makes it the wrong home for conventions the whole team must follow.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Put the conventions in the system prompt of a dedicated guidance-review subagent.",
+          "correct": false,
+          "explanation": "A subagent's prompt applies only inside delegated runs of that subagent. Work the main session does on guidance-system files would never see the conventions, so the coverage requirement is not met.",
+          "citation": { "title": "Claude Code — Create custom subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Create .claude/rules/guidance.md with a paths glob for src/guidance/**/*.ts.",
+          "correct": true,
+          "explanation": "Path-scoped rules are exactly this case: a rule file with a paths field only enters context when Claude reads files matching the glob. That keeps the instructions out of startup context while guaranteeing they arrive whenever the relevant files are touched, and the file is committed so the whole team gets it.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "D",
+          "text": "Pass the conventions with --append-system-prompt on every invocation.",
+          "correct": false,
+          "explanation": "That flag injects text at the system-prompt level but must be supplied on every invocation, which suits scripts and automation rather than interactive team use. It is also unconditional, so it reintroduces the context cost the team is trying to avoid.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-03",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A grain elevator cooperative must guarantee that Claude Code can never run a shell command that writes to the live scale-ticket database, even if a prompt or a checked-in file instructs it to. Which TWO mechanisms provide enforcement rather than guidance?",
+      "options": [
+        {
+          "key": "A",
+          "text": "A prominent \"never write to the scale-ticket database\" instruction in the project CLAUDE.md.",
+          "correct": false,
+          "explanation": "CLAUDE.md is loaded as context, not as enforced configuration, and Anthropic states there is no guarantee of strict compliance. It shapes behaviour but cannot stop a tool call, so it fails a hard safety requirement.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "A permissions.deny rule for the matching Bash commands, delivered through managed settings.",
+          "correct": true,
+          "explanation": "Permission rules are enforced by the client regardless of what Claude decides to do, which is precisely the guarantee the cooperative needs. Delivering them through the managed tier also puts them above user, project and local settings, so an individual developer cannot add an allow rule that overrides the deny.",
+          "citation": { "title": "Claude Code — Configure permissions", "url": "https://code.claude.com/docs/en/permissions" }
+        },
+        {
+          "key": "C",
+          "text": "A .claude/rules/database.md file that loads in every session.",
+          "correct": false,
+          "explanation": "Rules are another form of always-loaded context, subject to the same caveat as CLAUDE.md: they influence Claude but do not block anything. Choosing a rule file here confuses instruction delivery with policy enforcement.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "D",
+          "text": "A PreToolUse hook that inspects the Bash command and returns a deny decision when it matches.",
+          "correct": true,
+          "explanation": "PreToolUse fires before a tool call executes and is the only tool hook that can block it, either by returning permissionDecision \"deny\" or by exiting with code 2. Because it runs as a deterministic shell command outside the model, it holds regardless of what the model was told in the prompt.",
+          "citation": { "title": "Claude Code — Hooks reference", "url": "https://code.claude.com/docs/en/hooks" }
+        },
+        {
+          "key": "E",
+          "text": "A PostToolUse hook that exits with code 2 when it detects a database write.",
+          "correct": false,
+          "explanation": "PostToolUse fires after a tool call has already succeeded, so the write would have happened before the hook ran. Exit code 2 there only surfaces stderr to Claude; the documentation is explicit that PostToolUse cannot block the action.",
+          "citation": { "title": "Claude Code — Hooks reference", "url": "https://code.claude.com/docs/en/hooks" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-04",
+      "question": "A touring orchestra's operations team sets disable-model-invocation: true on a publish-tour-dates skill and concludes that Claude can no longer reach the CMS on its own. Is that conclusion correct?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Yes — the flag removes the tools the skill uses from the session.",
+          "correct": false,
+          "explanation": "The flag governs skill invocation, not the tool surface. Whatever tools were available in the session, such as Bash or an MCP server's tools, remain available to Claude whether or not the skill is loaded.",
+          "citation": { "title": "Claude Code — Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
+        },
+        {
+          "key": "B",
+          "text": "Yes — the flag makes the skill read-only so it can no longer perform writes.",
+          "correct": false,
+          "explanation": "There is no read-only mode implied by this frontmatter field. Restricting what can be written is the job of permission rules or a PreToolUse hook, not of a skill-invocation setting.",
+          "citation": { "title": "Claude Code — Configure permissions", "url": "https://code.claude.com/docs/en/permissions" }
+        },
+        {
+          "key": "C",
+          "text": "No — the flag only hides the skill from the slash-command menu, and Claude can still auto-invoke it.",
+          "correct": false,
+          "explanation": "This reverses the two controls. Hiding a skill from the user's slash menu while leaving Claude able to invoke it is user-invocable: false; disable-model-invocation does the opposite.",
+          "citation": { "title": "Claude Code — Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
+        },
+        {
+          "key": "D",
+          "text": "No — it only stops Claude auto-invoking the skill; the underlying tools stay available.",
+          "correct": true,
+          "explanation": "With disable-model-invocation: true, only the user can trigger the skill with its slash command, and its description is kept out of Claude's context so Claude cannot decide to load it. That is a guardrail against unwanted workflow triggering, not a capability restriction: to stop the CMS being reached at all, the team needs a permissions.deny rule or a PreToolUse hook.",
+          "citation": { "title": "Claude Code — Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-05",
+      "question": "A contractor working on an aquarium's husbandry-monitoring repo reports that a rule committed in the project CLAUDE.md is being ignored. Before anyone rewrites the rule, what is the first thing to check?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Run /context in that session and confirm the file actually appears under Memory files.",
+          "correct": true,
+          "explanation": "Anthropic's troubleshooting order starts with verifying the file loaded at all: /context lists the memory files the session actually picked up. A CLAUDE.md in an unexpected location, or one excluded by claudeMdExcludes, is invisible to Claude, and no amount of rewording fixes that.",
+          "citation": { "title": "Claude Code — Debug your configuration", "url": "https://code.claude.com/docs/en/debug-your-config" }
+        },
+        {
+          "key": "B",
+          "text": "Raise the model's effort level so it pays more attention to instructions.",
+          "correct": false,
+          "explanation": "Effort controls how much reasoning the model spends on a request; it does nothing about whether an instruction file reached the context window. Reaching for a model knob before confirming the input is a common misdiagnosis.",
+          "citation": { "title": "Effort", "url": "https://platform.claude.com/docs/en/build-with-claude/effort" }
+        },
+        {
+          "key": "C",
+          "text": "Convert the rule into a stop sequence so generation halts when it is violated.",
+          "correct": false,
+          "explanation": "Stop sequences are a Messages API parameter that ends generation when specific text is emitted; they are not a Claude Code configuration surface and cannot express a behavioural rule. This confuses an API-level output control with project instructions.",
+          "citation": { "title": "Stop reasons and fallback", "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons" }
+        },
+        {
+          "key": "D",
+          "text": "Move the rule into the contractor's ~/.claude/CLAUDE.md so it loads earlier.",
+          "correct": false,
+          "explanation": "User-scope memory loads before project memory, so moving the rule there makes it less specific, not more authoritative. It also stops being shared with the team through version control, which defeats the point of a project rule.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-06",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "An air-traffic-controller training provider runs Claude Code from the root of a large monorepo. Startup context is dominated by CLAUDE.md files, several belonging to unrelated teams. Which TWO changes reduce startup context without losing instructions the team still needs?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Convert directory-specific instructions into .claude/rules/ files with paths frontmatter.",
+          "correct": true,
+          "explanation": "Path-scoped rules load only when Claude reads matching files, so instructions that only apply to one area stop occupying context in every session. Anthropic recommends this specifically as the remedy for a memory file that has grown large.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Split the root CLAUDE.md into several smaller files pulled in with @path imports.",
+          "correct": false,
+          "explanation": "Splitting into imports improves organisation but not context cost: imported files are expanded and loaded at launch with the file that references them. The documentation calls this out explicitly, because it is a common false economy.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "C",
+          "text": "Add claudeMdExcludes patterns for the ancestor CLAUDE.md files owned by other teams.",
+          "correct": true,
+          "explanation": "Claude Code loads CLAUDE.md from the working directory and every directory above it, which is why unrelated teams' files appear. claudeMdExcludes skips specific files by path or glob and is designed for exactly this monorepo situation; putting it in .claude/settings.local.json keeps the exclusion machine-local.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "D",
+          "text": "Rename the other teams' CLAUDE.md files to CLAUDE.local.md.",
+          "correct": false,
+          "explanation": "CLAUDE.local.md still loads at launch — it is appended after CLAUDE.md at the same level — so the context cost is unchanged. Renaming files another team owns is also a change you should not be making on their behalf.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "E",
+          "text": "Move the instructions into the managed-policy CLAUDE.md so they load once for everyone.",
+          "correct": false,
+          "explanation": "A managed-policy CLAUDE.md applies to every session on the machine in every repository, and individual settings cannot exclude it. That increases the always-on context rather than reducing it, and it is the wrong scope for repository-specific guidance.",
+          "citation": { "title": "Claude Code — Deploy managed settings", "url": "https://code.claude.com/docs/en/managed-settings" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-07",
+      "question": "An air-traffic training provider defines a curriculum-auditor subagent in .claude/agents/. Engineers find it repeatedly misses constraints that the main session had already discussed at length. What should they change?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Give the subagent the Agent tool so it can spawn helpers that recover the missing context.",
+          "correct": false,
+          "explanation": "Spawning further subagents multiplies isolated contexts rather than sharing the parent's. Each new agent starts from the same missing information, so the root cause is untouched.",
+          "citation": { "title": "Claude Code — Create custom subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        },
+        {
+          "key": "B",
+          "text": "Move the definition from .claude/agents/ to ~/.claude/agents/ so it applies to every project the engineers work in.",
+          "correct": false,
+          "explanation": "That only changes the scope in which the subagent is discoverable, from project to personal, and it stops the definition being shared through version control. What the subagent receives at startup is unchanged.",
+          "citation": { "title": "Claude Code — Create custom subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Write self-contained delegation prompts, since a subagent does not inherit the parent conversation history.",
+          "correct": true,
+          "explanation": "Context isolation is the point of a subagent, and the trade-off is that it does not inherit the parent conversation: it gets its own system prompt, the task message, the CLAUDE.md hierarchy and any preloaded skills. Anything decided in conversation must therefore be restated in the delegation prompt or written somewhere the subagent can read.",
+          "citation": { "title": "Claude Code — Create custom subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Remove the tools allowlist so the subagent inherits every tool the main session has.",
+          "correct": false,
+          "explanation": "Widening the tool surface does not transfer conversational context, and it weakens the least-privilege posture that made a dedicated auditor attractive. The missing information is in the messages, not in the tools.",
+          "citation": { "title": "Claude Code — Create custom subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-08",
+      "question": "A grain cooperative's IT group must ensure developers can connect Claude Code only to two security-reviewed MCP servers, and cannot widen that list in their own settings. Which configuration achieves it?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Commit a .mcp.json listing the two approved servers at the root of every repository.",
+          "correct": false,
+          "explanation": "A project .mcp.json distributes servers to the team but does not restrict anything: a developer can still add servers in their own user configuration. It solves discovery, not policy.",
+          "citation": { "title": "Claude Code — Connect Claude Code to tools via MCP", "url": "https://code.claude.com/docs/en/mcp" }
+        },
+        {
+          "key": "B",
+          "text": "Set allowedMcpServers with allowManagedMcpServersOnly: true in managed settings.",
+          "correct": true,
+          "explanation": "Allowlists from every settings scope normally merge, so a user can broaden what an allowlist permits. Setting allowManagedMcpServersOnly: true makes the managed allowlist the only one that applies, which is what turns a recommendation into an enforced approved catalogue.",
+          "citation": { "title": "Claude Code — Control MCP server access for your organization", "url": "https://code.claude.com/docs/en/managed-mcp" }
+        },
+        {
+          "key": "C",
+          "text": "Add a deniedMcpServers entry for every other MCP server the team knows about.",
+          "correct": false,
+          "explanation": "A denylist blocks what you can name, and cannot cover servers that do not exist yet or that nobody has heard of. When the requirement is \"only these two\", an allowlist is the correct shape of control.",
+          "citation": { "title": "Claude Code — Control MCP server access for your organization", "url": "https://code.claude.com/docs/en/managed-mcp" }
+        },
+        {
+          "key": "D",
+          "text": "List the two approved servers in the organisation-wide managed CLAUDE.md.",
+          "correct": false,
+          "explanation": "A managed CLAUDE.md carries behavioural guidance, not technical enforcement — Anthropic's own comparison table puts tool and server restrictions in managed settings and leaves CLAUDE.md for guidance. Nothing prevents a developer adding another server.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-09",
+      "type": "multi",
+      "selectCount": 2,
+      "question": "A network of 40 dental laboratories wants every repository to receive the same three skills and one subagent, versioned and updatable centrally, plus a lint hook that individual developers cannot switch off. Which TWO approaches fit?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Copy a .claude/ directory into each repository and re-copy it whenever anything changes.",
+          "correct": false,
+          "explanation": "Standalone .claude/ configuration is what Anthropic recommends for personal workflows and quick experiments, not for distribution. Forty hand-maintained copies drift immediately and have no version story.",
+          "citation": { "title": "Claude Code — Create plugins", "url": "https://code.claude.com/docs/en/plugins" }
+        },
+        {
+          "key": "B",
+          "text": "Ask every developer to place the skill and subagent files in their own ~/.claude/ directory.",
+          "correct": false,
+          "explanation": "Personal scope is machine-local and unversioned, so each developer ends up on a different revision and new joiners get nothing. It also cannot deliver anything a developer is unable to disable.",
+          "citation": { "title": "Claude Code — Create custom subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        },
+        {
+          "key": "C",
+          "text": "Package the skills and subagent as a plugin and distribute it through an internal marketplace.",
+          "correct": true,
+          "explanation": "Plugins are the documented mechanism for sharing skills, agents, hooks and MCP servers across projects and teams with versioned releases. A marketplace gives the 40 labs one place to install and update from, which is exactly the central-versioning requirement.",
+          "citation": { "title": "Claude Code — Create plugins", "url": "https://code.claude.com/docs/en/plugins" }
+        },
+        {
+          "key": "D",
+          "text": "Paste the skill bodies into each repository's CLAUDE.md so they are always in context.",
+          "correct": false,
+          "explanation": "This inverts the design: skills exist so procedural content loads on demand, while CLAUDE.md is loaded in full every session. Pasting them in bloats startup context and reduces adherence to the rest of the file.",
+          "citation": { "title": "Claude Code — Extend Claude with skills", "url": "https://code.claude.com/docs/en/skills" }
+        },
+        {
+          "key": "E",
+          "text": "Deliver the lint hook through managed settings so it applies on every machine.",
+          "correct": true,
+          "explanation": "Managed settings sit at the top of the settings precedence order, above command line, project-local, shared project and user settings, so a key set there wins. Configuring the hook at that tier is what makes it something an individual developer cannot switch off.",
+          "citation": { "title": "Claude Code — Settings files and precedence", "url": "https://code.claude.com/docs/en/settings" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-10",
+      "question": "Deep into a Claude Code session, an aquarium-telemetry team realises a refactor Claude made about twenty prompts ago was wrong. They want the files back as they were then, but need to keep the conversation that followed. Which built-in capability fits?",
+      "options": [
+        {
+          "key": "A",
+          "text": "/rewind, choosing its Restore code option for that checkpoint.",
+          "correct": true,
+          "explanation": "Claude Code snapshots file state before each user prompt, and the rewind menu lets you restore code, conversation, or both independently. \"Restore code\" is the option that reverts file changes while leaving the discussion intact, which is precisely the team's requirement.",
+          "citation": { "title": "Claude Code — Checkpointing", "url": "https://code.claude.com/docs/en/checkpointing" }
+        },
+        {
+          "key": "B",
+          "text": "/compact, which rebuilds the session from the last known-good state.",
+          "correct": false,
+          "explanation": "Compaction summarises conversation history to free context; it never touches files on disk. Reaching for it here would shrink the very discussion the team wants to keep while leaving the bad refactor in place.",
+          "citation": { "title": "Claude Code — Checkpointing", "url": "https://code.claude.com/docs/en/checkpointing" }
+        },
+        {
+          "key": "C",
+          "text": "/clear, then re-open the session so Claude reloads the original files.",
+          "correct": false,
+          "explanation": "Clearing discards conversation context and performs no file restoration, so the edited files stay edited and the useful discussion is lost. It is a context-hygiene command, not an undo.",
+          "citation": { "title": "Claude Code — Checkpointing", "url": "https://code.claude.com/docs/en/checkpointing" }
+        },
+        {
+          "key": "D",
+          "text": "A PostToolUse hook that stores a copy of each file before it is written.",
+          "correct": false,
+          "explanation": "PostToolUse runs after the write has already happened, so a snapshot taken there records the modified file, not the original. Building bespoke tooling is also unnecessary when checkpointing already tracks edits from Claude's file tools.",
+          "citation": { "title": "Claude Code — Hooks reference", "url": "https://code.claude.com/docs/en/hooks" }
+        }
+      ]
+    },
+    {
+      "id": "F5-D3-11",
+      "question": "A tunnel-boring software team notices Claude re-learning the same corrections about their preferred test runner in session after session, even though nobody has added anything to CLAUDE.md. Which Claude Code mechanism is designed for this?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Path-scoped rules under .claude/rules/, which capture team conventions as they emerge.",
+          "correct": false,
+          "explanation": "Rules are files you write, and path-scoped ones load only when matching files are read. They are a good home for standards a human has decided to codify, but nothing about them captures corrections automatically.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        },
+        {
+          "key": "B",
+          "text": "Prompt caching, which keeps earlier turns available across sessions at reduced cost.",
+          "correct": false,
+          "explanation": "Prompt caching is an API cost-and-latency optimisation for repeated prefixes within a short TTL, not a persistence layer. It never carries knowledge from one Claude Code session into another.",
+          "citation": { "title": "Prompt caching", "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching" }
+        },
+        {
+          "key": "C",
+          "text": "A dedicated subagent with its own tool allowlist that reviews test commands.",
+          "correct": false,
+          "explanation": "A subagent isolates a task into its own context window; it does not remember anything between invocations either. Adding one here creates machinery without addressing the persistence problem.",
+          "citation": { "title": "Claude Code — Create custom subagents", "url": "https://code.claude.com/docs/en/sub-agents" }
+        },
+        {
+          "key": "D",
+          "text": "Auto memory, where Claude records corrections and preferences itself.",
+          "correct": true,
+          "explanation": "Auto memory is the complement to CLAUDE.md: you write CLAUDE.md, Claude writes auto memory, saving learnings such as the corrections you keep giving. The MEMORY.md index loads at the start of every conversation and topic files are read on demand, so a repeated correction stops being repeated.",
+          "citation": { "title": "Claude Code — How Claude remembers your project", "url": "https://code.claude.com/docs/en/memory" }
+        }
+      ]
+    }
+  ]
+}
